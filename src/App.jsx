@@ -623,26 +623,28 @@ function InputTab({ selected, periods, updatePeriod, TS }) {
             </div>
           </div>
 
-          {/* 来期予想セクション */}
-          <div style={{ ...S.card, border:"1px solid #fbbf2444" }}>
-            <div style={{ color:"#fbbf24", fontWeight:700, marginBottom:8 }}>来期予想データ</div>
-            <div style={{ color:"#475569", fontSize:11, marginBottom:14 }}>
-              株価・株式数・純資産は最新本決算を自動継承。予想PER・PSR・EBITDA・EV/EBITDAの計算に使用されます。
+          {/* 来期予想セクション：最新年のみ表示 */}
+          {activeYear === String(CY) && (
+            <div style={{ ...S.card, border:"1px solid #fbbf2444" }}>
+              <div style={{ color:"#fbbf24", fontWeight:700, marginBottom:8 }}>来期予想データ</div>
+              <div style={{ color:"#475569", fontSize:11, marginBottom:14 }}>
+                株価・株式数・純資産は最新本決算を自動継承。予想PER・PSR・配当利回り・営業利益率の計算に使用されます。
+              </div>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))", gap:14 }}>
+                {FORECAST_FIELDS.map(({ label, key, hint }) => (
+                  <div key={key} style={{ display:"flex", flexDirection:"column", gap:3 }}>
+                    <label style={{ color:"#64748b", fontSize:10 }}>{label}</label>
+                    <input
+                      value={periods[FORECAST_KEY]?.[key] || ""}
+                      onChange={e => handleChange(FORECAST_KEY, key, e.target.value)}
+                      style={S.input} placeholder="数値を入力" inputMode="decimal"
+                    />
+                    {hint && <span style={{ color:"#334155", fontSize:9 }}>{hint}</span>}
+                  </div>
+                ))}
+              </div>
             </div>
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))", gap:14 }}>
-              {FORECAST_FIELDS.map(({ label, key, hint }) => (
-                <div key={key} style={{ display:"flex", flexDirection:"column", gap:3 }}>
-                  <label style={{ color:"#64748b", fontSize:10 }}>{label}</label>
-                  <input
-                    value={periods[FORECAST_KEY]?.[key] || ""}
-                    onChange={e => handleChange(FORECAST_KEY, key, e.target.value)}
-                    style={S.input} placeholder="数値を入力" inputMode="decimal"
-                  />
-                  {hint && <span style={{ color:"#334155", fontSize:9 }}>{hint}</span>}
-                </div>
-              ))}
-            </div>
-          </div>
+          )}
 
           {/* 3年並べて比較表示 */}
           <div style={{ ...S.card, overflowX:"auto" }}>
