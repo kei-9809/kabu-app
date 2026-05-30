@@ -783,14 +783,14 @@ export default function App() {
                     <div style={S.card}>
                       <div style={{color:"#94a3b8",fontSize:13,fontWeight:700,marginBottom:12}}>損益率ランキング</div>
                       <ResponsiveContainer width="100%" height={200}>
-                        <BarChart data={sortedByPnl.map(h=>({name:h.name.length>8?h.name.slice(0,8)+"…":h.name,損益率:parseFloat(((h.currentPrice-h.avgCost)/h.avgCost*100).toFixed(2))}))} layout="vertical" margin={{left:10,right:50}}>
+                        <BarChart data={sortedByPnl.map(h=>({name:h.name.length>8?h.name.slice(0,8)+"…":h.name,損益率:parseFloat(((h.currentPrice-h.avgCost)/h.avgCost*100).toFixed(2))}))} layout="vertical" margin={{left:10,right:20}}>
                           <CartesianGrid strokeDasharray="3 3" stroke="#1e293b"/>
                           <XAxis type="number" tick={{fill:"#64748b",fontSize:10}} tickFormatter={v=>v+"%"}/>
                           <YAxis dataKey="name" type="category" tick={{fill:"#94a3b8",fontSize:11}} width={90}/>
-                          <Tooltip formatter={v=>v+"%"} contentStyle={S.tooltip} labelStyle={{color:"#94a3b8"}} itemStyle={{color:"#e2e8f0"}}/>
+                          <Tooltip formatter={v=>[v+"%","損益率"]} contentStyle={S.tooltip} labelStyle={{color:"#94a3b8"}} itemStyle={{color:"#e2e8f0"}}/>
                           <ReferenceLine x={0} stroke="#475569"/>
-                          <Bar dataKey="損益率" radius={[0,4,4,0]} fill="#4ade80"
-                            label={{position:"right",fill:"#94a3b8",fontSize:10,formatter:v=>v+"%"}}
+                          <Bar dataKey="損益率" radius={[0,4,4,0]}
+                            fill="#4ade80"
                           />
                         </BarChart>
                       </ResponsiveContainer>
