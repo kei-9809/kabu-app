@@ -256,10 +256,9 @@ function calcChg(cur, prev) {
 }
 
 // 財務指標タブ（多期間対応）
-function MetricsTab({ c, f, selected, TS }) {
+function MetricsTab({ c, f, selected, periods, TS }) {
   const [metricsView, setMetricsView] = useState("current");
 
-  const periods = selected?.periods || {};
   const annualData = useMemo(() => {
     return ANNUAL_KEYS.map(yr => {
       const fd = periods[yr] || {};
@@ -530,12 +529,10 @@ function MetricsTab({ c, f, selected, TS }) {
 }
 
 // 数値入力タブ（多期間対応）
-function InputTab({ selected, updatePeriod, TS }) {
+function InputTab({ selected, periods, updatePeriod, TS }) {
   const [inputView, setInputView] = useState("annual"); // annual | qtr
   const [activeYear, setActiveYear] = useState(String(CY));
   const [activeQtrYear, setActiveQtrYear] = useState(String(CY));
-
-  const periods = selected?.periods || {};
 
   const handleChange = (periodKey, fieldKey, val) => {
     if (val === "" || val === "-" || /^-?\d*\.?\d*$/.test(val)) {
@@ -1074,7 +1071,7 @@ export default function App() {
                 </div>
 
                 {detailTab === "metrics" && (
-                  <MetricsTab c={c} f={f} selected={portfolio.find(h=>h.id===selected.id)||selected} TS={TS} />
+                  <MetricsTab c={c} f={f} selected={portfolio.find(h=>h.id===selected.id)||selected} periods={(portfolio.find(h=>h.id===selected.id)||selected).periods||{}} TS={TS} />
                 )}
 
                 {detailTab === "memo" && (
@@ -1138,7 +1135,7 @@ export default function App() {
                 )}
 
                 {detailTab === "input" && (
-                  <InputTab selected={portfolio.find(h=>h.id===selected.id)||selected} updatePeriod={updatePeriod} TS={TS} />
+                  <InputTab selected={portfolio.find(h=>h.id===selected.id)||selected} periods={(portfolio.find(h=>h.id===selected.id)||selected).periods||{}} updatePeriod={updatePeriod} TS={TS} />
                 )}
 
                 {detailTab === "ir" && (
