@@ -244,11 +244,13 @@ const saveBaseYear = y => { try { localStorage.setItem(LS_BASE_YEAR, String(y));
 
 // baseYearを基準に4年分のキーを生成（baseYear-2 〜 baseYear+1）
 const getAnnualKeys = base => [String(base-2), String(base-1), String(base), String(base+1)];
-
-const QTR_KEYS = [];
-for (let y = CY-2; y <= CY; y++) {
-  ["Q1","Q2","Q3","Q4"].forEach(q => QTR_KEYS.push(`${y}-${q}`));
-}
+const getQtrKeys = base => {
+  const keys = [];
+  for (let y = base-2; y <= base+1; y++) {
+    ["Q1","Q2","Q3","Q4"].forEach(q => keys.push(`${y}-${q}`));
+  }
+  return keys;
+};
 
 const LS_UNDO = "kabulens_undo_v2";
 const loadUndoData = () => {
@@ -284,7 +286,7 @@ function calcChg(cur, prev) {
 }
 
 // 財務指標タブ（多期間対応）
-function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, TS }) {
+function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, TS }) {
   const [metricsView, setMetricsView] = useState("current");
 
   const annualData = useMemo(() => {
@@ -358,13 +360,13 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, TS }) {
   }, [annualData]);
 
   const qtrData = useMemo(() => {
-    return QTR_KEYS.map(key => {
+    return qtrKeys.map(key => {
       const fd = periods[key] || {};
       const calc = calcAll(fd);
       const [yr, q] = key.split("-");
       return { label: yr+"年"+q, key, f: fd, c: calc };
     });
-  }, [periods]);
+  }, [periods, qtrKeys]);
 
   return (
     <div>
@@ -598,7 +600,7 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, TS }) {
 }
 
 // 数値入力タブ（多期間対応）
-function InputTab({ selected, periods, updatePeriod, baseYear, annualKeys, TS }) {
+function InputTab({ selected, periods, updatePeriod, baseYear, annualKeys, qtrKeys, TS }) {
   const [inputView, setInputView] = useState("annual"); // annual | qtr
   const [activeYear, setActiveYear] = useState(String(baseYear));
   const [activeQtrYear, setActiveQtrYear] = useState(String(baseYear));
@@ -703,7 +705,7 @@ function InputTab({ selected, periods, updatePeriod, baseYear, annualKeys, TS })
       {inputView === "qtr" && (
         <div>
           <div style={{ display:"flex", gap:8, marginBottom:16 }}>
-            {[String(CY-2), String(CY-1), String(CY)].map(yr => (
+            {annualKeys.map(yr => (
               <button key={yr} style={{ ...S.navBtn, ...(activeQtrYear===yr?S.navOn:{}) }} onClick={() => setActiveQtrYear(yr)}>{yr}年</button>
             ))}
           </div>
@@ -746,6 +748,7 @@ export default function App() {
   const [baseYear, setBaseYear]   = useState(() => loadBaseYear());
   const [undoData, setUndoData]   = useState(() => loadUndoData());
   const ANNUAL_KEYS = getAnnualKeys(baseYear);
+  const QTR_KEYS = getQtrKeys(baseYear);
   const [simParams, setSimParams] = useState({ years:"5", growthRate:"15", targetMargin:"15", targetPer:"20", targetEvEbitda:"", dividendRate:"2", reinvest:true });
   const [simTab, setSimTab]       = useState("scenario");
   const [irForm, setIrForm]       = useState({ date:"", title:"", url:"", type:"決算" });
@@ -1219,7 +1222,7 @@ export default function App() {
                 </div>
 
                 {detailTab === "metrics" && (
-                  <MetricsTab c={c} f={f} selected={portfolio.find(h=>h.id===selected.id)||selected} periods={(portfolio.find(h=>h.id===selected.id)||selected).periods||{}} baseYear={baseYear} annualKeys={ANNUAL_KEYS} TS={TS} />
+                  <MetricsTab c={c} f={f} selected={portfolio.find(h=>h.id===selected.id)||selected} periods={(portfolio.find(h=>h.id===selected.id)||selected).periods||{}} baseYear={baseYear} annualKeys={ANNUAL_KEYS} qtrKeys={QTR_KEYS} TS={TS} />
                 )}
 
                 {detailTab === "memo" && (
@@ -1283,7 +1286,7 @@ export default function App() {
                 )}
 
                 {detailTab === "input" && (
-                  <InputTab selected={portfolio.find(h=>h.id===selected.id)||selected} periods={(portfolio.find(h=>h.id===selected.id)||selected).periods||{}} updatePeriod={updatePeriod} baseYear={baseYear} annualKeys={ANNUAL_KEYS} TS={TS} />
+                  <InputTab selected={portfolio.find(h=>h.id===selected.id)||selected} periods={(portfolio.find(h=>h.id===selected.id)||selected).periods||{}} updatePeriod={updatePeriod} baseYear={baseYear} annualKeys={ANNUAL_KEYS} qtrKeys={QTR_KEYS} TS={TS} />
                 )}
 
                 {detailTab === "ir" && (
