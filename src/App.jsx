@@ -234,7 +234,17 @@ const PERIOD_FIELDS = [
 ];
 
 const CY = new Date().getFullYear();
-const ANNUAL_KEYS = [String(CY-2), String(CY-1), String(CY)];
+
+// 決算年次はlocalStorageで管理（初期値は現在年）
+const LS_BASE_YEAR = "kabulens_base_year";
+const loadBaseYear = () => {
+  try { const v = localStorage.getItem(LS_BASE_YEAR); return v ? parseInt(v) : CY; } catch { return CY; }
+};
+const saveBaseYear = y => { try { localStorage.setItem(LS_BASE_YEAR, String(y)); } catch {} };
+
+// baseYearを基準に4年分のキーを生成（baseYear-2 〜 baseYear+1）
+const getAnnualKeys = base => [String(base-2), String(base-1), String(base), String(base+1)];
+
 const QTR_KEYS = [];
 for (let y = CY-2; y <= CY; y++) {
   ["Q1","Q2","Q3","Q4"].forEach(q => QTR_KEYS.push(`${y}-${q}`));
@@ -263,22 +273,28 @@ function calcChg(cur, prev) {
 }
 
 // 財務指標タブ（多期間対応）
-function MetricsTab({ c, f, selected, periods, TS }) {
+function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, TS }) {
   const [metricsView, setMetricsView] = useState("current");
 
   const annualData = useMemo(() => {
-    return ANNUAL_KEYS.map(yr => {
+    return annualKeys.map(yr => {
       const fd = periods[yr] || {};
       const calc = calcAll(fd);
       return { label: yr+"年", key: yr, f: fd, c: calc };
     });
-  }, [periods]);
+  }, [periods, annualKeys]);
 
-  // 最新本決算データを優先（入力済みの最新年を探す）
+  // 最新本決算 = baseYear年のデータ（翌年は予算年度なので除く）
   const latestAnnual = useMemo(() => {
-    const filled = [...annualData].reverse().find(d => Object.values(d.f).some(v => v !== "" && v != null));
-    return filled || null;
-  }, [annualData]);
+    const baseKey = String(baseYear);
+    const fd = periods[baseKey] || {};
+    if (!Object.values(fd).some(v => v !== "" && v != null)) {
+      // baseYearが空なら前年を探す
+      const filled = [String(baseYear-1), String(baseYear-2)].map(yr => ({ key:yr, f:periods[yr]||{} })).find(d => Object.values(d.f).some(v => v !== "" && v != null));
+      return filled ? { label:filled.key+"年", key:filled.key, f:filled.f, c:calcAll(filled.f) } : null;
+    }
+    return { label:baseKey+"年", key:baseKey, f:fd, c:calcAll(fd) };
+  }, [periods, baseYear]);
 
   // 現在の指標用: 最新本決算があればそちらを使い、株価だけ現在値で上書き
   const cc = useMemo(() => {
@@ -571,10 +587,10 @@ function MetricsTab({ c, f, selected, periods, TS }) {
 }
 
 // 数値入力タブ（多期間対応）
-function InputTab({ selected, periods, updatePeriod, TS }) {
+function InputTab({ selected, periods, updatePeriod, baseYear, annualKeys, TS }) {
   const [inputView, setInputView] = useState("annual"); // annual | qtr
-  const [activeYear, setActiveYear] = useState(String(CY));
-  const [activeQtrYear, setActiveQtrYear] = useState(String(CY));
+  const [activeYear, setActiveYear] = useState(String(baseYear));
+  const [activeQtrYear, setActiveQtrYear] = useState(String(baseYear));
 
   const handleChange = (periodKey, fieldKey, val) => {
     if (val === "" || val === "-" || /^-?\d*\.?\d*$/.test(val)) {
@@ -600,7 +616,7 @@ function InputTab({ selected, periods, updatePeriod, TS }) {
       {inputView === "annual" && (
         <div>
           <div style={{ display:"flex", gap:8, marginBottom:16 }}>
-            {ANNUAL_KEYS.map(yr => (
+            {annualKeys.map(yr => (
               <button key={yr} style={{ ...S.navBtn, ...(activeYear===yr?S.navOn:{}) }} onClick={() => setActiveYear(yr)}>{yr}年</button>
             ))}
           </div>
@@ -623,8 +639,8 @@ function InputTab({ selected, periods, updatePeriod, TS }) {
             </div>
           </div>
 
-          {/* 来期予想セクション：最新年のみ表示 */}
-          {activeYear === String(CY) && (
+          {/* 来期予想セクション：翌年度選択時のみ表示 */}
+          {activeYear === String(baseYear+1) && (
             <div style={{ ...S.card, border:"1px solid #fbbf2444" }}>
               <div style={{ color:"#fbbf24", fontWeight:700, marginBottom:8 }}>来期予想データ</div>
               <div style={{ color:"#475569", fontSize:11, marginBottom:14 }}>
@@ -646,21 +662,21 @@ function InputTab({ selected, periods, updatePeriod, TS }) {
             </div>
           )}
 
-          {/* 3年並べて比較表示 */}
+          {/* 4年並べて比較表示 */}
           <div style={{ ...S.card, overflowX:"auto" }}>
-            <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:12 }}>3年分 入力済みデータ確認</div>
+            <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:12 }}>4年分 入力済みデータ確認</div>
             <table style={{ width:"100%", borderCollapse:"collapse", fontSize:11 }}>
               <thead>
                 <tr style={{ borderBottom:"1px solid #1e293b" }}>
                   <th style={{ textAlign:"left", padding:"6px 10px", color:"#475569" }}>項目</th>
-                  {ANNUAL_KEYS.map(yr => <th key={yr} style={{ textAlign:"right", padding:"6px 10px", color:"#60a5fa" }}>{yr}年</th>)}
+                  {annualKeys.map(yr => <th key={yr} style={{ textAlign:"right", padding:"6px 10px", color:"#60a5fa" }}>{yr}年</th>)}
                 </tr>
               </thead>
               <tbody>
                 {PERIOD_FIELDS.slice(2, 9).map(({ label, key }) => (
                   <tr key={key} style={{ borderBottom:"1px solid #1e293b" }}>
                     <td style={{ padding:"6px 10px", color:"#64748b" }}>{label}</td>
-                    {ANNUAL_KEYS.map(yr => (
+                    {annualKeys.map(yr => (
                       <td key={yr} style={{ textAlign:"right", padding:"6px 10px", color:"#e2e8f0" }}>
                         {periods[yr]?.[key] ? fmtM(n(periods[yr][key])) : "—"}
                       </td>
@@ -716,6 +732,8 @@ export default function App() {
   const [selected, setSelected]   = useState(() => (loadData() || INIT)[0]);
   const [detailTab, setDetailTab] = useState("metrics");
   const [compareIds, setCompareIds] = useState([]);
+  const [baseYear, setBaseYear]   = useState(() => loadBaseYear());
+  const ANNUAL_KEYS = getAnnualKeys(baseYear);
   const [simParams, setSimParams] = useState({ years:"5", growthRate:"15", targetMargin:"15", targetPer:"20", targetEvEbitda:"", dividendRate:"2", reinvest:true });
   const [simTab, setSimTab]       = useState("scenario");
   const [irForm, setIrForm]       = useState({ date:"", title:"", url:"", type:"決算" });
@@ -809,6 +827,37 @@ export default function App() {
     save(p => p.map(h => h.id === selected.id ? { ...h, irList:h.irList.filter((_, i) => i !== idx) } : h));
     setSelected(s => ({ ...s, irList:s.irList.filter((_, i) => i !== idx) }));
   };
+
+  const handleAdvanceYear = useCallback(() => {
+    const nextBase = baseYear + 1;
+    const msg = `決算年度を1年進めます。\n\n現在: ${baseYear-2}〜${baseYear+1}年\n更新後: ${nextBase-2}〜${nextBase+1}年\n\n・${baseYear-2}年のデータは削除されます\n・各銘柄のデータが1年ずつ繰り越されます\n\nよろしいですか？`;
+    if (!window.confirm(msg)) return;
+
+    // 各銘柄のperiodsを1年繰り越し
+    save(p => p.map(h => {
+      const oldPeriods = h.periods || {};
+      const newPeriods = {};
+      // 年次データを1年繰り越し（最古年は削除）
+      getAnnualKeys(nextBase).forEach(yr => {
+        const prevYr = String(parseInt(yr) - 1);
+        if (oldPeriods[prevYr]) newPeriods[yr] = oldPeriods[prevYr];
+      });
+      // 四半期データも繰り越し
+      Object.keys(oldPeriods).forEach(key => {
+        if (key.includes("-Q")) {
+          const yr = parseInt(key.split("-")[0]);
+          if (yr >= nextBase - 2) newPeriods[key] = oldPeriods[key];
+        }
+      });
+      // forecastデータはそのまま引き継ぎ
+      if (oldPeriods[FORECAST_KEY]) newPeriods[FORECAST_KEY] = oldPeriods[FORECAST_KEY];
+      return { ...h, periods: newPeriods };
+    }));
+
+    // baseYearを更新
+    setBaseYear(nextBase);
+    saveBaseYear(nextBase);
+  }, [baseYear, save]);
 
   const toggleCompare = id => setCompareIds(p => p.includes(id) ? p.filter(x => x !== id) : p.length < 4 ? [...p, id] : p);
 
@@ -923,10 +972,13 @@ export default function App() {
           <span style={{ fontSize:22, fontWeight:900, color:"#f1f5f9", letterSpacing:2 }}>KABU<span style={{ color:"#4ade80" }}>LENS</span></span>
           <span style={{ fontSize:11, color:"#334155" }}>日本株専用</span>
         </div>
-        <nav style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
+        <nav style={{ display:"flex", gap:4, flexWrap:"wrap", alignItems:"center" }}>
           {[["portfolio","ポートフォリオ"],["detail","銘柄詳細"],["compare","他社比較"],["simulation","シミュレーション"]].map(([k,v]) => (
             <button key={k} style={{ ...S.navBtn, ...(tab===k?S.navOn:{}) }} onClick={() => setTab(k)}>{v}</button>
           ))}
+          <button style={{ ...S.miniBtn, color:"#a78bfa", borderColor:"#a78bfa", fontSize:11 }} onClick={handleAdvanceYear}>
+            📅 {baseYear}→{baseYear+1}年 更新
+          </button>
         </nav>
       </header>
 
@@ -1136,7 +1188,7 @@ export default function App() {
                 </div>
 
                 {detailTab === "metrics" && (
-                  <MetricsTab c={c} f={f} selected={portfolio.find(h=>h.id===selected.id)||selected} periods={(portfolio.find(h=>h.id===selected.id)||selected).periods||{}} TS={TS} />
+                  <MetricsTab c={c} f={f} selected={portfolio.find(h=>h.id===selected.id)||selected} periods={(portfolio.find(h=>h.id===selected.id)||selected).periods||{}} baseYear={baseYear} annualKeys={ANNUAL_KEYS} TS={TS} />
                 )}
 
                 {detailTab === "memo" && (
@@ -1200,7 +1252,7 @@ export default function App() {
                 )}
 
                 {detailTab === "input" && (
-                  <InputTab selected={portfolio.find(h=>h.id===selected.id)||selected} periods={(portfolio.find(h=>h.id===selected.id)||selected).periods||{}} updatePeriod={updatePeriod} TS={TS} />
+                  <InputTab selected={portfolio.find(h=>h.id===selected.id)||selected} periods={(portfolio.find(h=>h.id===selected.id)||selected).periods||{}} updatePeriod={updatePeriod} baseYear={baseYear} annualKeys={ANNUAL_KEYS} TS={TS} />
                 )}
 
                 {detailTab === "ir" && (
