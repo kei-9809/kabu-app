@@ -204,6 +204,408 @@ const INPUT_FIELDS = [
   { label:"信用倍率（倍）", key:"shinyoBairitu" },
 ];
 
+// ── 多期間入力フィールド定義 ──────────────────────────────────────────────────
+const PERIOD_FIELDS = [
+  { label:"株価（円）",          key:"price" },
+  { label:"発行済株式数（千株）", key:"shares", hint:"例: 14430000" },
+  { label:"売上高（円）",        key:"sales" },
+  { label:"売上総利益（円）",    key:"grossProfit" },
+  { label:"営業利益（円）",      key:"opProfit" },
+  { label:"経常利益（円）",      key:"ordProfit" },
+  { label:"当期純利益（円）",    key:"netProfit", hint:"赤字はマイナスで" },
+  { label:"総資産（円）",        key:"totalAssets" },
+  { label:"純資産（円）",        key:"equity" },
+  { label:"流動資産（円）",      key:"curAssets" },
+  { label:"固定資産（円）",      key:"fixAssets" },
+  { label:"流動負債（円）",      key:"curLiab" },
+  { label:"固定負債（円）",      key:"fixLiab" },
+  { label:"EBITDA（円）",       key:"ebitda", hint:"営業利益+減価償却費" },
+  { label:"1株配当（円）",       key:"dividend" },
+  { label:"信用倍率（倍）",      key:"shinyoBairitu" },
+];
+
+const CY = new Date().getFullYear();
+const ANNUAL_KEYS = [String(CY-2), String(CY-1), String(CY)];
+const QTR_KEYS = [];
+for (let y = CY-2; y <= CY; y++) {
+  ["Q1","Q2","Q3","Q4"].forEach(q => QTR_KEYS.push(`${y}-${q}`));
+}
+
+function chgColor(v) {
+  if (v == null) return "#475569";
+  return v > 0 ? "#4ade80" : v < 0 ? "#f87171" : "#94a3b8";
+}
+function chgStr(v) {
+  if (v == null) return "—";
+  return (v > 0 ? "+" : "") + v.toFixed(1) + "%";
+}
+function calcChg(cur, prev) {
+  if (cur == null || prev == null || prev === 0) return null;
+  return (cur - prev) / Math.abs(prev) * 100;
+}
+
+// 財務指標タブ（多期間対応）
+function MetricsTab({ c, f, selected, TS }) {
+  const [metricsView, setMetricsView] = useState("current"); // current | trend
+
+  const periods = selected?.periods || {};
+  const annualData = useMemo(() => {
+    return ANNUAL_KEYS.map(yr => {
+      const fd = periods[yr] || {};
+      const calc = calcAll(fd);
+      return { label: yr+"年", key: yr, f: fd, c: calc };
+    });
+  }, [periods]);
+
+  const trendData = useMemo(() => {
+    return annualData.map(({ label, f: fd, c: ca }) => ({
+      name: label,
+      売上高: n(fd.sales) ? parseFloat(fmtM(n(fd.sales)).replace(/[^0-9.-]/g,"")) : null,
+      営業利益: n(fd.opProfit) ? parseFloat(fmtM(n(fd.opProfit)).replace(/[^0-9.-]/g,"")) : null,
+      純利益: n(fd.netProfit) ? parseFloat(fmtM(n(fd.netProfit)).replace(/[^0-9.-]/g,"")) : null,
+      ROE: ca.roe ? parseFloat((ca.roe*100).toFixed(1)) : null,
+      ROA: ca.roa ? parseFloat((ca.roa*100).toFixed(1)) : null,
+      営業利益率: ca.opMargin ? parseFloat((ca.opMargin*100).toFixed(1)) : null,
+      自己資本比率: ca.equityRatio ? parseFloat((ca.equityRatio*100).toFixed(1)) : null,
+    }));
+  }, [annualData]);
+
+  const qtrData = useMemo(() => {
+    return QTR_KEYS.map(key => {
+      const fd = periods[key] || {};
+      const calc = calcAll(fd);
+      const [yr, q] = key.split("-");
+      return { label: yr+"年"+q, key, f: fd, c: calc };
+    });
+  }, [periods]);
+
+  return (
+    <div>
+      <div style={{ display:"flex", gap:4, marginBottom:16 }}>
+        <button style={{ ...S.navBtn, ...(metricsView==="current"?S.navOn:{}) }} onClick={() => setMetricsView("current")}>現在の指標</button>
+        <button style={{ ...S.navBtn, ...(metricsView==="trend"?S.navOn:{}) }} onClick={() => setMetricsView("trend")}>トレンド分析</button>
+        <button style={{ ...S.navBtn, ...(metricsView==="qtr"?S.navOn:{}) }} onClick={() => setMetricsView("qtr")}>四半期推移</button>
+      </div>
+
+      {metricsView === "current" && (
+        <div>
+          <Sec title="株価指標">
+            <MBox label="PER" value={c.per?xfmt(c.per):"—"} color={c.per&&c.per<15?"#4ade80":c.per&&c.per<25?"#fbbf24":"#f87171"} hint="15倍未満が割安" badge={c.per&&c.per<15?"割安":""} />
+            <MBox label="PBR" value={c.pbr?xfmt(c.pbr):"—"} color={c.pbr&&c.pbr<1.5?"#4ade80":"#94a3b8"} hint="1倍以下は解散価値割れ" />
+            <MBox label="PSR" value={c.psr?xfmt(c.psr):"—"} color={c.psr&&c.psr<2?"#4ade80":"#94a3b8"} />
+            <MBox label="EV/EBITDA" value={c.evEbitda?xfmt(c.evEbitda):"—"} color={c.evEbitda&&c.evEbitda<10?"#4ade80":"#94a3b8"} hint="10倍未満が割安" />
+            <MBox label="信用倍率" value={f.shinyoBairitu?f.shinyoBairitu+"倍":"—"} color={n(f.shinyoBairitu)>3?"#f87171":"#94a3b8"} hint="高いと将来売り圧力" />
+            <MBox label="配当利回り" value={c.dividendYield?pct(c.dividendYield):"—"} color={c.dividendYield&&c.dividendYield>0.03?"#4ade80":"#94a3b8"} />
+            <MBox label="配当性向" value={c.payoutRatio?pct(c.payoutRatio):"—"} color="#94a3b8" hint="30〜50%が健全" />
+            <MBox label="時価総額" value={c.marketCap?fmtM(c.marketCap):"—"} color="#e2e8f0" />
+          </Sec>
+          <Sec title="収益性・資本効率">
+            <MBox label="ROE" value={c.roe?pct(c.roe):"—"} color={c.roe&&c.roe>0.15?"#4ade80":"#94a3b8"} hint="15%超で優良" />
+            <MBox label="ROA" value={c.roa?pct(c.roa):"—"} color={c.roa&&c.roa>0.05?"#4ade80":"#94a3b8"} hint="5%超で優良" />
+            <MBox label="ROIC" value={c.roic?pct(c.roic):"—"} color={c.roic&&c.roic>0.08?"#4ade80":"#94a3b8"} hint="8%超で優良" />
+            <MBox label="粗利率" value={c.grossMargin?pct(c.grossMargin):"—"} color={c.grossMargin&&c.grossMargin>0.40?"#4ade80":"#94a3b8"} />
+            <MBox label="営業利益率" value={c.opMargin?pct(c.opMargin):"—"} color={c.opMargin&&c.opMargin>0.10?"#4ade80":"#94a3b8"} hint="10%超で優良" />
+            <MBox label="経常利益率" value={c.ordMargin?pct(c.ordMargin):"—"} color="#94a3b8" />
+          </Sec>
+          <Sec title="安全性">
+            <MBox label="自己資本比率" value={c.equityRatio?pct(c.equityRatio):"—"} color={c.equityRatio&&c.equityRatio>0.40?"#4ade80":"#94a3b8"} hint="40%超が安全" />
+            <MBox label="流動比率" value={c.currentRatio?pct(c.currentRatio):"—"} color={c.currentRatio&&c.currentRatio>2?"#4ade80":c.currentRatio&&c.currentRatio>1?"#fbbf24":"#f87171"} hint="200%超が理想" />
+            <MBox label="固定比率" value={c.fixedRatio?pct(c.fixedRatio):"—"} color={c.fixedRatio&&c.fixedRatio<1?"#4ade80":"#94a3b8"} hint="100%以下が望ましい" />
+            <MBox label="固定長期適合率" value={c.fixedLTRatio?pct(c.fixedLTRatio):"—"} color={c.fixedLTRatio&&c.fixedLTRatio<1?"#4ade80":"#f87171"} hint="100%以下が望ましい" />
+          </Sec>
+        </div>
+      )}
+
+      {metricsView === "trend" && (
+        <div>
+          {/* 年次比較テーブル */}
+          <div style={{ ...S.card, overflowX:"auto", marginBottom:16 }}>
+            <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:12 }}>年次財務指標比較（前期比変化率付き）</div>
+            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+              <thead>
+                <tr style={{ borderBottom:"1px solid #1e293b" }}>
+                  <th style={{ textAlign:"left", padding:"6px 10px", color:"#475569", fontSize:11 }}>指標</th>
+                  {annualData.map(({ label, key }, i) => (
+                    <th key={key} style={{ textAlign:"right", padding:"6px 10px", color:"#60a5fa", fontSize:11, minWidth:100 }}>
+                      {label}
+                      {i > 0 && <span style={{ display:"block", color:"#334155", fontSize:9 }}>前年比</span>}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  ["売上高",      d => n(d.f.sales),           v => fmtM(v)],
+                  ["営業利益",    d => n(d.f.opProfit),        v => fmtM(v)],
+                  ["経常利益",    d => n(d.f.ordProfit),       v => fmtM(v)],
+                  ["当期純利益",  d => n(d.f.netProfit),       v => fmtM(v)],
+                  ["EBITDA",     d => n(d.f.ebitda),          v => fmtM(v)],
+                  ["営業利益率",  d => d.c.opMargin,           v => pct(v)],
+                  ["純利益率",    d => d.c.ordMargin,          v => pct(v)],
+                  ["ROE",        d => d.c.roe,                v => pct(v)],
+                  ["ROA",        d => d.c.roa,                v => pct(v)],
+                  ["自己資本比率",d => d.c.equityRatio,        v => pct(v)],
+                  ["PER",        d => d.c.per,                v => v?xfmt(v):"—"],
+                  ["EPS",        d => d.c.eps,                v => v?"¥"+v.toFixed(1):"—"],
+                  ["1株配当",    d => n(d.f.dividend),        v => v?"¥"+v:"—"],
+                ].map(([label, getter, formatter]) => (
+                  <tr key={label} style={{ borderBottom:"1px solid #1e293b" }}>
+                    <td style={{ padding:"6px 10px", color:"#64748b", fontSize:11 }}>{label}</td>
+                    {annualData.map(({ key }, i) => {
+                      const cur = getter(annualData[i]);
+                      const prev = i > 0 ? getter(annualData[i-1]) : null;
+                      const chg = calcChg(cur, prev);
+                      return (
+                        <td key={key} style={{ textAlign:"right", padding:"6px 10px" }}>
+                          <div style={{ color:"#e2e8f0", fontWeight:600 }}>{formatter(cur)}</div>
+                          {i > 0 && <div style={{ color:chgColor(chg), fontSize:10 }}>{chgStr(chg)}</div>}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* 売上高・営業利益・純利益グラフ */}
+          <div style={S.card}>
+            <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:12 }}>売上高・営業利益・純利益推移</div>
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={annualData.map(({ label, f: fd }) => ({
+                name: label,
+                売上高: n(fd.sales) ? Math.round(n(fd.sales)/1e8)/10 : null,
+                営業利益: n(fd.opProfit) ? Math.round(n(fd.opProfit)/1e8)/10 : null,
+                純利益: n(fd.netProfit) ? Math.round(n(fd.netProfit)/1e8)/10 : null,
+              }))}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                <XAxis dataKey="name" tick={{ fill:"#94a3b8", fontSize:11 }} />
+                <YAxis tick={{ fill:"#64748b", fontSize:10 }} tickFormatter={v => v+"億"} />
+                <Tooltip formatter={v => v+"億円"} contentStyle={TS} itemStyle={{ color:"#e2e8f0" }} />
+                <Legend wrapperStyle={{ color:"#94a3b8", fontSize:11 }} />
+                <Bar dataKey="売上高" fill="#60a5fa" radius={[3,3,0,0]} />
+                <Bar dataKey="営業利益" fill="#4ade80" radius={[3,3,0,0]} />
+                <Bar dataKey="純利益" fill="#a78bfa" radius={[3,3,0,0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* 利益率・ROEトレンド */}
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
+            <div style={S.card}>
+              <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:12 }}>利益率トレンド</div>
+              <ResponsiveContainer width="100%" height={180}>
+                <LineChart data={trendData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                  <XAxis dataKey="name" tick={{ fill:"#94a3b8", fontSize:11 }} />
+                  <YAxis tick={{ fill:"#64748b", fontSize:10 }} tickFormatter={v => v+"%"} />
+                  <Tooltip formatter={v => v+"%"} contentStyle={TS} itemStyle={{ color:"#e2e8f0" }} />
+                  <Legend wrapperStyle={{ color:"#94a3b8", fontSize:11 }} />
+                  <Line type="monotone" dataKey="営業利益率" stroke="#4ade80" strokeWidth={2} dot={{ fill:"#4ade80" }} connectNulls />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+            <div style={S.card}>
+              <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:12 }}>ROE・ROAトレンド</div>
+              <ResponsiveContainer width="100%" height={180}>
+                <LineChart data={trendData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                  <XAxis dataKey="name" tick={{ fill:"#94a3b8", fontSize:11 }} />
+                  <YAxis tick={{ fill:"#64748b", fontSize:10 }} tickFormatter={v => v+"%"} />
+                  <Tooltip formatter={v => v+"%"} contentStyle={TS} itemStyle={{ color:"#e2e8f0" }} />
+                  <Legend wrapperStyle={{ color:"#94a3b8", fontSize:11 }} />
+                  <Line type="monotone" dataKey="ROE" stroke="#4ade80" strokeWidth={2} dot={{ fill:"#4ade80" }} connectNulls />
+                  <Line type="monotone" dataKey="ROA" stroke="#60a5fa" strokeWidth={2} dot={{ fill:"#60a5fa" }} connectNulls />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {metricsView === "qtr" && (
+        <div>
+          <div style={{ ...S.card, overflowX:"auto", marginBottom:16 }}>
+            <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:12 }}>四半期財務指標（前年同期比付き）</div>
+            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:11 }}>
+              <thead>
+                <tr style={{ borderBottom:"1px solid #1e293b" }}>
+                  <th style={{ textAlign:"left", padding:"6px 8px", color:"#475569", fontSize:10 }}>指標</th>
+                  {qtrData.map(({ label, key }) => (
+                    <th key={key} style={{ textAlign:"right", padding:"6px 8px", color:"#60a5fa", fontSize:10, minWidth:80 }}>{label}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  ["売上高",   d => n(d.f.sales),    v => fmtM(v)],
+                  ["営業利益", d => n(d.f.opProfit),  v => fmtM(v)],
+                  ["純利益",   d => n(d.f.netProfit), v => fmtM(v)],
+                  ["EPS",     d => d.c.eps,           v => v?"¥"+v.toFixed(1):"—"],
+                ].map(([label, getter, formatter]) => (
+                  <tr key={label} style={{ borderBottom:"1px solid #1e293b" }}>
+                    <td style={{ padding:"6px 8px", color:"#64748b" }}>{label}</td>
+                    {qtrData.map(({ key }, i) => {
+                      const cur = getter(qtrData[i]);
+                      const prevYr = i >= 4 ? getter(qtrData[i-4]) : null;
+                      const chg = calcChg(cur, prevYr);
+                      return (
+                        <td key={key} style={{ textAlign:"right", padding:"6px 8px" }}>
+                          <div style={{ color:"#e2e8f0" }}>{formatter(cur)}</div>
+                          {prevYr != null && <div style={{ color:chgColor(chg), fontSize:9 }}>{chgStr(chg)}</div>}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* 四半期売上推移グラフ */}
+          <div style={S.card}>
+            <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:12 }}>四半期売上高・営業利益推移</div>
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={qtrData.map(({ label, f: fd }) => ({
+                name: label,
+                売上高: n(fd.sales) ? Math.round(n(fd.sales)/1e8)/10 : null,
+                営業利益: n(fd.opProfit) ? Math.round(n(fd.opProfit)/1e8)/10 : null,
+              }))}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                <XAxis dataKey="name" tick={{ fill:"#94a3b8", fontSize:9 }} interval={0} angle={-30} textAnchor="end" height={40} />
+                <YAxis tick={{ fill:"#64748b", fontSize:10 }} tickFormatter={v => v+"億"} />
+                <Tooltip formatter={v => v+"億円"} contentStyle={TS} itemStyle={{ color:"#e2e8f0" }} />
+                <Legend wrapperStyle={{ color:"#94a3b8", fontSize:11 }} />
+                <Bar dataKey="売上高" fill="#60a5fa" radius={[2,2,0,0]} />
+                <Bar dataKey="営業利益" fill="#4ade80" radius={[2,2,0,0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// 数値入力タブ（多期間対応）
+function InputTab({ selected, updatePeriod, TS }) {
+  const [inputView, setInputView] = useState("annual"); // annual | qtr
+  const [activeYear, setActiveYear] = useState(String(CY));
+  const [activeQtrYear, setActiveQtrYear] = useState(String(CY));
+
+  const periods = selected?.periods || {};
+
+  const handleChange = (periodKey, fieldKey, val) => {
+    if (val === "" || val === "-" || /^-?\d*\.?\d*$/.test(val)) {
+      updatePeriod(selected.id, periodKey, fieldKey, val);
+    }
+  };
+
+  return (
+    <div>
+      <div style={{ marginBottom:12, padding:10, background:"#111827", borderRadius:6, fontSize:11, color:"#475569" }}>
+        参考先:{" "}
+        <a href="https://finance.yahoo.co.jp" target="_blank" rel="noreferrer" style={{ color:"#60a5fa" }}>Yahoo Finance</a>
+        {" / "}<a href="https://www.kabutan.jp" target="_blank" rel="noreferrer" style={{ color:"#60a5fa" }}>株探</a>
+        {" / "}<a href="https://irbank.net" target="_blank" rel="noreferrer" style={{ color:"#60a5fa" }}>IRバンク</a>
+        {" / "}<a href="https://www.buffett-code.com" target="_blank" rel="noreferrer" style={{ color:"#60a5fa" }}>バフェットコード</a>
+      </div>
+
+      <div style={{ display:"flex", gap:4, marginBottom:16 }}>
+        <button style={{ ...S.navBtn, ...(inputView==="annual"?S.navOn:{}) }} onClick={() => setInputView("annual")}>本決算（年次）</button>
+        <button style={{ ...S.navBtn, ...(inputView==="qtr"?S.navOn:{}) }} onClick={() => setInputView("qtr")}>四半期決算</button>
+      </div>
+
+      {inputView === "annual" && (
+        <div>
+          <div style={{ display:"flex", gap:8, marginBottom:16 }}>
+            {ANNUAL_KEYS.map(yr => (
+              <button key={yr} style={{ ...S.navBtn, ...(activeYear===yr?S.navOn:{}) }} onClick={() => setActiveYear(yr)}>{yr}年</button>
+            ))}
+          </div>
+          <div style={{ ...S.card, border:"1px solid #334155" }}>
+            <div style={{ color:"#60a5fa", fontWeight:700, marginBottom:16 }}>{activeYear}年 本決算データ</div>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))", gap:14 }}>
+              {PERIOD_FIELDS.map(({ label, key, hint }) => (
+                <div key={key} style={{ display:"flex", flexDirection:"column", gap:3 }}>
+                  <label style={{ color:"#64748b", fontSize:10 }}>{label}</label>
+                  <input
+                    value={periods[activeYear]?.[key] || ""}
+                    onChange={e => handleChange(activeYear, key, e.target.value)}
+                    style={S.input}
+                    placeholder="数値を入力"
+                    inputMode="decimal"
+                  />
+                  {hint && <span style={{ color:"#334155", fontSize:9 }}>{hint}</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* 3年並べて比較表示 */}
+          <div style={{ ...S.card, overflowX:"auto" }}>
+            <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:12 }}>3年分 入力済みデータ確認</div>
+            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:11 }}>
+              <thead>
+                <tr style={{ borderBottom:"1px solid #1e293b" }}>
+                  <th style={{ textAlign:"left", padding:"6px 10px", color:"#475569" }}>項目</th>
+                  {ANNUAL_KEYS.map(yr => <th key={yr} style={{ textAlign:"right", padding:"6px 10px", color:"#60a5fa" }}>{yr}年</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {PERIOD_FIELDS.slice(2, 9).map(({ label, key }) => (
+                  <tr key={key} style={{ borderBottom:"1px solid #1e293b" }}>
+                    <td style={{ padding:"6px 10px", color:"#64748b" }}>{label}</td>
+                    {ANNUAL_KEYS.map(yr => (
+                      <td key={yr} style={{ textAlign:"right", padding:"6px 10px", color:"#e2e8f0" }}>
+                        {periods[yr]?.[key] ? fmtM(n(periods[yr][key])) : "—"}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {inputView === "qtr" && (
+        <div>
+          <div style={{ display:"flex", gap:8, marginBottom:16 }}>
+            {[String(CY-2), String(CY-1), String(CY)].map(yr => (
+              <button key={yr} style={{ ...S.navBtn, ...(activeQtrYear===yr?S.navOn:{}) }} onClick={() => setActiveQtrYear(yr)}>{yr}年</button>
+            ))}
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(2,1fr)", gap:16 }}>
+            {["Q1","Q2","Q3","Q4"].map(q => {
+              const key = activeQtrYear+"-"+q;
+              return (
+                <div key={key} style={{ ...S.card, border:"1px solid #334155" }}>
+                  <div style={{ color:"#fbbf24", fontWeight:700, marginBottom:12 }}>{activeQtrYear}年 {q}</div>
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+                    {PERIOD_FIELDS.filter(f2 => ["price","shares","sales","opProfit","netProfit","totalAssets","equity"].includes(f2.key)).map(({ label, key: fk, hint }) => (
+                      <div key={fk} style={{ display:"flex", flexDirection:"column", gap:3 }}>
+                        <label style={{ color:"#64748b", fontSize:10 }}>{label}</label>
+                        <input
+                          value={periods[key]?.[fk] || ""}
+                          onChange={e => handleChange(key, fk, e.target.value)}
+                          style={{ ...S.input, fontSize:12 }}
+                          placeholder="数値"
+                          inputMode="decimal"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
   const [tab, setTab]             = useState("portfolio");
   const [portfolio, setPortfolio] = useState(() => loadData() || INIT);
@@ -240,6 +642,23 @@ export default function App() {
   const updateMemo = useCallback((id, key, val) => {
     save(p => p.map(h => h.id === id ? { ...h, memo:{ ...(h.memo||EMPTY_MEMO), [key]:val } } : h));
     if (selected?.id === id) setSelected(s => ({ ...s, memo:{ ...(s.memo||EMPTY_MEMO), [key]:val } }));
+  }, [selected, save]);
+
+  // 多期間データ更新
+  const updatePeriod = useCallback((id, periodKey, fieldKey, val) => {
+    save(p => p.map(h => {
+      if (h.id !== id) return h;
+      const periods = { ...(h.periods || {}) };
+      periods[periodKey] = { ...(periods[periodKey] || {}), [fieldKey]: val };
+      return { ...h, periods };
+    }));
+    if (selected?.id === id) {
+      setSelected(s => {
+        const periods = { ...(s.periods || {}) };
+        periods[periodKey] = { ...(periods[periodKey] || {}), [fieldKey]: val };
+        return { ...s, periods };
+      });
+    }
   }, [selected, save]);
 
   const addStock = () => {
@@ -613,50 +1032,7 @@ export default function App() {
                 </div>
 
                 {detailTab === "metrics" && (
-                  <div>
-                    <Sec title="株価指標">
-                      <MBox label="PER" value={c.per?xfmt(c.per):"—"} color={c.per&&c.per<15?"#4ade80":c.per&&c.per<25?"#fbbf24":"#f87171"} hint="15倍未満が割安" badge={c.per&&c.per<15?"割安":""} />
-                      <MBox label="PBR" value={c.pbr?xfmt(c.pbr):"—"} color={c.pbr&&c.pbr<1.5?"#4ade80":"#94a3b8"} hint="1倍以下は解散価値割れ" />
-                      <MBox label="PSR" value={c.psr?xfmt(c.psr):"—"} color={c.psr&&c.psr<2?"#4ade80":"#94a3b8"} />
-                      <MBox label="EV/EBITDA" value={c.evEbitda?xfmt(c.evEbitda):"—"} color={c.evEbitda&&c.evEbitda<10?"#4ade80":"#94a3b8"} hint="10倍未満が割安" />
-                      <MBox label="信用倍率" value={f.shinyoBairitu?f.shinyoBairitu+"倍":"—"} color={n(f.shinyoBairitu)>3?"#f87171":"#94a3b8"} hint="高いと将来売り圧力" />
-                      <MBox label="配当利回り" value={c.dividendYield?pct(c.dividendYield):"—"} color={c.dividendYield&&c.dividendYield>0.03?"#4ade80":"#94a3b8"} />
-                      <MBox label="配当性向" value={c.payoutRatio?pct(c.payoutRatio):"—"} color="#94a3b8" hint="30〜50%が健全" />
-                      <MBox label="時価総額" value={c.marketCap?fmtM(c.marketCap):"—"} color="#e2e8f0" />
-                    </Sec>
-                    <Sec title="収益性・資本効率">
-                      <MBox label="ROE" value={c.roe?pct(c.roe):"—"} color={c.roe&&c.roe>0.15?"#4ade80":"#94a3b8"} hint="15%超で優良" />
-                      <MBox label="ROA" value={c.roa?pct(c.roa):"—"} color={c.roa&&c.roa>0.05?"#4ade80":"#94a3b8"} hint="5%超で優良" />
-                      <MBox label="ROIC" value={c.roic?pct(c.roic):"—"} color={c.roic&&c.roic>0.08?"#4ade80":"#94a3b8"} hint="8%超で優良" />
-                      <MBox label="粗利率" value={c.grossMargin?pct(c.grossMargin):"—"} color={c.grossMargin&&c.grossMargin>0.40?"#4ade80":"#94a3b8"} />
-                      <MBox label="営業利益率" value={c.opMargin?pct(c.opMargin):"—"} color={c.opMargin&&c.opMargin>0.10?"#4ade80":"#94a3b8"} hint="10%超で優良" />
-                      <MBox label="経常利益率" value={c.ordMargin?pct(c.ordMargin):"—"} color="#94a3b8" />
-                    </Sec>
-                    <Sec title="安全性">
-                      <MBox label="自己資本比率" value={c.equityRatio?pct(c.equityRatio):"—"} color={c.equityRatio&&c.equityRatio>0.40?"#4ade80":"#94a3b8"} hint="40%超が安全" />
-                      <MBox label="流動比率" value={c.currentRatio?pct(c.currentRatio):"—"} color={c.currentRatio&&c.currentRatio>2?"#4ade80":c.currentRatio&&c.currentRatio>1?"#fbbf24":"#f87171"} hint="200%超が理想" />
-                      <MBox label="固定比率" value={c.fixedRatio?pct(c.fixedRatio):"—"} color={c.fixedRatio&&c.fixedRatio<1?"#4ade80":"#94a3b8"} hint="100%以下が望ましい" />
-                      <MBox label="固定長期適合率" value={c.fixedLTRatio?pct(c.fixedLTRatio):"—"} color={c.fixedLTRatio&&c.fixedLTRatio<1?"#4ade80":"#f87171"} hint="100%以下が望ましい" />
-                    </Sec>
-                    {(c.grossMargin||c.opMargin) && (
-                      <div style={S.card}>
-                        <div style={{ color:"#94a3b8", fontSize:13, marginBottom:12 }}>利益率グラフ</div>
-                        <ResponsiveContainer width="100%" height={180}>
-                          <BarChart data={[
-                            { name:"粗利率",    v:c.grossMargin?parseFloat((c.grossMargin*100).toFixed(1)):0 },
-                            { name:"営業利益率", v:c.opMargin?parseFloat((c.opMargin*100).toFixed(1)):0 },
-                            { name:"経常利益率", v:c.ordMargin?parseFloat((c.ordMargin*100).toFixed(1)):0 },
-                          ]}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                            <XAxis dataKey="name" tick={{ fill:"#94a3b8", fontSize:12 }} />
-                            <YAxis tick={{ fill:"#64748b", fontSize:11 }} tickFormatter={v => v+"%"} />
-                            <Tooltip formatter={v => v+"%"} contentStyle={TS} itemStyle={{ color:"#e2e8f0" }} />
-                            <Bar dataKey="v" fill="#4ade80" radius={[4,4,0,0]} />
-                          </BarChart>
-                        </ResponsiveContainer>
-                      </div>
-                    )}
-                  </div>
+                  <MetricsTab c={c} f={f} selected={selected} TS={TS} />
                 )}
 
                 {detailTab === "memo" && (
@@ -720,23 +1096,7 @@ export default function App() {
                 )}
 
                 {detailTab === "input" && (
-                  <div>
-                    <div style={{ marginBottom:12, padding:10, background:"#111827", borderRadius:6, fontSize:11, color:"#475569" }}>
-                      参考先:{" "}
-                      <a href="https://finance.yahoo.co.jp" target="_blank" rel="noreferrer" style={{ color:"#60a5fa" }}>Yahoo Finance Japan</a>
-                      {" / "}<a href="https://www.kabutan.jp" target="_blank" rel="noreferrer" style={{ color:"#60a5fa" }}>株探</a>
-                      {" / "}<a href="https://irbank.net" target="_blank" rel="noreferrer" style={{ color:"#60a5fa" }}>IRバンク</a>
-                      {" / "}<a href="https://www.buffett-code.com" target="_blank" rel="noreferrer" style={{ color:"#60a5fa" }}>バフェットコード</a>
-                    </div>
-                    <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))", gap:14 }}>
-                      {INPUT_FIELDS.map(({ label, key, hint }) => (
-                        <FInput key={key} label={label} value={f[key]||""} onChange={v => updateF(selected.id,key,v)} hint={hint||""} numOnly={true} />
-                      ))}
-                    </div>
-                    <div style={{ marginTop:16, padding:12, background:"#111827", borderRadius:8, fontSize:11, color:"#475569" }}>
-                      EPS・BPS は入力不要です。純利益と発行済株式数から自動計算されます。
-                    </div>
-                  </div>
+                  <InputTab selected={selected} updatePeriod={updatePeriod} TS={TS} />
                 )}
 
                 {detailTab === "ir" && (
