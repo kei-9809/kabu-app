@@ -291,14 +291,14 @@ const MBox = ({ label, value, color="#94a3b8", hint="", badge="" }) => {
             <span style={{ color:"#f1f5f9", fontWeight:700, fontSize:13 }}>{desc.title}</span>
             <button onClick={()=>setOpen(false)} style={{ background:"none", border:"none", color:"#64748b", cursor:"pointer", fontSize:16, lineHeight:1, padding:"0 2px" }}>×</button>
           </div>
-          <div style={{ background:"#111827", borderRadius:6, padding:"6px 10px", marginBottom:8, fontSize:11, color:"#64748b", fontFamily:"monospace" }}>
+          <div style={{ background:"#111827", borderRadius:6, padding:"6px 10px", marginBottom:8, fontSize:11, color:"#60a5fa", fontFamily:"monospace" }}>
             {desc.formula}
           </div>
-          <div style={{ fontSize:12, color:"#94a3b8", marginBottom:8, lineHeight:1.7 }}>{desc.what}</div>
-          <div style={{ fontSize:11, color:"#475569", marginBottom:6, padding:"6px 8px", background:"#111827", borderRadius:6, lineHeight:1.6 }}>
+          <div style={{ fontSize:12, color:"#cbd5e1", marginBottom:8, lineHeight:1.7 }}>{desc.what}</div>
+          <div style={{ fontSize:11, color:"#94a3b8", marginBottom:6, padding:"6px 8px", background:"#111827", borderRadius:6, lineHeight:1.6 }}>
             <span style={{ color:"#4ade80" }}>📊 </span>{desc.judge}
           </div>
-          {desc.note && <div style={{ fontSize:10, color:"#334155", lineHeight:1.6 }}>💡 {desc.note}</div>}
+          {desc.note && <div style={{ fontSize:10, color:"#64748b", lineHeight:1.6 }}>💡 {desc.note}</div>}
         </div>
       )}
     </div>
