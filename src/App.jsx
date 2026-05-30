@@ -323,7 +323,7 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, TS }) {
     shinyoBairitu: latestAnnual.f.shinyoBairitu || f.shinyoBairitu,
   } : f;
 
-  // 来期予想指標の計算
+  // 今期予想指標の計算
   const fc = useMemo(() => {
     const fd = periods[FORECAST_KEY] || {};
     if (!Object.values(fd).some(v => v !== "" && v != null)) return null;
@@ -396,11 +396,11 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, TS }) {
             <MBox label="時価総額" value={cc.marketCap?fmtM(cc.marketCap):"—"} color="#e2e8f0" />
           </Sec>
           {fc && (
-            <Sec title="株価指標(来期予想)">
-              <MBox label="予想PER" value={fc.per?xfmt(fc.per):"—"} color={fc.per&&fc.per<15?"#4ade80":fc.per&&fc.per<25?"#fbbf24":"#f87171"} hint="来期予想純利益ベース" badge={fc.per&&fc.per<15?"割安":""} />
-              <MBox label="予想PSR" value={fc.psr?xfmt(fc.psr):"—"} color={fc.psr&&fc.psr<2?"#4ade80":"#94a3b8"} hint="来期予想売上高ベース" />
-              <MBox label="予想配当利回り" value={fc.dividendYield?pct(fc.dividendYield):"—"} color={fc.dividendYield&&fc.dividendYield>0.03?"#4ade80":"#94a3b8"} hint="来期予想配当ベース" />
-              <MBox label="予想営業利益率" value={fc.opMargin?pct(fc.opMargin):"—"} color={fc.opMargin&&fc.opMargin>0.10?"#4ade80":"#94a3b8"} hint="来期予想営業利益ベース" />
+            <Sec title="株価指標(今期予想)">
+              <MBox label="予想PER" value={fc.per?xfmt(fc.per):"—"} color={fc.per&&fc.per<15?"#4ade80":fc.per&&fc.per<25?"#fbbf24":"#f87171"} hint="今期予想純利益ベース" badge={fc.per&&fc.per<15?"割安":""} />
+              <MBox label="予想PSR" value={fc.psr?xfmt(fc.psr):"—"} color={fc.psr&&fc.psr<2?"#4ade80":"#94a3b8"} hint="今期予想売上高ベース" />
+              <MBox label="予想配当利回り" value={fc.dividendYield?pct(fc.dividendYield):"—"} color={fc.dividendYield&&fc.dividendYield>0.03?"#4ade80":"#94a3b8"} hint="今期予想配当ベース" />
+              <MBox label="予想営業利益率" value={fc.opMargin?pct(fc.opMargin):"—"} color={fc.opMargin&&fc.opMargin>0.10?"#4ade80":"#94a3b8"} hint="今期予想営業利益ベース" />
             </Sec>
           )}
           <Sec title="キャッシュ指標">
@@ -650,10 +650,10 @@ function InputTab({ selected, periods, updatePeriod, baseYear, annualKeys, TS })
             </div>
           </div>
 
-          {/* 来期予想セクション：翌年度選択時のみ表示 */}
+          {/* 今期予想セクション：翌年度選択時のみ表示 */}
           {activeYear === String(baseYear+1) && (
             <div style={{ ...S.card, border:"1px solid #fbbf2444" }}>
-              <div style={{ color:"#fbbf24", fontWeight:700, marginBottom:8 }}>来期予想データ</div>
+              <div style={{ color:"#fbbf24", fontWeight:700, marginBottom:8 }}>今期予想データ</div>
               <div style={{ color:"#475569", fontSize:11, marginBottom:14 }}>
                 株価・株式数・純資産は最新本決算を自動継承。予想PER・PSR・配当利回り・営業利益率の計算に使用されます。
               </div>
