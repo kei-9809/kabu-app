@@ -2,6 +2,7 @@ import { useState, useCallback, useMemo } from "react";
 import {
   BarChart, Bar, LineChart, Line, AreaChart, Area,
   RadarChart, Radar, PolarGrid, PolarAngleAxis,
+  PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine, Legend
 } from "recharts";
@@ -756,13 +757,25 @@ export default function App() {
                     <div style={S.card}>
                       <div style={{color:"#94a3b8",fontSize:13,fontWeight:700,marginBottom:12}}>セクター別配分</div>
                       <ResponsiveContainer width="100%" height={200}>
-                        <BarChart data={sectorData} layout="vertical" margin={{left:10,right:40}}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#1e293b"/>
-                          <XAxis type="number" tick={{fill:"#64748b",fontSize:10}} tickFormatter={v=>fmtM(v)}/>
-                          <YAxis dataKey="name" type="category" tick={{fill:"#94a3b8",fontSize:11}} width={70}/>
+                        <PieChart>
+                          <Pie
+                            data={sectorData}
+                            dataKey="value"
+                            nameKey="name"
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={50}
+                            outerRadius={80}
+                            paddingAngle={3}
+                            label={({name,percent})=>`${name} ${(percent*100).toFixed(0)}%`}
+                            labelLine={true}
+                          >
+                            {sectorData.map((_,i)=>(
+                              <Cell key={i} fill={["#60a5fa","#4ade80","#f59e0b","#a78bfa","#f87171","#34d399","#fb7185","#38bdf8"][i%8]}/>
+                            ))}
+                          </Pie>
                           <Tooltip formatter={v=>"¥"+v.toLocaleString()} contentStyle={S.tooltip}/>
-                          <Bar dataKey="value" fill="#60a5fa" radius={[0,4,4,0]}/>
-                        </BarChart>
+                        </PieChart>
                       </ResponsiveContainer>
                     </div>
                     <div style={S.card}>
