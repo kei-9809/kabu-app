@@ -839,38 +839,24 @@ export default function App() {
 
   const handleAdvanceYear = useCallback(() => {
     const nextBase = baseYear + 1;
-    const msg = `決算年度を1年進めます。\n\n現在: ${baseYear-2}〜${baseYear+1}年\n更新後: ${nextBase-2}〜${nextBase+1}年\n\n・${baseYear-2}年のデータは削除されます\n・各銘柄のデータが1年ずつ繰り越されます\n\nよろしいですか？`;
+    const oldestYr = String(baseYear - 2);
+    const msg = "決算年度を1年進めます。\n\n現在: " + (baseYear-2) + "~" + (baseYear+1) + "年\n更新後: " + (nextBase-2) + "~" + (nextBase+1) + "年\n\n・" + oldestYr + "年のデータは削除されます\n・表示範囲が1年ずれます（既存データはそのまま）\n\nよろしいですか？";
     if (!window.confirm(msg)) return;
 
-    // undo用に現在の状態を保存
-    const undo = { baseYear, portfolio };
+    // undo用に現在の状態を保存（baseYearとportfolioを記録）
+    const undo = { baseYear, portfolio: JSON.parse(JSON.stringify(portfolio)) };
     setUndoData(undo);
     saveUndoData(undo);
 
-    // 各銘柄のperiodsを更新
+    // 最古年（baseYear-2）のperiodsデータのみ削除
     save(p => p.map(h => {
       const oldPeriods = h.periods || {};
       const newPeriods = {};
-
-      // 年次データ: 既存の年キーはそのまま維持（削除対象の最古年のみ除外）
-      const oldestYr = String(baseYear - 2);
       Object.keys(oldPeriods).forEach(key => {
-        if (key === oldestYr) return; // 最古年は削除
-        if (!key.includes("-Q") && key !== FORECAST_KEY) {
-          newPeriods[key] = oldPeriods[key]; // 既存年次データはそのまま
-        }
+        if (key === oldestYr) return; // 最古年を削除
+        if (key.includes("-Q") && key.startsWith(oldestYr)) return; // 最古年の四半期も削除
+        newPeriods[key] = oldPeriods[key];
       });
-
-      // 四半期データ: 最古年分のみ削除
-      Object.keys(oldPeriods).forEach(key => {
-        if (key.includes("-Q")) {
-          const yr = parseInt(key.split("-")[0]);
-          if (yr > parseInt(oldestYr)) newPeriods[key] = oldPeriods[key];
-        }
-      });
-
-      // forecastデータはそのまま
-      if (oldPeriods[FORECAST_KEY]) newPeriods[FORECAST_KEY] = oldPeriods[FORECAST_KEY];
       return { ...h, periods: newPeriods };
     }));
 
@@ -880,14 +866,15 @@ export default function App() {
 
   const handleUndoYear = useCallback(() => {
     if (!undoData) return;
-    if (!window.confirm(`決算年度の更新を元に戻します。\n\n${undoData.baseYear+1}→${undoData.baseYear}年 に戻りますがよろしいですか？`)) return;
-    save(() => undoData.portfolio);
+    const msg = "決算年度の更新を元に戻します。\n\n" + (undoData.baseYear+1) + "->" + undoData.baseYear + "年 に戻りますがよろしいですか？";
+    if (!window.confirm(msg)) return;
     setPortfolio(undoData.portfolio);
+    saveData(undoData.portfolio);
     setBaseYear(undoData.baseYear);
     saveBaseYear(undoData.baseYear);
     setUndoData(null);
     clearUndoData();
-  }, [undoData, save]);
+  }, [undoData]);
 
   const toggleCompare = id => setCompareIds(p => p.includes(id) ? p.filter(x => x !== id) : p.length < 4 ? [...p, id] : p);
 
