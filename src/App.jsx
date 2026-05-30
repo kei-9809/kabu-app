@@ -124,6 +124,14 @@ const INITIAL_PORTFOLIO = [
     financials:{ price:"6850", shares:"2110000", sales:"6000000000000", grossProfit:"", opProfit:"500000000000", ordProfit:"", netProfit:"-800000000000", totalAssets:"50000000000000", equity:"8000000000000", curAssets:"", fixAssets:"", curLiab:"", fixLiab:"", ebitda:"900000000000", dividend:"", shinyoBairitu:"3.2" }, irList:[] },
 ];
 
+// ── 基本コンポーネント ─────────────────────────────────────────────────────────
+const Tag = ({ children, color="#4ade80" }) => (
+  <span style={{ background:color+"22", color, border:`1px solid ${color}44`, borderRadius:4, padding:"2px 8px", fontSize:11, fontWeight:600 }}>{children}</span>
+);
+const Δ = ({ val, fmt: f = v => v.toFixed(2) }) => (
+  <span style={{ color:val>=0?"#4ade80":"#f87171", fontWeight:700 }}>{val>=0?"▲":"▼"} {f(Math.abs(val))}</span>
+);
+
 // ── 指標説明データ ─────────────────────────────────────────────────────────────
 const METRIC_DESC = {
   "PER": {
