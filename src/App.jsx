@@ -756,43 +756,40 @@ export default function App() {
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
                     <div style={S.card}>
                       <div style={{color:"#94a3b8",fontSize:13,fontWeight:700,marginBottom:12}}>セクター別配分</div>
-                      <ResponsiveContainer width="100%" height={260}>
+                      <ResponsiveContainer width="100%" height={200}>
                         <PieChart>
-                          <Pie
-                            data={sectorData}
-                            dataKey="value"
-                            nameKey="name"
-                            cx="50%"
-                            cy="50%"
-                            innerRadius={55}
-                            outerRadius={85}
-                            paddingAngle={3}
-                            label={({name,percent,x,y})=>(
-                              <text x={x} y={y} fill="#94a3b8" textAnchor="middle" dominantBaseline="central" fontSize={11}>
-                                {`${name} ${(percent*100).toFixed(0)}%`}
-                              </text>
-                            )}
-                            labelLine={{stroke:"#334155"}}
-                          >
+                          <Pie data={sectorData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={3}>
                             {sectorData.map((_,i)=>(
                               <Cell key={i} fill={["#60a5fa","#4ade80","#f59e0b","#a78bfa","#f87171","#34d399","#fb7185","#38bdf8"][i%8]}/>
                             ))}
                           </Pie>
-                          <Tooltip formatter={v=>"¥"+v.toLocaleString()} contentStyle={S.tooltip}/>
+                          <Tooltip formatter={(v,name)=>["¥"+v.toLocaleString(),name]} contentStyle={S.tooltip} labelStyle={{color:"#94a3b8"}} itemStyle={{color:"#e2e8f0"}}/>
                         </PieChart>
                       </ResponsiveContainer>
+                      {/* カスタム凡例 */}
+                      <div style={{display:"flex",flexWrap:"wrap",gap:"6px 16px",justifyContent:"center",marginTop:8}}>
+                        {sectorData.map((d,i)=>{
+                          const color=["#60a5fa","#4ade80","#f59e0b","#a78bfa","#f87171","#34d399","#fb7185","#38bdf8"][i%8];
+                          const total=sectorData.reduce((a,b)=>a+b.value,0);
+                          return(
+                            <span key={d.name} style={{display:"flex",alignItems:"center",gap:5,fontSize:11,color:"#94a3b8"}}>
+                              <span style={{display:"inline-block",width:10,height:10,borderRadius:2,background:color,flexShrink:0}}/>
+                              {d.name}　{((d.value/total)*100).toFixed(0)}%
+                            </span>
+                          );
+                        })}
+                      </div>
                     </div>
                     <div style={S.card}>
                       <div style={{color:"#94a3b8",fontSize:13,fontWeight:700,marginBottom:12}}>損益率ランキング</div>
                       <ResponsiveContainer width="100%" height={200}>
-                        <BarChart data={sortedByPnl.map(h=>({name:h.ticker,損益率:parseFloat(((h.currentPrice-h.avgCost)/h.avgCost*100).toFixed(2))}))} layout="vertical" margin={{left:10,right:50}}>
+                        <BarChart data={sortedByPnl.map(h=>({name:h.name.length>8?h.name.slice(0,8)+"…":h.name,損益率:parseFloat(((h.currentPrice-h.avgCost)/h.avgCost*100).toFixed(2))}))} layout="vertical" margin={{left:10,right:50}}>
                           <CartesianGrid strokeDasharray="3 3" stroke="#1e293b"/>
                           <XAxis type="number" tick={{fill:"#64748b",fontSize:10}} tickFormatter={v=>v+"%"}/>
-                          <YAxis dataKey="name" type="category" tick={{fill:"#94a3b8",fontSize:11}} width={50}/>
-                          <Tooltip formatter={v=>v+"%"} contentStyle={S.tooltip}/>
+                          <YAxis dataKey="name" type="category" tick={{fill:"#94a3b8",fontSize:11}} width={90}/>
+                          <Tooltip formatter={v=>v+"%"} contentStyle={S.tooltip} labelStyle={{color:"#94a3b8"}} itemStyle={{color:"#e2e8f0"}}/>
                           <ReferenceLine x={0} stroke="#475569"/>
-                          <Bar dataKey="損益率" radius={[0,4,4,0]}
-                            fill="#4ade80"
+                          <Bar dataKey="損益率" radius={[0,4,4,0]} fill="#4ade80"
                             label={{position:"right",fill:"#94a3b8",fontSize:10,formatter:v=>v+"%"}}
                           />
                         </BarChart>
@@ -1564,5 +1561,5 @@ const S = {
   input:{ background:"#111827", border:"1px solid #1e293b", color:"#e2e8f0", padding:"8px 12px", borderRadius:6, fontSize:13, fontFamily:"inherit", outline:"none", width:"100%", boxSizing:"border-box" },
   select:{ background:"#111827", border:"1px solid #1e293b", color:"#e2e8f0", padding:"8px 12px", borderRadius:6, fontSize:13, fontFamily:"inherit", width:"100%" },
   miniBtn:{ background:"#111827", border:"1px solid #334155", color:"#64748b", padding:"4px 10px", borderRadius:4, cursor:"pointer", fontSize:11, fontFamily:"inherit" },
-  tooltip:{ background:"#0d1424", border:"1px solid #1e293b", borderRadius:6, color:"#e2e8f0", fontSize:12 },
+  tooltip:{ background:"#0d1424", border:"1px solid #1e293b", borderRadius:6, color:"#e2e8f0", fontSize:12, fontFamily:"'DM Mono','Courier New',monospace" },
 };
