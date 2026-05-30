@@ -304,27 +304,45 @@ const Section = ({ title, children }) => (
     <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(145px,1fr))", gap:10 }}>{children}</div>
   </div>
 );
-const FInput = ({ label, value, onChange, hint="", numericOnly=false }) => (
-  <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
-    <label style={{ color:"#64748b", fontSize:10 }}>{label}</label>
-    <input
-      value={value}
-      onChange={e => {
-        const v = e.target.value;
-        if (numericOnly) {
-          // 数字・マイナス・ドットのみ許可
-          if (v === "" || v === "-" || /^-?\d*\.?\d*$/.test(v)) onChange(v);
-        } else {
-          onChange(v);
-        }
-      }}
-      style={S.input}
-      placeholder={numericOnly ? "数値を入力" : "入力"}
-      inputMode={numericOnly ? "decimal" : "text"}
-    />
-    {hint && <span style={{ color:"#334155", fontSize:9 }}>{hint}</span>}
-  </div>
-);
+const FInput = ({ label, value, onChange, hint="", numericOnly=false, type="text", maxLen=100 }) => {
+  const handleChange = e => {
+    let v = e.target.value;
+    if (numericOnly) {
+      if (v === "" || v === "-" || /^-?\d*\.?\d*$/.test(v)) onChange(v);
+      return;
+    }
+    if (type === "ticker") {
+      // 証券コード: 数字のみ、最大5文字
+      if (/^\d{0,5}$/.test(v)) onChange(v);
+      return;
+    }
+    if (type === "date") {
+      // 日付: 数字とハイフンのみ
+      if (/^[\d-]{0,10}$/.test(v)) onChange(v);
+      return;
+    }
+    if (type === "url") {
+      // URL: スペースなし
+      if (!/\s/.test(v)) onChange(v.slice(0, 300));
+      return;
+    }
+    // 通常テキスト: maxLen制限のみ
+    onChange(v.slice(0, maxLen));
+  };
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
+      <label style={{ color:"#64748b", fontSize:10 }}>{label}</label>
+      <input
+        value={value}
+        onChange={handleChange}
+        style={S.input}
+        placeholder={numericOnly ? "数値を入力" : type==="date" ? "例: 2025-05-08" : type==="url" ? "https://..." : "入力"}
+        inputMode={numericOnly||type==="ticker" ? "decimal" : "text"}
+      />
+      {hint && <span style={{ color:"#334155", fontSize:9 }}>{hint}</span>}
+    </div>
+  );
+};
 const scoreColor = v => v >= 80 ? "#4ade80" : v >= 50 ? "#fbbf24" : "#f87171";
 const typeColor  = t => t==="決算"?"#4ade80":t==="配当"?"#fbbf24":t==="人事"?"#a78bfa":"#64748b";
 const COLORS = ["#4ade80","#60a5fa","#f59e0b","#a78bfa"];
@@ -581,9 +599,9 @@ export default function App() {
               <div style={{...S.card,marginBottom:16}}>
                 <div style={{color:"#94a3b8",fontWeight:700,marginBottom:12,fontSize:13}}>新規銘柄追加</div>
                 <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))",gap:12}}>
-                  <FInput label="証券コード（例: 7203）" value={addForm.ticker} onChange={v=>setAddForm(p=>({...p,ticker:v}))}/>
-                  <FInput label="銘柄名" value={addForm.name} onChange={v=>setAddForm(p=>({...p,name:v}))}/>
-                  <FInput label="セクター" value={addForm.sector} onChange={v=>setAddForm(p=>({...p,sector:v}))}/>
+                  <FInput label="証券コード（例: 7203）" value={addForm.ticker} onChange={v=>setAddForm(p=>({...p,ticker:v}))} type="ticker"/>
+                  <FInput label="銘柄名" value={addForm.name} onChange={v=>setAddForm(p=>({...p,name:v}))} maxLen={30}/>
+                  <FInput label="セクター" value={addForm.sector} onChange={v=>setAddForm(p=>({...p,sector:v}))} maxLen={20}/>
                   <FInput label="保有数量（株）" value={addForm.qty} onChange={v=>setAddForm(p=>({...p,qty:v}))} numericOnly={true}/>
                   <FInput label="平均取得単価（円）" value={addForm.avgCost} onChange={v=>setAddForm(p=>({...p,avgCost:v}))} numericOnly={true}/>
                   <FInput label="現在株価（円）" value={addForm.currentPrice} onChange={v=>setAddForm(p=>({...p,currentPrice:v}))} numericOnly={true}/>
@@ -732,7 +750,7 @@ export default function App() {
                     {showIrForm&&(
                       <div style={{...S.card,marginBottom:16}}>
                         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
-                          <FInput label="日付（例: 2025-05-08）" value={irForm.date} onChange={v=>setIrForm(p=>({...p,date:v}))}/>
+                          <FInput label="日付（例: 2025-05-08）" value={irForm.date} onChange={v=>setIrForm(p=>({...p,date:v}))} type="date"/>
                           <div style={{display:"flex",flexDirection:"column",gap:3}}>
                             <label style={{color:"#64748b",fontSize:10}}>種別</label>
                             <select value={irForm.type} style={S.select} onChange={e=>setIrForm(p=>({...p,type:e.target.value}))}>
@@ -740,8 +758,8 @@ export default function App() {
                             </select>
                           </div>
                         </div>
-                        <div style={{marginBottom:12}}><FInput label="タイトル" value={irForm.title} onChange={v=>setIrForm(p=>({...p,title:v}))}/></div>
-                        <div style={{marginBottom:12}}><FInput label="URL（任意）" value={irForm.url} onChange={v=>setIrForm(p=>({...p,url:v}))}/></div>
+                        <div style={{marginBottom:12}}><FInput label="タイトル" value={irForm.title} onChange={v=>setIrForm(p=>({...p,title:v}))} maxLen={100}/></div>
+                        <div style={{marginBottom:12}}><FInput label="URL（任意）" value={irForm.url} onChange={v=>setIrForm(p=>({...p,url:v}))} type="url"/></div>
                         <button style={S.addBtn} onClick={addIR}>保存</button>
                       </div>
                     )}
