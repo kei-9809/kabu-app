@@ -733,6 +733,7 @@ export default function App() {
   const [detailTab, setDetailTab] = useState("metrics");
   const [compareIds, setCompareIds] = useState([]);
   const [baseYear, setBaseYear]   = useState(() => loadBaseYear());
+  const [undoData, setUndoData]   = useState(null); // {baseYear, portfolio}
   const ANNUAL_KEYS = getAnnualKeys(baseYear);
   const [simParams, setSimParams] = useState({ years:"5", growthRate:"15", targetMargin:"15", targetPer:"20", targetEvEbitda:"", dividendRate:"2", reinvest:true });
   const [simTab, setSimTab]       = useState("scenario");
@@ -833,31 +834,40 @@ export default function App() {
     const msg = `決算年度を1年進めます。\n\n現在: ${baseYear-2}〜${baseYear+1}年\n更新後: ${nextBase-2}〜${nextBase+1}年\n\n・${baseYear-2}年のデータは削除されます\n・各銘柄のデータが1年ずつ繰り越されます\n\nよろしいですか？`;
     if (!window.confirm(msg)) return;
 
+    // undo用に現在の状態を保存
+    setUndoData({ baseYear, portfolio });
+
     // 各銘柄のperiodsを1年繰り越し
     save(p => p.map(h => {
       const oldPeriods = h.periods || {};
       const newPeriods = {};
-      // 年次データを1年繰り越し（最古年は削除）
       getAnnualKeys(nextBase).forEach(yr => {
         const prevYr = String(parseInt(yr) - 1);
         if (oldPeriods[prevYr]) newPeriods[yr] = oldPeriods[prevYr];
       });
-      // 四半期データも繰り越し
       Object.keys(oldPeriods).forEach(key => {
         if (key.includes("-Q")) {
           const yr = parseInt(key.split("-")[0]);
           if (yr >= nextBase - 2) newPeriods[key] = oldPeriods[key];
         }
       });
-      // forecastデータはそのまま引き継ぎ
       if (oldPeriods[FORECAST_KEY]) newPeriods[FORECAST_KEY] = oldPeriods[FORECAST_KEY];
       return { ...h, periods: newPeriods };
     }));
 
-    // baseYearを更新
     setBaseYear(nextBase);
     saveBaseYear(nextBase);
-  }, [baseYear, save]);
+  }, [baseYear, portfolio, save]);
+
+  const handleUndoYear = useCallback(() => {
+    if (!undoData) return;
+    if (!window.confirm(`決算年度の更新を元に戻します。\n\n${undoData.baseYear+1}→${undoData.baseYear}年 に戻りますがよろしいですか？`)) return;
+    save(() => undoData.portfolio);
+    setPortfolio(undoData.portfolio);
+    setBaseYear(undoData.baseYear);
+    saveBaseYear(undoData.baseYear);
+    setUndoData(null);
+  }, [undoData, save]);
 
   const toggleCompare = id => setCompareIds(p => p.includes(id) ? p.filter(x => x !== id) : p.length < 4 ? [...p, id] : p);
 
@@ -979,6 +989,11 @@ export default function App() {
           <button style={{ ...S.miniBtn, color:"#a78bfa", borderColor:"#a78bfa", fontSize:11 }} onClick={handleAdvanceYear}>
             📅 {baseYear}→{baseYear+1}年 更新
           </button>
+          {undoData && (
+            <button style={{ ...S.miniBtn, color:"#fbbf24", borderColor:"#fbbf24", fontSize:11 }} onClick={handleUndoYear}>
+              ↩ 更新を元に戻す
+            </button>
+          )}
         </nav>
       </header>
 
