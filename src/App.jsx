@@ -27,7 +27,14 @@ function calcAll(f) {
   const net = n(f.netProfit), ta = n(f.totalAssets), eq = n(f.equity);
   const ca = n(f.curAssets), fa = n(f.fixAssets);
   const cl = n(f.curLiab), fl = n(f.fixLiab);
-  const ebitda = n(f.ebitda), div = n(f.dividend);
+  const div = n(f.dividend);
+  const depTangible = n(f.depTangible);    // 減価償却費（有形）
+  const depIntangible = n(f.depIntangible); // 償却費（無形・のれん）
+  // EBITDA: 手入力があれば優先、なければ自動計算
+  const ebitdaManual = n(f.ebitda);
+  const ebitdaCalc = op != null ? op + (depTangible||0) + (depIntangible||0) : null;
+  const ebitda = ebitdaManual != null ? ebitdaManual : ebitdaCalc;
+
   const marketCap = price != null && shares != null ? price * shares * 1000 : null;
   const netDebt = ta != null && eq != null && ca != null ? (ta - eq) - ca : null;
   const ev = marketCap != null && netDebt != null ? marketCap + netDebt : null;
@@ -35,7 +42,7 @@ function calcAll(f) {
   const bps = eq != null && shares > 0 ? eq / (shares * 1000) : null;
   const ic = ta != null && cl != null ? ta - cl : null;
   return {
-    marketCap, ev, eps, bps, ebitda,
+    marketCap, ev, eps, bps, ebitda, ebitdaCalc, depTangible, depIntangible,
     grossMargin: safe(gp, sales), opMargin: safe(op, sales), ordMargin: safe(ord, sales),
     roe: safe(net, eq), roa: safe(ord, ta), roic: safe(op, ic),
     currentRatio: safe(ca, cl), fixedRatio: safe(fa, eq),
@@ -199,29 +206,33 @@ const INPUT_FIELDS = [
   { label:"固定資産（円）", key:"fixAssets" },
   { label:"流動負債（円）", key:"curLiab" },
   { label:"固定負債（円）", key:"fixLiab" },
-  { label:"EBITDA（円）", key:"ebitda", hint:"営業利益+減価償却費" },
+  { label:"減価償却費（円）", key:"depTangible", hint:"有形固定資産の減価償却費" },
+  { label:"償却費（円）", key:"depIntangible", hint:"無形固定資産・のれん等" },
+  { label:"EBITDA（円）", key:"ebitda", hint:"空欄なら営業利益+償却費で自動計算" },
   { label:"1株配当（円）", key:"dividend" },
   { label:"信用倍率（倍）", key:"shinyoBairitu" },
-];
+]; 
 
 // ── 多期間入力フィールド定義 ──────────────────────────────────────────────────
 const PERIOD_FIELDS = [
-  { label:"株価（円）",          key:"price" },
-  { label:"発行済株式数（千株）", key:"shares", hint:"例: 14430000" },
-  { label:"売上高（円）",        key:"sales" },
-  { label:"売上総利益（円）",    key:"grossProfit" },
-  { label:"営業利益（円）",      key:"opProfit" },
-  { label:"経常利益（円）",      key:"ordProfit" },
-  { label:"当期純利益（円）",    key:"netProfit", hint:"赤字はマイナスで" },
-  { label:"総資産（円）",        key:"totalAssets" },
-  { label:"純資産（円）",        key:"equity" },
-  { label:"流動資産（円）",      key:"curAssets" },
-  { label:"固定資産（円）",      key:"fixAssets" },
-  { label:"流動負債（円）",      key:"curLiab" },
-  { label:"固定負債（円）",      key:"fixLiab" },
-  { label:"EBITDA（円）",       key:"ebitda", hint:"営業利益+減価償却費" },
-  { label:"1株配当（円）",       key:"dividend" },
-  { label:"信用倍率（倍）",      key:"shinyoBairitu" },
+  { label:"株価（円）",              key:"price" },
+  { label:"発行済株式数（千株）",     key:"shares",        hint:"例: 14430000" },
+  { label:"売上高（円）",            key:"sales" },
+  { label:"売上総利益（円）",        key:"grossProfit" },
+  { label:"営業利益（円）",          key:"opProfit" },
+  { label:"経常利益（円）",          key:"ordProfit" },
+  { label:"当期純利益（円）",        key:"netProfit",     hint:"赤字はマイナスで" },
+  { label:"総資産（円）",            key:"totalAssets" },
+  { label:"純資産（円）",            key:"equity" },
+  { label:"流動資産（円）",          key:"curAssets" },
+  { label:"固定資産（円）",          key:"fixAssets" },
+  { label:"流動負債（円）",          key:"curLiab" },
+  { label:"固定負債（円）",          key:"fixLiab" },
+  { label:"減価償却費（円）",        key:"depTangible",   hint:"有形固定資産の減価償却費" },
+  { label:"償却費（円）",            key:"depIntangible", hint:"無形固定資産・のれん等" },
+  { label:"EBITDA（円）",           key:"ebitda",        hint:"空欄なら自動計算" },
+  { label:"1株配当（円）",           key:"dividend" },
+  { label:"信用倍率（倍）",          key:"shinyoBairitu" },
 ];
 
 const CY = new Date().getFullYear();
@@ -246,7 +257,7 @@ function calcChg(cur, prev) {
 
 // 財務指標タブ（多期間対応）
 function MetricsTab({ c, f, selected, TS }) {
-  const [metricsView, setMetricsView] = useState("current"); // current | trend
+  const [metricsView, setMetricsView] = useState("current");
 
   const periods = selected?.periods || {};
   const annualData = useMemo(() => {
@@ -256,6 +267,20 @@ function MetricsTab({ c, f, selected, TS }) {
       return { label: yr+"年", key: yr, f: fd, c: calc };
     });
   }, [periods]);
+
+  // 最新本決算データを優先（入力済みの最新年を探す）
+  const latestAnnual = useMemo(() => {
+    const filled = [...annualData].reverse().find(d => Object.values(d.f).some(v => v !== "" && v != null));
+    return filled || null;
+  }, [annualData]);
+
+  // 現在の指標用: 最新本決算があればそちらを使い、株価だけ現在値で上書き
+  const cc = useMemo(() => {
+    if (!latestAnnual) return c;
+    const merged = { ...latestAnnual.f, price: f.price || latestAnnual.f.price, shinyoBairitu: f.shinyoBairitu };
+    return calcAll(merged);
+  }, [latestAnnual, c, f]);
+  const ff = latestAnnual ? { ...latestAnnual.f, price: f.price || latestAnnual.f.price, shinyoBairitu: f.shinyoBairitu } : f;
 
   const trendData = useMemo(() => {
     return annualData.map(({ label, f: fd, c: ca }) => ({
@@ -289,29 +314,46 @@ function MetricsTab({ c, f, selected, TS }) {
 
       {metricsView === "current" && (
         <div>
+          {latestAnnual && (
+            <div style={{ marginBottom:12, padding:"6px 12px", background:"#111827", borderRadius:6, fontSize:11, color:"#64748b" }}>
+              財務数値: <span style={{ color:"#4ade80" }}>{latestAnnual.label}本決算</span> を使用 / 株価・信用倍率: 現在の入力値
+            </div>
+          )}
+          {!latestAnnual && (
+            <div style={{ marginBottom:12, padding:"6px 12px", background:"#111827", borderRadius:6, fontSize:11, color:"#fbbf24" }}>
+              本決算データ未入力です。「数値入力」タブの「本決算（年次）」から入力してください。
+            </div>
+          )}
           <Sec title="株価指標">
-            <MBox label="PER" value={c.per?xfmt(c.per):"—"} color={c.per&&c.per<15?"#4ade80":c.per&&c.per<25?"#fbbf24":"#f87171"} hint="15倍未満が割安" badge={c.per&&c.per<15?"割安":""} />
-            <MBox label="PBR" value={c.pbr?xfmt(c.pbr):"—"} color={c.pbr&&c.pbr<1.5?"#4ade80":"#94a3b8"} hint="1倍以下は解散価値割れ" />
-            <MBox label="PSR" value={c.psr?xfmt(c.psr):"—"} color={c.psr&&c.psr<2?"#4ade80":"#94a3b8"} />
-            <MBox label="EV/EBITDA" value={c.evEbitda?xfmt(c.evEbitda):"—"} color={c.evEbitda&&c.evEbitda<10?"#4ade80":"#94a3b8"} hint="10倍未満が割安" />
-            <MBox label="信用倍率" value={f.shinyoBairitu?f.shinyoBairitu+"倍":"—"} color={n(f.shinyoBairitu)>3?"#f87171":"#94a3b8"} hint="高いと将来売り圧力" />
-            <MBox label="配当利回り" value={c.dividendYield?pct(c.dividendYield):"—"} color={c.dividendYield&&c.dividendYield>0.03?"#4ade80":"#94a3b8"} />
-            <MBox label="配当性向" value={c.payoutRatio?pct(c.payoutRatio):"—"} color="#94a3b8" hint="30〜50%が健全" />
-            <MBox label="時価総額" value={c.marketCap?fmtM(c.marketCap):"—"} color="#e2e8f0" />
+            <MBox label="PER" value={cc.per?xfmt(cc.per):"—"} color={cc.per&&cc.per<15?"#4ade80":cc.per&&cc.per<25?"#fbbf24":"#f87171"} hint="15倍未満が割安" badge={cc.per&&cc.per<15?"割安":""} />
+            <MBox label="PBR" value={cc.pbr?xfmt(cc.pbr):"—"} color={cc.pbr&&cc.pbr<1.5?"#4ade80":"#94a3b8"} hint="1倍以下は解散価値割れ" />
+            <MBox label="PSR" value={cc.psr?xfmt(cc.psr):"—"} color={cc.psr&&cc.psr<2?"#4ade80":"#94a3b8"} />
+            <MBox label="EV/EBITDA" value={cc.evEbitda?xfmt(cc.evEbitda):"—"} color={cc.evEbitda&&cc.evEbitda<10?"#4ade80":"#94a3b8"} hint="10倍未満が割安" />
+            <MBox label="信用倍率" value={ff.shinyoBairitu?ff.shinyoBairitu+"倍":"—"} color={n(ff.shinyoBairitu)>3?"#f87171":"#94a3b8"} hint="高いと将来売り圧力" />
+            <MBox label="配当利回り" value={cc.dividendYield?pct(cc.dividendYield):"—"} color={cc.dividendYield&&cc.dividendYield>0.03?"#4ade80":"#94a3b8"} />
+            <MBox label="配当性向" value={cc.payoutRatio?pct(cc.payoutRatio):"—"} color="#94a3b8" hint="30〜50%が健全" />
+            <MBox label="時価総額" value={cc.marketCap?fmtM(cc.marketCap):"—"} color="#e2e8f0" />
+          </Sec>
+          <Sec title="キャッシュ指標">
+            <MBox label="EBITDA" value={cc.ebitda?fmtM(cc.ebitda):"—"} color="#60a5fa"
+              hint={cc.ebitdaCalc && !n(ff.ebitda) ? "自動計算（営業利益+償却費）" : cc.ebitda?"入力値":"未入力"} />
+            <MBox label="EV/EBITDA" value={cc.evEbitda?xfmt(cc.evEbitda):"—"} color={cc.evEbitda&&cc.evEbitda<10?"#4ade80":"#94a3b8"} hint="10倍未満が割安" />
+            {cc.depTangible != null && <MBox label="減価償却費" value={fmtM(cc.depTangible)} color="#94a3b8" />}
+            {cc.depIntangible != null && <MBox label="償却費" value={fmtM(cc.depIntangible)} color="#94a3b8" />}
           </Sec>
           <Sec title="収益性・資本効率">
-            <MBox label="ROE" value={c.roe?pct(c.roe):"—"} color={c.roe&&c.roe>0.15?"#4ade80":"#94a3b8"} hint="15%超で優良" />
-            <MBox label="ROA" value={c.roa?pct(c.roa):"—"} color={c.roa&&c.roa>0.05?"#4ade80":"#94a3b8"} hint="5%超で優良" />
-            <MBox label="ROIC" value={c.roic?pct(c.roic):"—"} color={c.roic&&c.roic>0.08?"#4ade80":"#94a3b8"} hint="8%超で優良" />
-            <MBox label="粗利率" value={c.grossMargin?pct(c.grossMargin):"—"} color={c.grossMargin&&c.grossMargin>0.40?"#4ade80":"#94a3b8"} />
-            <MBox label="営業利益率" value={c.opMargin?pct(c.opMargin):"—"} color={c.opMargin&&c.opMargin>0.10?"#4ade80":"#94a3b8"} hint="10%超で優良" />
-            <MBox label="経常利益率" value={c.ordMargin?pct(c.ordMargin):"—"} color="#94a3b8" />
+            <MBox label="ROE" value={cc.roe?pct(cc.roe):"—"} color={cc.roe&&cc.roe>0.15?"#4ade80":"#94a3b8"} hint="15%超で優良" />
+            <MBox label="ROA" value={cc.roa?pct(cc.roa):"—"} color={cc.roa&&cc.roa>0.05?"#4ade80":"#94a3b8"} hint="5%超で優良" />
+            <MBox label="ROIC" value={cc.roic?pct(cc.roic):"—"} color={cc.roic&&cc.roic>0.08?"#4ade80":"#94a3b8"} hint="8%超で優良" />
+            <MBox label="粗利率" value={cc.grossMargin?pct(cc.grossMargin):"—"} color={cc.grossMargin&&cc.grossMargin>0.40?"#4ade80":"#94a3b8"} />
+            <MBox label="営業利益率" value={cc.opMargin?pct(cc.opMargin):"—"} color={cc.opMargin&&cc.opMargin>0.10?"#4ade80":"#94a3b8"} hint="10%超で優良" />
+            <MBox label="経常利益率" value={cc.ordMargin?pct(cc.ordMargin):"—"} color="#94a3b8" />
           </Sec>
           <Sec title="安全性">
-            <MBox label="自己資本比率" value={c.equityRatio?pct(c.equityRatio):"—"} color={c.equityRatio&&c.equityRatio>0.40?"#4ade80":"#94a3b8"} hint="40%超が安全" />
-            <MBox label="流動比率" value={c.currentRatio?pct(c.currentRatio):"—"} color={c.currentRatio&&c.currentRatio>2?"#4ade80":c.currentRatio&&c.currentRatio>1?"#fbbf24":"#f87171"} hint="200%超が理想" />
-            <MBox label="固定比率" value={c.fixedRatio?pct(c.fixedRatio):"—"} color={c.fixedRatio&&c.fixedRatio<1?"#4ade80":"#94a3b8"} hint="100%以下が望ましい" />
-            <MBox label="固定長期適合率" value={c.fixedLTRatio?pct(c.fixedLTRatio):"—"} color={c.fixedLTRatio&&c.fixedLTRatio<1?"#4ade80":"#f87171"} hint="100%以下が望ましい" />
+            <MBox label="自己資本比率" value={cc.equityRatio?pct(cc.equityRatio):"—"} color={cc.equityRatio&&cc.equityRatio>0.40?"#4ade80":"#94a3b8"} hint="40%超が安全" />
+            <MBox label="流動比率" value={cc.currentRatio?pct(cc.currentRatio):"—"} color={cc.currentRatio&&cc.currentRatio>2?"#4ade80":cc.currentRatio&&cc.currentRatio>1?"#fbbf24":"#f87171"} hint="200%超が理想" />
+            <MBox label="固定比率" value={cc.fixedRatio?pct(cc.fixedRatio):"—"} color={cc.fixedRatio&&cc.fixedRatio<1?"#4ade80":"#94a3b8"} hint="100%以下が望ましい" />
+            <MBox label="固定長期適合率" value={cc.fixedLTRatio?pct(cc.fixedLTRatio):"—"} color={cc.fixedLTRatio&&cc.fixedLTRatio<1?"#4ade80":"#f87171"} hint="100%以下が望ましい" />
           </Sec>
         </div>
       )}
