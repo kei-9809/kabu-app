@@ -304,10 +304,24 @@ const Section = ({ title, children }) => (
     <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(145px,1fr))", gap:10 }}>{children}</div>
   </div>
 );
-const FInput = ({ label, value, onChange, hint="" }) => (
+const FInput = ({ label, value, onChange, hint="", numericOnly=false }) => (
   <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
     <label style={{ color:"#64748b", fontSize:10 }}>{label}</label>
-    <input value={value} onChange={e=>onChange(e.target.value)} style={S.input} placeholder="数値を入力"/>
+    <input
+      value={value}
+      onChange={e => {
+        const v = e.target.value;
+        if (numericOnly) {
+          // 数字・マイナス・ドットのみ許可
+          if (v === "" || v === "-" || /^-?\d*\.?\d*$/.test(v)) onChange(v);
+        } else {
+          onChange(v);
+        }
+      }}
+      style={S.input}
+      placeholder={numericOnly ? "数値を入力" : "入力"}
+      inputMode={numericOnly ? "decimal" : "text"}
+    />
     {hint && <span style={{ color:"#334155", fontSize:9 }}>{hint}</span>}
   </div>
 );
@@ -317,11 +331,26 @@ const COLORS = ["#4ade80","#60a5fa","#f59e0b","#a78bfa"];
 
 // ── localStorage ユーティリティ ───────────────────────────────────────────────
 const LS_KEY = "kabulens_portfolio_v1";
+const isValidPortfolio = (data) => {
+  if (!Array.isArray(data) || data.length === 0) return false;
+  return data.every(h =>
+    h.id && h.ticker && h.name &&
+    typeof h.qty === "number" && !isNaN(h.qty) &&
+    typeof h.avgCost === "number" && !isNaN(h.avgCost) &&
+    typeof h.currentPrice === "number" && !isNaN(h.currentPrice) &&
+    h.financials && typeof h.financials === "object"
+  );
+};
 const loadPortfolio = () => {
   try {
     const saved = localStorage.getItem(LS_KEY);
-    if (saved) return JSON.parse(saved);
-  } catch {}
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (isValidPortfolio(parsed)) return parsed;
+      // 壊れていたら削除してサンプルデータを返す
+      localStorage.removeItem(LS_KEY);
+    }
+  } catch { localStorage.removeItem(LS_KEY); }
   return null;
 };
 const savePortfolio = (p) => {
@@ -555,9 +584,9 @@ export default function App() {
                   <FInput label="証券コード（例: 7203）" value={addForm.ticker} onChange={v=>setAddForm(p=>({...p,ticker:v}))}/>
                   <FInput label="銘柄名" value={addForm.name} onChange={v=>setAddForm(p=>({...p,name:v}))}/>
                   <FInput label="セクター" value={addForm.sector} onChange={v=>setAddForm(p=>({...p,sector:v}))}/>
-                  <FInput label="保有数量（株）" value={addForm.qty} onChange={v=>setAddForm(p=>({...p,qty:v}))}/>
-                  <FInput label="平均取得単価（円）" value={addForm.avgCost} onChange={v=>setAddForm(p=>({...p,avgCost:v}))}/>
-                  <FInput label="現在株価（円）" value={addForm.currentPrice} onChange={v=>setAddForm(p=>({...p,currentPrice:v}))}/>
+                  <FInput label="保有数量（株）" value={addForm.qty} onChange={v=>setAddForm(p=>({...p,qty:v}))} numericOnly={true}/>
+                  <FInput label="平均取得単価（円）" value={addForm.avgCost} onChange={v=>setAddForm(p=>({...p,avgCost:v}))} numericOnly={true}/>
+                  <FInput label="現在株価（円）" value={addForm.currentPrice} onChange={v=>setAddForm(p=>({...p,currentPrice:v}))} numericOnly={true}/>
                 </div>
                 <div style={{marginTop:12,display:"flex",gap:8}}>
                   <button style={S.addBtn} onClick={handleAddStock}>追加する</button>
@@ -685,7 +714,7 @@ export default function App() {
                     </div>
                     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:14}}>
                       {INPUT_FIELDS.map(({label,key,hint})=>(
-                        <FInput key={key} label={label} value={f[key]||""} onChange={v=>updateF(selected.id,key,v)} hint={hint||""}/>
+                        <FInput key={key} label={label} value={f[key]||""} onChange={v=>updateF(selected.id,key,v)} hint={hint||""} numericOnly={true}/>
                       ))}
                     </div>
                     <div style={{marginTop:16,padding:12,background:"#111827",borderRadius:8,fontSize:11,color:"#475569"}}>
@@ -921,12 +950,12 @@ export default function App() {
                 <div style={{...S.card,marginBottom:16}}>
                   <div style={{color:"#94a3b8",fontWeight:700,marginBottom:12}}>⚙️ シミュレーション設定 — {selected.name}（{selected.ticker}）</div>
                   <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(155px,1fr))",gap:12}}>
-                    <FInput label="予測年数（年）" value={simParams.years} onChange={v=>setSimParams(p=>({...p,years:v}))}/>
-                    <FInput label="売上成長率（基本）%" value={simParams.growthRate} onChange={v=>setSimParams(p=>({...p,growthRate:v}))}/>
-                    <FInput label="目標営業利益率 %" value={simParams.targetMargin} onChange={v=>setSimParams(p=>({...p,targetMargin:v}))}/>
-                    <FInput label="目標PER（倍）" value={simParams.targetPer} onChange={v=>setSimParams(p=>({...p,targetPer:v}))}/>
-                    <FInput label="目標EV/EBITDA（任意）" value={simParams.targetEvEbitda} onChange={v=>setSimParams(p=>({...p,targetEvEbitda:v}))}/>
-                    <FInput label="配当利回り %" value={simParams.dividendRate} onChange={v=>setSimParams(p=>({...p,dividendRate:v}))}/>
+                    <FInput label="予測年数（年）" value={simParams.years} onChange={v=>setSimParams(p=>({...p,years:v}))} numericOnly={true}/>
+                    <FInput label="売上成長率（基本）%" value={simParams.growthRate} onChange={v=>setSimParams(p=>({...p,growthRate:v}))} numericOnly={true}/>
+                    <FInput label="目標営業利益率 %" value={simParams.targetMargin} onChange={v=>setSimParams(p=>({...p,targetMargin:v}))} numericOnly={true}/>
+                    <FInput label="目標PER（倍）" value={simParams.targetPer} onChange={v=>setSimParams(p=>({...p,targetPer:v}))} numericOnly={true}/>
+                    <FInput label="目標EV/EBITDA（任意）" value={simParams.targetEvEbitda} onChange={v=>setSimParams(p=>({...p,targetEvEbitda:v}))} numericOnly={true}/>
+                    <FInput label="配当利回り %" value={simParams.dividendRate} onChange={v=>setSimParams(p=>({...p,dividendRate:v}))} numericOnly={true}/>
                     <div style={{display:"flex",flexDirection:"column",gap:3}}>
                       <label style={{color:"#64748b",fontSize:10}}>配当再投資</label>
                       <button style={{...S.miniBtn,padding:"8px 12px",color:simParams.reinvest?"#4ade80":"#64748b",borderColor:simParams.reinvest?"#4ade80":"#334155"}} onClick={()=>setSimParams(p=>({...p,reinvest:!p.reinvest}))}>
