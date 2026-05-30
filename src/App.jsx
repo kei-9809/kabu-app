@@ -208,7 +208,6 @@ const INPUT_FIELDS = [
   { label:"固定負債（円）", key:"fixLiab" },
   { label:"減価償却費（円）", key:"depTangible", hint:"有形固定資産の減価償却費" },
   { label:"償却費（円）", key:"depIntangible", hint:"無形固定資産・のれん等" },
-  { label:"EBITDA（円）", key:"ebitda", hint:"空欄なら営業利益+償却費で自動計算" },
   { label:"1株配当（円）", key:"dividend" },
   { label:"信用倍率（倍）", key:"shinyoBairitu" },
 ]; 
@@ -230,7 +229,6 @@ const PERIOD_FIELDS = [
   { label:"固定負債（円）",          key:"fixLiab" },
   { label:"減価償却費（円）",        key:"depTangible",   hint:"有形固定資産の減価償却費" },
   { label:"償却費（円）",            key:"depIntangible", hint:"無形固定資産・のれん等" },
-  { label:"EBITDA（円）",           key:"ebitda",        hint:"空欄なら自動計算" },
   { label:"1株配当（円）",           key:"dividend" },
   { label:"信用倍率（倍）",          key:"shinyoBairitu" },
 ];
@@ -241,6 +239,18 @@ const QTR_KEYS = [];
 for (let y = CY-2; y <= CY; y++) {
   ["Q1","Q2","Q3","Q4"].forEach(q => QTR_KEYS.push(`${y}-${q}`));
 }
+
+// 来期予想フィールド（シンプル5項目）
+const FORECAST_KEY = "forecast";
+const FORECAST_FIELDS = [
+  { label:"予想売上高（円）",    key:"sales" },
+  { label:"予想純利益（円）",    key:"netProfit",     hint:"赤字はマイナスで" },
+  { label:"予想EBITDA（円）",   key:"ebitda",        hint:"空欄なら営業利益+償却費" },
+  { label:"予想営業利益（円）",  key:"opProfit" },
+  { label:"予想1株配当（円）",   key:"dividend" },
+  { label:"減価償却費（円）",    key:"depTangible",   hint:"予想EBITDA自動計算用" },
+  { label:"償却費（円）",        key:"depIntangible", hint:"無形固定資産・のれん等" },
+];
 
 function chgColor(v) {
   if (v == null) return "#475569";
@@ -276,10 +286,38 @@ function MetricsTab({ c, f, selected, periods, TS }) {
   // 現在の指標用: 最新本決算があればそちらを使い、株価だけ現在値で上書き
   const cc = useMemo(() => {
     if (!latestAnnual) return c;
-    const merged = { ...latestAnnual.f, price: f.price || latestAnnual.f.price, shinyoBairitu: f.shinyoBairitu };
+    const merged = {
+      ...latestAnnual.f,
+      price: f.price || latestAnnual.f.price,
+      shinyoBairitu: latestAnnual.f.shinyoBairitu || f.shinyoBairitu,
+    };
     return calcAll(merged);
   }, [latestAnnual, c, f]);
-  const ff = latestAnnual ? { ...latestAnnual.f, price: f.price || latestAnnual.f.price, shinyoBairitu: f.shinyoBairitu } : f;
+  const ff = latestAnnual ? {
+    ...latestAnnual.f,
+    price: f.price || latestAnnual.f.price,
+    shinyoBairitu: latestAnnual.f.shinyoBairitu || f.shinyoBairitu,
+  } : f;
+
+  // 来期予想指標の計算
+  const fc = useMemo(() => {
+    const fd = periods[FORECAST_KEY] || {};
+    if (!Object.values(fd).some(v => v !== "" && v != null)) return null;
+    // 株価・株式数・純資産はlatestAnnualから継承
+    const base = latestAnnual ? latestAnnual.f : {};
+    const merged = {
+      ...base,
+      price: ff.price,
+      sales: fd.sales || base.sales,
+      netProfit: fd.netProfit,
+      opProfit: fd.opProfit,
+      dividend: fd.dividend,
+      ebitda: fd.ebitda,
+      depTangible: fd.depTangible,
+      depIntangible: fd.depIntangible,
+    };
+    return calcAll(merged);
+  }, [periods, latestAnnual, ff]);
 
   const trendData = useMemo(() => {
     return annualData.map(({ label, f: fd, c: ca }) => ({
@@ -323,20 +361,27 @@ function MetricsTab({ c, f, selected, periods, TS }) {
               本決算データ未入力です。「数値入力」タブの「本決算（年次）」から入力してください。
             </div>
           )}
-          <Sec title="株価指標">
+          <Sec title="株価指標(実績)">
             <MBox label="PER" value={cc.per?xfmt(cc.per):"—"} color={cc.per&&cc.per<15?"#4ade80":cc.per&&cc.per<25?"#fbbf24":"#f87171"} hint="15倍未満が割安" badge={cc.per&&cc.per<15?"割安":""} />
             <MBox label="PBR" value={cc.pbr?xfmt(cc.pbr):"—"} color={cc.pbr&&cc.pbr<1.5?"#4ade80":"#94a3b8"} hint="1倍以下は解散価値割れ" />
             <MBox label="PSR" value={cc.psr?xfmt(cc.psr):"—"} color={cc.psr&&cc.psr<2?"#4ade80":"#94a3b8"} />
-            <MBox label="EV/EBITDA" value={cc.evEbitda?xfmt(cc.evEbitda):"—"} color={cc.evEbitda&&cc.evEbitda<10?"#4ade80":"#94a3b8"} hint="10倍未満が割安" />
             <MBox label="信用倍率" value={ff.shinyoBairitu?ff.shinyoBairitu+"倍":"—"} color={n(ff.shinyoBairitu)>3?"#f87171":"#94a3b8"} hint="高いと将来売り圧力" />
             <MBox label="配当利回り" value={cc.dividendYield?pct(cc.dividendYield):"—"} color={cc.dividendYield&&cc.dividendYield>0.03?"#4ade80":"#94a3b8"} />
             <MBox label="配当性向" value={cc.payoutRatio?pct(cc.payoutRatio):"—"} color="#94a3b8" hint="30〜50%が健全" />
             <MBox label="時価総額" value={cc.marketCap?fmtM(cc.marketCap):"—"} color="#e2e8f0" />
           </Sec>
+          {fc && (
+            <Sec title="株価指標(来期予想)">
+              <MBox label="予想PER" value={fc.per?xfmt(fc.per):"—"} color={fc.per&&fc.per<15?"#4ade80":fc.per&&fc.per<25?"#fbbf24":"#f87171"} hint="来期予想純利益ベース" badge={fc.per&&fc.per<15?"割安":""} />
+              <MBox label="予想PSR" value={fc.psr?xfmt(fc.psr):"—"} color={fc.psr&&fc.psr<2?"#4ade80":"#94a3b8"} hint="来期予想売上高ベース" />
+              <MBox label="予想配当利回り" value={fc.dividendYield?pct(fc.dividendYield):"—"} color={fc.dividendYield&&fc.dividendYield>0.03?"#4ade80":"#94a3b8"} hint="来期予想配当ベース" />
+            </Sec>
+          )}
           <Sec title="キャッシュ指標">
-            <MBox label="EBITDA" value={cc.ebitda?fmtM(cc.ebitda):"—"} color="#60a5fa"
-              hint={cc.ebitdaCalc && !n(ff.ebitda) ? "自動計算（営業利益+償却費）" : cc.ebitda?"入力値":"未入力"} />
-            <MBox label="EV/EBITDA" value={cc.evEbitda?xfmt(cc.evEbitda):"—"} color={cc.evEbitda&&cc.evEbitda<10?"#4ade80":"#94a3b8"} hint="10倍未満が割安" />
+            <MBox label="EBITDA(実績)" value={cc.ebitda?fmtM(cc.ebitda):"—"} color="#60a5fa" hint="営業利益+減価償却費+償却費" />
+            <MBox label="EV/EBITDA(実績)" value={cc.evEbitda?xfmt(cc.evEbitda):"—"} color={cc.evEbitda&&cc.evEbitda<10?"#4ade80":"#94a3b8"} hint="10倍未満が割安" />
+            {fc && <MBox label="EBITDA(予想)" value={fc.ebitda?fmtM(fc.ebitda):"—"} color="#34d399" hint="来期予想" />}
+            {fc && <MBox label="EV/EBITDA(予想)" value={fc.evEbitda?xfmt(fc.evEbitda):"—"} color={fc.evEbitda&&fc.evEbitda<10?"#4ade80":"#94a3b8"} hint="来期予想ベース" />}
             {cc.depTangible != null && <MBox label="減価償却費" value={fmtM(cc.depTangible)} color="#94a3b8" />}
             {cc.depIntangible != null && <MBox label="償却費" value={fmtM(cc.depIntangible)} color="#94a3b8" />}
           </Sec>
@@ -553,7 +598,35 @@ function InputTab({ selected, periods, updatePeriod, TS }) {
       <div style={{ display:"flex", gap:4, marginBottom:16 }}>
         <button style={{ ...S.navBtn, ...(inputView==="annual"?S.navOn:{}) }} onClick={() => setInputView("annual")}>本決算（年次）</button>
         <button style={{ ...S.navBtn, ...(inputView==="qtr"?S.navOn:{}) }} onClick={() => setInputView("qtr")}>四半期決算</button>
+        <button style={{ ...S.navBtn, ...(inputView==="forecast"?S.navOn:{}) }} onClick={() => setInputView("forecast")}>来期予想</button>
       </div>
+
+      {inputView === "forecast" && (
+        <div>
+          <div style={{ marginBottom:12, padding:"8px 12px", background:"#111827", borderRadius:6, fontSize:11, color:"#475569" }}>
+            会社予想・アナリスト予想値を入力してください。株価・株式数・純資産は最新本決算の値を自動継承します。
+          </div>
+          <div style={{ ...S.card, border:"1px solid #fbbf2444" }}>
+            <div style={{ color:"#fbbf24", fontWeight:700, marginBottom:16 }}>来期予想データ（{CY+1}年度想定）</div>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))", gap:14 }}>
+              {FORECAST_FIELDS.map(({ label, key, hint }) => (
+                <div key={key} style={{ display:"flex", flexDirection:"column", gap:3 }}>
+                  <label style={{ color:"#64748b", fontSize:10 }}>{label}</label>
+                  <input
+                    value={periods[FORECAST_KEY]?.[key] || ""}
+                    onChange={e => handleChange(FORECAST_KEY, key, e.target.value)}
+                    style={S.input} placeholder="数値を入力" inputMode="decimal"
+                  />
+                  {hint && <span style={{ color:"#334155", fontSize:9 }}>{hint}</span>}
+                </div>
+              ))}
+            </div>
+            <div style={{ marginTop:12, fontSize:11, color:"#334155" }}>
+              予想PBRは算出不要（純資産が来期予想にないため表示されません）
+            </div>
+          </div>
+        </div>
+      )}
 
       {inputView === "annual" && (
         <div>
