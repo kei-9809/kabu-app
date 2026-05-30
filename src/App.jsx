@@ -756,7 +756,7 @@ export default function App() {
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
                     <div style={S.card}>
                       <div style={{color:"#94a3b8",fontSize:13,fontWeight:700,marginBottom:12}}>セクター別配分</div>
-                      <ResponsiveContainer width="100%" height={200}>
+                      <ResponsiveContainer width="100%" height={260}>
                         <PieChart>
                           <Pie
                             data={sectorData}
@@ -764,11 +764,15 @@ export default function App() {
                             nameKey="name"
                             cx="50%"
                             cy="50%"
-                            innerRadius={50}
-                            outerRadius={80}
+                            innerRadius={55}
+                            outerRadius={85}
                             paddingAngle={3}
-                            label={({name,percent})=>`${name} ${(percent*100).toFixed(0)}%`}
-                            labelLine={true}
+                            label={({name,percent,x,y})=>(
+                              <text x={x} y={y} fill="#94a3b8" textAnchor="middle" dominantBaseline="central" fontSize={11}>
+                                {`${name} ${(percent*100).toFixed(0)}%`}
+                              </text>
+                            )}
+                            labelLine={{stroke:"#334155"}}
                           >
                             {sectorData.map((_,i)=>(
                               <Cell key={i} fill={["#60a5fa","#4ade80","#f59e0b","#a78bfa","#f87171","#34d399","#fb7185","#38bdf8"][i%8]}/>
