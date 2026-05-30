@@ -250,11 +250,14 @@ for (let y = CY-2; y <= CY; y++) {
   ["Q1","Q2","Q3","Q4"].forEach(q => QTR_KEYS.push(`${y}-${q}`));
 }
 
-const LS_UNDO = "kabulens_undo";
+const LS_UNDO = "kabulens_undo_v2";
 const loadUndoData = () => {
   try {
     const d = localStorage.getItem(LS_UNDO);
-    return d ? JSON.parse(d) : null;
+    if (!d) return null;
+    const parsed = JSON.parse(d);
+    if (!parsed || !parsed.baseYear || !Array.isArray(parsed.portfolio)) return null;
+    return parsed;
   } catch { return null; }
 };
 const saveUndoData = d => { try { localStorage.setItem(LS_UNDO, JSON.stringify(d)); } catch {} };
@@ -868,13 +871,19 @@ export default function App() {
     if (!undoData) return;
     const msg = "決算年度の更新を元に戻します。\n\n" + (undoData.baseYear+1) + "->" + undoData.baseYear + "年 に戻りますがよろしいですか？";
     if (!window.confirm(msg)) return;
+    // portfolioを復元
     setPortfolio(undoData.portfolio);
     saveData(undoData.portfolio);
+    // selectedも復元（同じidの銘柄を探す）
+    if (selected) {
+      const restoredSelected = undoData.portfolio.find(h => h.id === selected.id);
+      if (restoredSelected) setSelected(restoredSelected);
+    }
     setBaseYear(undoData.baseYear);
     saveBaseYear(undoData.baseYear);
     setUndoData(null);
     clearUndoData();
-  }, [undoData]);
+  }, [undoData, selected]);
 
   const toggleCompare = id => setCompareIds(p => p.includes(id) ? p.filter(x => x !== id) : p.length < 4 ? [...p, id] : p);
 
