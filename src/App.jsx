@@ -203,6 +203,18 @@ export default function App() {
     setShowAdd(false);
   };
 
+  const handleDeleteStock = useCallback((id) => {
+    if (!window.confirm("この銘柄を削除しますか？")) return;
+    setPortfolio(p => p.filter(h => h.id !== id));
+    setCompareIds(p => p.filter(x => x !== id));
+    if (selected?.id === id) {
+      setSelected(prev => {
+        const remaining = portfolio.filter(h => h.id !== id);
+        return remaining.length > 0 ? remaining[0] : null;
+      });
+    }
+  }, [selected, portfolio]);
+
   const addIR = () => {
     if (!irForm.title||!irForm.date) return;
     setPortfolio(p=>p.map(h=>h.id===selected.id?{...h,irList:[irForm,...(h.irList||[])]}:h));
@@ -355,6 +367,7 @@ export default function App() {
                     <span style={{display:"flex",gap:4,flexWrap:"wrap"}}>
                       <button style={S.miniBtn} onClick={()=>{handleSelect(h);setTab("detail");}}>詳細</button>
                       <button style={{...S.miniBtn,...(compareIds.includes(h.id)?{color:"#4ade80",borderColor:"#4ade80"}:{})}} onClick={()=>toggleCompare(h.id)}>{compareIds.includes(h.id)?"比較中":"比較"}</button>
+                      <button style={{...S.miniBtn,color:"#f87171",borderColor:"#f87171"}} onClick={()=>handleDeleteStock(h.id)}>削除</button>
                     </span>
                   </div>
                 );
