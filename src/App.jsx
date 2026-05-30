@@ -1,6 +1,6 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import {
-  BarChart, Bar, LineChart, Line,
+  BarChart, Bar, LineChart, Line, AreaChart, Area,
   XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine, Legend
 } from "recharts";
@@ -163,6 +163,7 @@ export default function App() {
   const [detailTab, setDetailTab] = useState("metrics");
   const [compareIds, setCompareIds] = useState([]);
   const [simParams, setSimParams] = useState({ years:"5", growthRate:"15", targetMargin:"15", targetPer:"20", targetEvEbitda:"", dividendRate:"2", reinvest:true });
+  const [simTab, setSimTab] = useState("scenario"); // scenario | margin | monte
   const [irForm, setIrForm] = useState({ date:"", title:"", url:"", type:"決算" });
   const [showIrForm, setShowIrForm] = useState(false);
   const [addForm, setAddForm] = useState({ ticker:"", name:"", sector:"", qty:"", avgCost:"", currentPrice:"" });
@@ -246,6 +247,65 @@ export default function App() {
   const c  = selected?calcAll(f):{};
   const sc = financialScore(c);
   const compareStocks = portfolio.filter(h=>compareIds.includes(h.id));
+
+  // 安全余裕率（適正株価 vs 現在株価）
+  const safetyMargin = useMemo(()=>{
+    if(!selected) return null;
+    const price = n(f.price)||selected.currentPrice;
+    const eps = c.eps;
+    const bps = c.bps;
+    const tPer = +simParams.targetPer;
+    const fairPer  = eps && eps > 0 ? eps * tPer : null;
+    const fairPbr  = bps ? bps * 1.5 : null;
+    const fairs = [fairPer, fairPbr].filter(v=>v!=null);
+    if(fairs.length===0) return null;
+    const fairAvg = fairs.reduce((a,b)=>a+b,0)/fairs.length;
+    return { fairPrice: Math.round(fairAvg), currentPrice: price, margin: (fairAvg - price)/price*100 };
+  },[selected, f, c, simParams.targetPer]);
+
+  // モンテカルロシミュレーション（1000回）
+  const monteData = useMemo(()=>{
+    if(!selected) return { chartData:[], stats:null };
+    const price = n(f.price)||selected.currentPrice;
+    const eps = c.eps||0;
+    const tPer = +simParams.targetPer;
+    const g = +simParams.growthRate/100;
+    const years = +simParams.years||5;
+    const TRIALS = 1000;
+    const finals = [];
+    for(let t=0;t<TRIALS;t++){
+      // 成長率に正規分布ノイズを加える（Box-Muller法）
+      let projEps = eps;
+      for(let y=0;y<years;y++){
+        const u1=Math.random(), u2=Math.random();
+        const noise = Math.sqrt(-2*Math.log(u1))*Math.cos(2*Math.PI*u2);
+        const annualG = g + noise * g * 0.5; // ±50%のブレ
+        projEps *= (1 + annualG);
+      }
+      // PERもランダムに変動
+      const perNoise = (Math.random()-0.5)*tPer*0.3;
+      const finalPrice = projEps > 0 ? Math.round(projEps * (tPer + perNoise)) : 0;
+      finals.push(finalPrice);
+    }
+    finals.sort((a,b)=>a-b);
+    const p10 = finals[Math.floor(TRIALS*0.10)];
+    const p25 = finals[Math.floor(TRIALS*0.25)];
+    const p50 = finals[Math.floor(TRIALS*0.50)];
+    const p75 = finals[Math.floor(TRIALS*0.75)];
+    const p90 = finals[Math.floor(TRIALS*0.90)];
+    const mean = Math.round(finals.reduce((a,b)=>a+b,0)/TRIALS);
+    const probProfit = finals.filter(v=>v>price).length/TRIALS*100;
+
+    // ヒストグラム用（20ビン）
+    const min = finals[0], max = finals[TRIALS-1];
+    const binSize = (max-min)/20||1;
+    const bins = Array.from({length:20},(_,i)=>{
+      const lo=min+i*binSize, hi=lo+binSize;
+      const count=finals.filter(v=>v>=lo&&v<hi).length;
+      return{ range: Math.round((lo+hi)/2).toLocaleString(), count, lo, hi };
+    });
+    return{ chartData:bins, stats:{ p10,p25,p50,p75,p90,mean,probProfit,price }, finals };
+  },[selected, f, c, simParams]);
 
   const METRIC_ROWS = [
     ["PER",        h=>calcAll(h.financials).per,          v=>v?x(v):"—",    v=>v&&v<15?"#4ade80":v&&v<25?"#fbbf24":"#f87171"],
@@ -555,11 +615,12 @@ export default function App() {
             {!selected&&<div style={S.card}><span style={{color:"#64748b"}}>銘柄を選択してください。</span></div>}
             {selected&&(
               <>
-                <div style={{...S.card,marginBottom:20}}>
-                  <div style={{color:"#94a3b8",fontWeight:700,marginBottom:12}}>シミュレーション設定 — {selected.name}（{selected.ticker}）</div>
-                  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))",gap:12}}>
+                {/* 設定パネル */}
+                <div style={{...S.card,marginBottom:16}}>
+                  <div style={{color:"#94a3b8",fontWeight:700,marginBottom:12}}>⚙️ シミュレーション設定 — {selected.name}（{selected.ticker}）</div>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(155px,1fr))",gap:12}}>
                     <FInput label="予測年数（年）" value={simParams.years} onChange={v=>setSimParams(p=>({...p,years:v}))}/>
-                    <FInput label="売上成長率 %" value={simParams.growthRate} onChange={v=>setSimParams(p=>({...p,growthRate:v}))}/>
+                    <FInput label="売上成長率（基本）%" value={simParams.growthRate} onChange={v=>setSimParams(p=>({...p,growthRate:v}))}/>
                     <FInput label="目標営業利益率 %" value={simParams.targetMargin} onChange={v=>setSimParams(p=>({...p,targetMargin:v}))}/>
                     <FInput label="目標PER（倍）" value={simParams.targetPer} onChange={v=>setSimParams(p=>({...p,targetPer:v}))}/>
                     <FInput label="目標EV/EBITDA（任意）" value={simParams.targetEvEbitda} onChange={v=>setSimParams(p=>({...p,targetEvEbitda:v}))}/>
@@ -571,88 +632,307 @@ export default function App() {
                       </button>
                     </div>
                   </div>
-                </div>
-                <div style={S.card}>
-                  <div style={{color:"#94a3b8",fontWeight:700,marginBottom:4}}>📈 株価推定（3シナリオ）</div>
-                  <div style={{color:"#475569",fontSize:12,marginBottom:12}}>強気:{Math.round(+simParams.growthRate*1.6)}% / 基本:{simParams.growthRate}% / 弱気:{Math.round(+simParams.growthRate*0.4)}% → 目標PER {simParams.targetPer}倍</div>
-                  <ResponsiveContainer width="100%" height={280}>
-                    <LineChart data={simData()}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#1e293b"/>
-                      <XAxis dataKey="year" tick={{fill:"#94a3b8",fontSize:12}}/>
-                      <YAxis tick={{fill:"#64748b",fontSize:11}} tickFormatter={v=>v?.toLocaleString()}/>
-                      <Tooltip formatter={v=>v?"¥"+v?.toLocaleString():"—"} contentStyle={S.tooltip}/>
-                      <ReferenceLine y={n(f.price)||selected.currentPrice} stroke="#f59e0b" strokeDasharray="4 4" label={{value:"現在株価",fill:"#f59e0b",fontSize:10}}/>
-                      <Legend wrapperStyle={{color:"#94a3b8",fontSize:12}}/>
-                      <Line type="monotone" dataKey="bull株価" stroke="#4ade80" strokeWidth={2} dot={{fill:"#4ade80"}} name="強気"/>
-                      <Line type="monotone" dataKey="base株価" stroke="#60a5fa" strokeWidth={2} dot={{fill:"#60a5fa"}} name="基本"/>
-                      <Line type="monotone" dataKey="bear株価" stroke="#f87171" strokeWidth={2} dot={{fill:"#f87171"}} name="弱気"/>
-                      {simData().some(d=>d.EV推定株価)&&<Line type="monotone" dataKey="EV推定株価" stroke="#a78bfa" strokeWidth={2} strokeDasharray="4 4" name="EV/EBITDA法"/>}
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
-                  <div style={S.card}>
-                    <div style={{color:"#94a3b8",fontWeight:700,marginBottom:4}}>💰 配当累計</div>
-                    <div style={{color:"#475569",fontSize:12,marginBottom:12}}>利回り{simParams.dividendRate}% {simParams.reinvest?"複利":"単純"}</div>
-                    <ResponsiveContainer width="100%" height={180}>
-                      <BarChart data={simData()}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b"/>
-                        <XAxis dataKey="year" tick={{fill:"#94a3b8",fontSize:11}}/>
-                        <YAxis tick={{fill:"#64748b",fontSize:10}} tickFormatter={v=>v?.toLocaleString()}/>
-                        <Tooltip formatter={v=>"¥"+v?.toLocaleString()} contentStyle={S.tooltip}/>
-                        <Bar dataKey="配当累計" fill="#fbbf24" radius={[4,4,0,0]}/>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                  <div style={S.card}>
-                    <div style={{color:"#94a3b8",fontWeight:700,marginBottom:4}}>📊 売上・営業利益推移</div>
-                    <div style={{color:"#475569",fontSize:12,marginBottom:12}}>成長率{simParams.growthRate}% × 目標利益率{simParams.targetMargin}%</div>
-                    <ResponsiveContainer width="100%" height={180}>
-                      <LineChart data={simData()}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b"/>
-                        <XAxis dataKey="year" tick={{fill:"#94a3b8",fontSize:11}}/>
-                        <YAxis tick={{fill:"#64748b",fontSize:10}} tickFormatter={v=>fmtM(v)}/>
-                        <Tooltip formatter={v=>fmtM(v)} contentStyle={S.tooltip}/>
-                        <Legend wrapperStyle={{color:"#94a3b8",fontSize:11}}/>
-                        <Line type="monotone" dataKey="売上" stroke="#60a5fa" strokeWidth={2} dot={false}/>
-                        <Line type="monotone" dataKey="営業利益" stroke="#4ade80" strokeWidth={2} dot={false}/>
-                      </LineChart>
-                    </ResponsiveContainer>
+                  <div style={{marginTop:12,fontSize:11,color:"#334155"}}>
+                    強気シナリオ: 成長率×1.6 / 弱気シナリオ: 成長率×0.4（自動計算）
                   </div>
                 </div>
-                <div style={S.card}>
-                  <div style={{color:"#94a3b8",fontWeight:700,marginBottom:12}}>📋 サマリーテーブル</div>
-                  <div style={{overflowX:"auto"}}>
-                    <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-                      <thead>
-                        <tr style={{borderBottom:"1px solid #1e293b"}}>
-                          {["年","強気株価","基本株価","弱気株価","EV法株価","EPS","売上","営業利益","配当累計"].map(h=>(
-                            <th key={h} style={{textAlign:"right",padding:"6px 10px",color:"#475569",fontSize:11,whiteSpace:"nowrap"}}>{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {simData().map((row,i)=>(
-                          <tr key={i} style={{borderBottom:"1px solid #1e293b",background:i===0?"#111827":"transparent"}}>
-                            <td style={{padding:"8px 10px",color:"#94a3b8",fontWeight:i===0?700:400}}>{row.year}</td>
-                            <td style={{textAlign:"right",padding:"8px 10px",color:"#4ade80",fontWeight:700}}>{"¥"+(row.bull株価?.toLocaleString()??"—")}</td>
-                            <td style={{textAlign:"right",padding:"8px 10px",color:"#60a5fa",fontWeight:700}}>{"¥"+(row.base株価?.toLocaleString()??"—")}</td>
-                            <td style={{textAlign:"right",padding:"8px 10px",color:"#f87171"}}>{"¥"+(row.bear株価?.toLocaleString()??"—")}</td>
-                            <td style={{textAlign:"right",padding:"8px 10px",color:"#a78bfa"}}>{row.EV推定株価?"¥"+row.EV推定株価?.toLocaleString():"—"}</td>
-                            <td style={{textAlign:"right",padding:"8px 10px",color:"#e2e8f0"}}>{"¥"+row.EPS}</td>
-                            <td style={{textAlign:"right",padding:"8px 10px",color:"#94a3b8"}}>{fmtM(row.売上)}</td>
-                            <td style={{textAlign:"right",padding:"8px 10px",color:"#94a3b8"}}>{fmtM(row.営業利益)}</td>
-                            <td style={{textAlign:"right",padding:"8px 10px",color:"#fbbf24"}}>{"¥"+row.配当累計?.toLocaleString()}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+
+                {/* サブタブ */}
+                <div style={{display:"flex",gap:4,marginBottom:16,flexWrap:"wrap"}}>
+                  {["scenario","margin","monte"].map(t=>(
+                    <button key={t} style={{...S.navBtn,...(simTab===t?S.navActive:{})}} onClick={()=>setSimTab(t)}>
+                      {{"scenario":"シナリオ分析","margin":"安全余裕率","monte":"モンテカルロ"}[t]}
+                    </button>
+                  ))}
                 </div>
+
+                {/* ── シナリオ分析 ── */}
+                {simTab==="scenario"&&(
+                  <div>
+                    <div style={S.card}>
+                      <div style={{color:"#94a3b8",fontWeight:700,marginBottom:4}}>📈 株価推定（3シナリオ比較）</div>
+                      <div style={{color:"#475569",fontSize:12,marginBottom:12}}>
+                        <span style={{color:"#4ade80"}}>■ 強気</span>: {Math.round(+simParams.growthRate*1.6)}%成長・PER{Math.round(+simParams.targetPer*1.2)}倍　
+                        <span style={{color:"#60a5fa"}}>■ 基本</span>: {simParams.growthRate}%成長・PER{simParams.targetPer}倍　
+                        <span style={{color:"#f87171"}}>■ 弱気</span>: {Math.round(+simParams.growthRate*0.4)}%成長・PER{Math.round(+simParams.targetPer*0.8)}倍
+                      </div>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <AreaChart data={simData()}>
+                          <defs>
+                            <linearGradient id="gbull" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#4ade80" stopOpacity={0.2}/><stop offset="95%" stopColor="#4ade80" stopOpacity={0}/></linearGradient>
+                            <linearGradient id="gbase" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#60a5fa" stopOpacity={0.2}/><stop offset="95%" stopColor="#60a5fa" stopOpacity={0}/></linearGradient>
+                            <linearGradient id="gbear" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#f87171" stopOpacity={0.15}/><stop offset="95%" stopColor="#f87171" stopOpacity={0}/></linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#1e293b"/>
+                          <XAxis dataKey="year" tick={{fill:"#94a3b8",fontSize:12}}/>
+                          <YAxis tick={{fill:"#64748b",fontSize:11}} tickFormatter={v=>v?.toLocaleString()}/>
+                          <Tooltip formatter={v=>v?"¥"+v?.toLocaleString():"—"} contentStyle={S.tooltip}/>
+                          <ReferenceLine y={n(f.price)||selected.currentPrice} stroke="#f59e0b" strokeDasharray="4 4" label={{value:"現在株価",fill:"#f59e0b",fontSize:10}}/>
+                          <ReferenceLine y={selected.avgCost} stroke="#a78bfa" strokeDasharray="4 4" label={{value:"取得単価",fill:"#a78bfa",fontSize:10}}/>
+                          <Legend wrapperStyle={{color:"#94a3b8",fontSize:12}}/>
+                          <Area type="monotone" dataKey="bull株価" stroke="#4ade80" strokeWidth={2} fill="url(#gbull)" name="強気"/>
+                          <Area type="monotone" dataKey="base株価" stroke="#60a5fa" strokeWidth={2} fill="url(#gbase)" name="基本"/>
+                          <Area type="monotone" dataKey="bear株価" stroke="#f87171" strokeWidth={2} fill="url(#gbear)" name="弱気"/>
+                          {simData().some(d=>d.EV推定株価)&&<Line type="monotone" dataKey="EV推定株価" stroke="#a78bfa" strokeWidth={2} strokeDasharray="4 4" name="EV/EBITDA法"/>}
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+
+                    {/* 損益分岐点カード */}
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:12,marginBottom:16}}>
+                      {["bull株価","base株価","bear株価"].map((key,i)=>{
+                        const label=["強気","基本","弱気"][i];
+                        const color=["#4ade80","#60a5fa","#f87171"][i];
+                        const rows=simData();
+                        const breakYear=rows.findIndex(r=>r[key]&&r[key]>selected.avgCost);
+                        const finalPrice=rows[rows.length-1]?.[key];
+                        const cagr=finalPrice&&selected.currentPrice>0?((Math.pow(finalPrice/selected.currentPrice,1/(+simParams.years||1))-1)*100).toFixed(1):null;
+                        return(
+                          <div key={key} style={{background:"#111827",border:`1px solid ${color}33`,borderRadius:8,padding:"12px 16px"}}>
+                            <div style={{color,fontWeight:700,fontSize:13,marginBottom:8}}>{label}シナリオ</div>
+                            <div style={{color:"#475569",fontSize:11,marginBottom:4}}>最終株価予測</div>
+                            <div style={{color,fontWeight:700,fontSize:18,marginBottom:8}}>{"¥"+(finalPrice?.toLocaleString()??"—")}</div>
+                            <div style={{color:"#475569",fontSize:11}}>年率リターン: <span style={{color}}>{cagr?cagr+"%":"—"}</span></div>
+                            <div style={{color:"#475569",fontSize:11,marginTop:4}}>取得単価超え: <span style={{color}}>{breakYear===0?"現在すでに超過":breakYear>0?breakYear+"年後":"期間内に到達せず"}</span></div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
+                      <div style={S.card}>
+                        <div style={{color:"#94a3b8",fontWeight:700,marginBottom:4}}>💰 配当累計</div>
+                        <div style={{color:"#475569",fontSize:12,marginBottom:12}}>利回り{simParams.dividendRate}% {simParams.reinvest?"複利":"単純"}</div>
+                        <ResponsiveContainer width="100%" height={180}>
+                          <BarChart data={simData()}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b"/>
+                            <XAxis dataKey="year" tick={{fill:"#94a3b8",fontSize:11}}/>
+                            <YAxis tick={{fill:"#64748b",fontSize:10}} tickFormatter={v=>v?.toLocaleString()}/>
+                            <Tooltip formatter={v=>"¥"+v?.toLocaleString()} contentStyle={S.tooltip}/>
+                            <Bar dataKey="配当累計" fill="#fbbf24" radius={[4,4,0,0]}/>
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                      <div style={S.card}>
+                        <div style={{color:"#94a3b8",fontWeight:700,marginBottom:4}}>📊 売上・営業利益推移</div>
+                        <div style={{color:"#475569",fontSize:12,marginBottom:12}}>成長率{simParams.growthRate}% × 目標利益率{simParams.targetMargin}%</div>
+                        <ResponsiveContainer width="100%" height={180}>
+                          <LineChart data={simData()}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b"/>
+                            <XAxis dataKey="year" tick={{fill:"#94a3b8",fontSize:11}}/>
+                            <YAxis tick={{fill:"#64748b",fontSize:10}} tickFormatter={v=>fmtM(v)}/>
+                            <Tooltip formatter={v=>fmtM(v)} contentStyle={S.tooltip}/>
+                            <Legend wrapperStyle={{color:"#94a3b8",fontSize:11}}/>
+                            <Line type="monotone" dataKey="売上" stroke="#60a5fa" strokeWidth={2} dot={false}/>
+                            <Line type="monotone" dataKey="営業利益" stroke="#4ade80" strokeWidth={2} dot={false}/>
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+
+                    <div style={S.card}>
+                      <div style={{color:"#94a3b8",fontWeight:700,marginBottom:12}}>📋 サマリーテーブル</div>
+                      <div style={{overflowX:"auto"}}>
+                        <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                          <thead>
+                            <tr style={{borderBottom:"1px solid #1e293b"}}>
+                              {["年","強気株価","基本株価","弱気株価","EV法","EPS","売上","営業利益","配当累計"].map(h=>(
+                                <th key={h} style={{textAlign:"right",padding:"6px 10px",color:"#475569",fontSize:11,whiteSpace:"nowrap"}}>{h}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {simData().map((row,i)=>(
+                              <tr key={i} style={{borderBottom:"1px solid #1e293b",background:i===0?"#111827":"transparent"}}>
+                                <td style={{padding:"8px 10px",color:"#94a3b8",fontWeight:i===0?700:400}}>{row.year}</td>
+                                <td style={{textAlign:"right",padding:"8px 10px",color:"#4ade80",fontWeight:700}}>{"¥"+(row.bull株価?.toLocaleString()??"—")}</td>
+                                <td style={{textAlign:"right",padding:"8px 10px",color:"#60a5fa",fontWeight:700}}>{"¥"+(row.base株価?.toLocaleString()??"—")}</td>
+                                <td style={{textAlign:"right",padding:"8px 10px",color:"#f87171"}}>{"¥"+(row.bear株価?.toLocaleString()??"—")}</td>
+                                <td style={{textAlign:"right",padding:"8px 10px",color:"#a78bfa"}}>{row.EV推定株価?"¥"+row.EV推定株価?.toLocaleString():"—"}</td>
+                                <td style={{textAlign:"right",padding:"8px 10px",color:"#e2e8f0"}}>{"¥"+row.EPS}</td>
+                                <td style={{textAlign:"right",padding:"8px 10px",color:"#94a3b8"}}>{fmtM(row.売上)}</td>
+                                <td style={{textAlign:"right",padding:"8px 10px",color:"#94a3b8"}}>{fmtM(row.営業利益)}</td>
+                                <td style={{textAlign:"right",padding:"8px 10px",color:"#fbbf24"}}>{"¥"+row.配当累計?.toLocaleString()}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── 安全余裕率 ── */}
+                {simTab==="margin"&&(
+                  <div>
+                    {!safetyMargin&&<div style={S.card}><span style={{color:"#64748b"}}>純利益・発行済株式数・目標PERを入力すると計算されます。</span></div>}
+                    {safetyMargin&&(()=>{
+                      const { fairPrice, currentPrice, margin } = safetyMargin;
+                      const isUnder = margin > 0;
+                      const barW = Math.min(Math.abs(margin), 100);
+                      return(
+                        <div>
+                          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:16,marginBottom:16}}>
+                            <div style={{background:"#111827",borderRadius:8,padding:"16px",textAlign:"center"}}>
+                              <div style={{color:"#475569",fontSize:11,marginBottom:6}}>適正株価（PERベース）</div>
+                              <div style={{color:"#f1f5f9",fontWeight:900,fontSize:28}}>¥{fairPrice.toLocaleString()}</div>
+                              <div style={{color:"#475569",fontSize:10,marginTop:4}}>目標PER {simParams.targetPer}倍 × EPS</div>
+                            </div>
+                            <div style={{background:"#111827",borderRadius:8,padding:"16px",textAlign:"center"}}>
+                              <div style={{color:"#475569",fontSize:11,marginBottom:6}}>現在株価</div>
+                              <div style={{color:"#f1f5f9",fontWeight:900,fontSize:28}}>¥{currentPrice.toLocaleString()}</div>
+                              <div style={{color:"#475569",fontSize:10,marginTop:4}}>入力値</div>
+                            </div>
+                            <div style={{background:isUnder?"#0f2a1a":"#2a0f0f",border:`1px solid ${isUnder?"#4ade80":"#f87171"}44`,borderRadius:8,padding:"16px",textAlign:"center"}}>
+                              <div style={{color:"#475569",fontSize:11,marginBottom:6}}>安全余裕率</div>
+                              <div style={{color:isUnder?"#4ade80":"#f87171",fontWeight:900,fontSize:28}}>{isUnder?"+":""}{margin.toFixed(1)}%</div>
+                              <div style={{color:"#475569",fontSize:10,marginTop:4}}>{isUnder?"割安（買い余地あり）":"割高（適正価格超え）"}</div>
+                            </div>
+                          </div>
+
+                          {/* ゲージバー */}
+                          <div style={S.card}>
+                            <div style={{color:"#94a3b8",fontWeight:700,marginBottom:16}}>株価ポジショニング</div>
+                            <div style={{position:"relative",height:60,background:"#111827",borderRadius:8,overflow:"hidden",marginBottom:8}}>
+                              {/* グラデーション背景 */}
+                              <div style={{position:"absolute",inset:0,background:"linear-gradient(to right, #f87171, #fbbf24, #4ade80)",opacity:0.15}}/>
+                              {/* 適正株価ライン */}
+                              <div style={{position:"absolute",top:0,bottom:0,left:"50%",width:2,background:"#4ade80",opacity:0.6}}/>
+                              <div style={{position:"absolute",top:4,left:"50%",transform:"translateX(-50%)",color:"#4ade80",fontSize:9,whiteSpace:"nowrap"}}>適正株価 ¥{fairPrice.toLocaleString()}</div>
+                              {/* 現在株価マーカー */}
+                              {(()=>{
+                                const pos = 50 - Math.min(Math.max(margin,-50),50);
+                                return(
+                                  <div style={{position:"absolute",top:0,bottom:0,left:`${pos}%`,width:3,background:"#f59e0b",borderRadius:2}}>
+                                    <div style={{position:"absolute",bottom:4,left:"50%",transform:"translateX(-50%)",color:"#f59e0b",fontSize:9,whiteSpace:"nowrap"}}>現在 ¥{currentPrice.toLocaleString()}</div>
+                                  </div>
+                                );
+                              })()}
+                            </div>
+                            <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:"#334155"}}>
+                              <span>← 割高</span><span>適正</span><span>割安 →</span>
+                            </div>
+                          </div>
+
+                          {/* 感度分析：PERを変えたときの適正株価 */}
+                          {c.eps&&c.eps>0&&(
+                            <div style={S.card}>
+                              <div style={{color:"#94a3b8",fontWeight:700,marginBottom:12}}>PER感度分析（EPSが一定の場合）</div>
+                              <ResponsiveContainer width="100%" height={200}>
+                                <BarChart data={[10,12,15,18,20,25,30].map(per=>({
+                                  PER:per+"倍",
+                                  適正株価:Math.round(c.eps*per),
+                                  isCurrent:per===+simParams.targetPer
+                                }))}>
+                                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b"/>
+                                  <XAxis dataKey="PER" tick={{fill:"#94a3b8",fontSize:11}}/>
+                                  <YAxis tick={{fill:"#64748b",fontSize:10}} tickFormatter={v=>v.toLocaleString()}/>
+                                  <Tooltip formatter={v=>"¥"+v.toLocaleString()} contentStyle={S.tooltip}/>
+                                  <ReferenceLine y={currentPrice} stroke="#f59e0b" strokeDasharray="4 4" label={{value:"現在株価",fill:"#f59e0b",fontSize:10}}/>
+                                  <Bar dataKey="適正株価" radius={[4,4,0,0]} fill="#60a5fa"/>
+                                </BarChart>
+                              </ResponsiveContainer>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
+
+                {/* ── モンテカルロ ── */}
+                {simTab==="monte"&&(
+                  <div>
+                    {(!c.eps||c.eps<=0)&&<div style={S.card}><span style={{color:"#64748b"}}>純利益・発行済株式数を入力するとシミュレーションできます。</span></div>}
+                    {c.eps&&c.eps>0&&monteData.stats&&(()=>{
+                      const { p10,p25,p50,p75,p90,mean,probProfit,price } = monteData.stats;
+                      return(
+                        <div>
+                          <div style={{...S.card,marginBottom:16}}>
+                            <div style={{color:"#94a3b8",fontWeight:700,marginBottom:4}}>🎲 モンテカルロシミュレーション（1,000回試行）</div>
+                            <div style={{color:"#475569",fontSize:12,marginBottom:16}}>
+                              成長率にランダムなブレ（±50%）とPERの変動を加えた{simParams.years}年後の株価分布です。
+                            </div>
+                            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:10,marginBottom:20}}>
+                              {[
+                                ["10パーセンタイル",p10,"#f87171"],
+                                ["25パーセンタイル",p25,"#fbbf24"],
+                                ["中央値（50%）",p50,"#60a5fa"],
+                                ["75パーセンタイル",p75,"#4ade80"],
+                                ["90パーセンタイル",p90,"#a78bfa"],
+                                ["平均値",mean,"#e2e8f0"],
+                              ].map(([label,val,color])=>(
+                                <div key={label} style={{background:"#111827",borderRadius:8,padding:"10px 12px"}}>
+                                  <div style={{color:"#475569",fontSize:10,marginBottom:4}}>{label}</div>
+                                  <div style={{color,fontWeight:700,fontSize:15}}>¥{val?.toLocaleString()}</div>
+                                </div>
+                              ))}
+                            </div>
+
+                            {/* プロフィット確率 */}
+                            <div style={{background:"#111827",borderRadius:8,padding:"12px 16px",marginBottom:16}}>
+                              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                                <span style={{color:"#94a3b8",fontSize:13}}>現在株価より上昇する確率</span>
+                                <span style={{color:probProfit>50?"#4ade80":"#f87171",fontWeight:700,fontSize:20}}>{probProfit.toFixed(1)}%</span>
+                              </div>
+                              <div style={{height:8,background:"#1e293b",borderRadius:4,overflow:"hidden"}}>
+                                <div style={{height:"100%",width:`${probProfit}%`,background:probProfit>50?"#4ade80":"#f87171",borderRadius:4,transition:"width 0.5s"}}/>
+                              </div>
+                              <div style={{display:"flex",justifyContent:"space-between",marginTop:4,fontSize:10,color:"#334155"}}>
+                                <span>現在株価 ¥{price.toLocaleString()}</span>
+                                <span>{(100-probProfit).toFixed(1)}% が下落</span>
+                              </div>
+                            </div>
+
+                            {/* ヒストグラム */}
+                            <div style={{color:"#94a3b8",fontSize:13,marginBottom:12}}>{simParams.years}年後の株価分布（ヒストグラム）</div>
+                            <ResponsiveContainer width="100%" height={220}>
+                              <BarChart data={monteData.chartData} margin={{left:0,right:0}}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b"/>
+                                <XAxis dataKey="range" tick={{fill:"#64748b",fontSize:9}} interval={3}/>
+                                <YAxis tick={{fill:"#64748b",fontSize:10}} tickFormatter={v=>v+"件"}/>
+                                <Tooltip formatter={v=>v+"件"} labelFormatter={v=>"¥"+v} contentStyle={S.tooltip}/>
+                                <ReferenceLine x={price.toLocaleString()} stroke="#f59e0b" label={{value:"現在",fill:"#f59e0b",fontSize:9}}/>
+                                <Bar dataKey="count" radius={[2,2,0,0]}
+                                  fill="#60a5fa"
+                                  label={false}
+                                />
+                              </BarChart>
+                            </ResponsiveContainer>
+                          </div>
+
+                          {/* パーセンタイル帯グラフ */}
+                          <div style={S.card}>
+                            <div style={{color:"#94a3b8",fontWeight:700,marginBottom:4}}>信頼区間バンド（年次推移）</div>
+                            <div style={{color:"#475569",fontSize:12,marginBottom:12}}>緑帯: 25〜75パーセンタイル　外帯: 10〜90パーセンタイル</div>
+                            <ResponsiveContainer width="100%" height={250}>
+                              <AreaChart data={simData()}>
+                                <defs>
+                                  <linearGradient id="band90" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#475569" stopOpacity={0.3}/><stop offset="95%" stopColor="#475569" stopOpacity={0.05}/></linearGradient>
+                                  <linearGradient id="band75" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#4ade80" stopOpacity={0.3}/><stop offset="95%" stopColor="#4ade80" stopOpacity={0.05}/></linearGradient>
+                                </defs>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b"/>
+                                <XAxis dataKey="year" tick={{fill:"#94a3b8",fontSize:12}}/>
+                                <YAxis tick={{fill:"#64748b",fontSize:11}} tickFormatter={v=>v?.toLocaleString()}/>
+                                <Tooltip formatter={v=>v?"¥"+v?.toLocaleString():"—"} contentStyle={S.tooltip}/>
+                                <ReferenceLine y={price} stroke="#f59e0b" strokeDasharray="4 4" label={{value:"現在株価",fill:"#f59e0b",fontSize:10}}/>
+                                <Legend wrapperStyle={{color:"#94a3b8",fontSize:12}}/>
+                                <Area type="monotone" dataKey="bull株価" stroke="#475569" strokeWidth={1} fill="url(#band90)" name="90%帯（強気）" strokeDasharray="4 4"/>
+                                <Area type="monotone" dataKey="base株価" stroke="#4ade80" strokeWidth={2} fill="url(#band75)" name="中央値"/>
+                                <Area type="monotone" dataKey="bear株価" stroke="#475569" strokeWidth={1} fill="none" name="10%帯（弱気）" strokeDasharray="4 4"/>
+                              </AreaChart>
+                            </ResponsiveContainer>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
               </>
             )}
           </div>
         )}
+
       </main>
     </div>
   );
