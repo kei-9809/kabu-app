@@ -96,6 +96,8 @@ const EMPTY_F = {
   curLiab:"", fixLiab:"", ebitda:"", dividend:"", shinyoBairitu:""
 };
 
+const EMPTY_MEMO = { targetPrice:"", buyReason:"", memo:"" };
+
 const INPUT_FIELDS = [
   { label:"株価（円）",          key:"price" },
   { label:"発行済株式数（千株）", key:"shares",      hint:"例: 14430000" },
@@ -117,10 +119,13 @@ const INPUT_FIELDS = [
 
 const INITIAL_PORTFOLIO = [
   { id:1, ticker:"7203", name:"トヨタ自動車", sector:"自動車", qty:100, avgCost:2850, currentPrice:3124,
+    memo:{ targetPrice:"3500", buyReason:"EV化への対応力と高配当が魅力", memo:"2024年3月期に最高益を更新。為替の影響に注意。" },
     financials:{ price:"3124", shares:"14430000", sales:"4390000000000", grossProfit:"900000000000", opProfit:"350000000000", ordProfit:"360000000000", netProfit:"400000000000", totalAssets:"9000000000000", equity:"3700000000000", curAssets:"5000000000000", fixAssets:"4000000000000", curLiab:"3000000000000", fixLiab:"2300000000000", ebitda:"450000000000", dividend:"75", shinyoBairitu:"2.1" }, irList:[] },
   { id:2, ticker:"6758", name:"ソニーグループ", sector:"電機", qty:50, avgCost:12400, currentPrice:13250,
+    memo:{ targetPrice:"15000", buyReason:"エンタメ・半導体センサーの多角化が強み", memo:"PlayStation・音楽・映画の収益安定性を評価。" },
     financials:{ price:"13250", shares:"1190000", sales:"13000000000000", grossProfit:"4200000000000", opProfit:"1200000000000", ordProfit:"1250000000000", netProfit:"900000000000", totalAssets:"25000000000000", equity:"6800000000000", curAssets:"12000000000000", fixAssets:"13000000000000", curLiab:"8000000000000", fixLiab:"10000000000000", ebitda:"1600000000000", dividend:"95", shinyoBairitu:"1.4" }, irList:[] },
   { id:3, ticker:"9984", name:"ソフトバンクG", sector:"通信", qty:200, avgCost:7200, currentPrice:6850,
+    memo:{ targetPrice:"8000", buyReason:"AI投資ポートフォリオへの期待", memo:"ARM上場後の動向と純有利子負債の推移を注視。" },
     financials:{ price:"6850", shares:"2110000", sales:"6000000000000", grossProfit:"", opProfit:"500000000000", ordProfit:"", netProfit:"-800000000000", totalAssets:"50000000000000", equity:"8000000000000", curAssets:"", fixAssets:"", curLiab:"", fixLiab:"", ebitda:"900000000000", dividend:"", shinyoBairitu:"3.2" }, irList:[] },
 ];
 
@@ -391,6 +396,8 @@ export default function App() {
   const [addForm, setAddForm] = useState({ ticker:"", name:"", sector:"", qty:"", avgCost:"", currentPrice:"" });
   const [showAdd, setShowAdd] = useState(false);
   const [saveMsg, setSaveMsg] = useState("");
+  const [showPriceUpdate, setShowPriceUpdate] = useState(false);
+  const [priceInputs, setPriceInputs] = useState({});
 
   // portfolioが変わるたびに自動保存
   const setPortfolioAndSave = useCallback((updater) => {
@@ -411,14 +418,35 @@ export default function App() {
     if(selected?.id===id) setSelected(s=>({...s,financials:{...s.financials,[key]:val}}));
   },[selected, setPortfolioAndSave]);
 
+  const updateMemo = useCallback((id,key,val)=>{
+    setPortfolioAndSave(p=>p.map(h=>h.id===id?{...h,memo:{...(h.memo||EMPTY_MEMO),[key]:val}}:h));
+    if(selected?.id===id) setSelected(s=>({...s,memo:{...(s.memo||EMPTY_MEMO),[key]:val}}));
+  },[selected, setPortfolioAndSave]);
+
   const handleSelect = h => setSelected(h);
 
   const handleAddStock = () => {
     const {ticker,name,sector,qty,avgCost,currentPrice}=addForm;
     if(!ticker||!name||!qty||!avgCost||!currentPrice) return;
-    setPortfolioAndSave(p=>[...p,{id:Date.now(),ticker,name,sector:sector||"—",qty:+qty,avgCost:+avgCost,currentPrice:+currentPrice,financials:{...EMPTY_F,price:currentPrice},irList:[]}]);
+    setPortfolioAndSave(p=>[...p,{id:Date.now(),ticker,name,sector:sector||"—",qty:+qty,avgCost:+avgCost,currentPrice:+currentPrice,financials:{...EMPTY_F,price:currentPrice},memo:{...EMPTY_MEMO},irList:[]}]);
     setAddForm({ticker:"",name:"",sector:"",qty:"",avgCost:"",currentPrice:""});
     setShowAdd(false);
+  };
+
+  const handleApplyPrices = () => {
+    setPortfolioAndSave(p=>p.map(h=>{
+      const newPrice = priceInputs[h.id];
+      if(!newPrice||isNaN(+newPrice)) return h;
+      return {...h, currentPrice:+newPrice, financials:{...h.financials, price:newPrice}};
+    }));
+    if(selected){
+      const newPrice = priceInputs[selected.id];
+      if(newPrice&&!isNaN(+newPrice)){
+        setSelected(s=>({...s, currentPrice:+newPrice, financials:{...s.financials, price:newPrice}}));
+      }
+    }
+    setPriceInputs({});
+    setShowPriceUpdate(false);
   };
 
   const handleDeleteStock = useCallback((id)=>{
@@ -570,13 +598,6 @@ export default function App() {
               {{"portfolio":"ポートフォリオ","detail":"銘柄詳細","compare":"他社比較","simulation":"シミュレーション"}[t]}
             </button>
           ))}
-          <button style={{...S.miniBtn,fontSize:11,color:"#475569"}} onClick={()=>{
-            if(window.confirm("データをリセットしてサンプルデータに戻しますか？")){
-              savePortfolio(INITIAL_PORTFOLIO);
-              setPortfolio(INITIAL_PORTFOLIO);
-              setSelected(INITIAL_PORTFOLIO[0]);
-            }
-          }}>リセット</button>
         </nav>
       </header>
 
@@ -591,10 +612,53 @@ export default function App() {
 
         {tab==="portfolio"&&(
           <div>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+            {/* ヘッダーボタン群 */}
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:8}}>
               <h2 style={S.sectionTitle}>保有銘柄一覧</h2>
-              <button style={S.addBtn} onClick={()=>setShowAdd(v=>!v)}>＋ 銘柄追加</button>
+              <div style={{display:"flex",gap:8}}>
+                <button style={{...S.miniBtn,color:"#fbbf24",borderColor:"#fbbf24"}} onClick={()=>{
+                  const inputs={};
+                  portfolio.forEach(h=>{inputs[h.id]=String(h.currentPrice);});
+                  setPriceInputs(inputs);
+                  setShowPriceUpdate(v=>!v);
+                }}>📊 株価を更新</button>
+                <button style={S.addBtn} onClick={()=>setShowAdd(v=>!v)}>＋ 銘柄追加</button>
+              </div>
             </div>
+
+            {/* 株価一括更新パネル */}
+            {showPriceUpdate&&(
+              <div style={{...S.card,marginBottom:16,border:"1px solid #fbbf2444"}}>
+                <div style={{color:"#fbbf24",fontWeight:700,marginBottom:12,fontSize:13}}>📊 現在株価の一括更新</div>
+                <div style={{color:"#64748b",fontSize:11,marginBottom:12}}>Yahoo Finance / 株探などで確認した最新株価を入力してください。</div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:10,marginBottom:12}}>
+                  {portfolio.map(h=>(
+                    <div key={h.id} style={{display:"flex",flexDirection:"column",gap:3}}>
+                      <label style={{color:"#64748b",fontSize:10}}>{h.name}（{h.ticker}）</label>
+                      <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                        <input
+                          value={priceInputs[h.id]??String(h.currentPrice)}
+                          onChange={e=>{
+                            const v=e.target.value;
+                            if(v===""||/^-?\d*\.?\d*$/.test(v)) setPriceInputs(p=>({...p,[h.id]:v}));
+                          }}
+                          style={{...S.input,flex:1}}
+                          inputMode="decimal"
+                        />
+                        <span style={{color:"#475569",fontSize:11}}>円</span>
+                      </div>
+                      <span style={{fontSize:9,color:"#334155"}}>前回: ¥{h.currentPrice.toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+                <div style={{display:"flex",gap:8}}>
+                  <button style={S.addBtn} onClick={handleApplyPrices}>更新を適用</button>
+                  <button style={S.miniBtn} onClick={()=>setShowPriceUpdate(false)}>キャンセル</button>
+                </div>
+              </div>
+            )}
+
+            {/* 銘柄追加フォーム */}
             {showAdd&&(
               <div style={{...S.card,marginBottom:16}}>
                 <div style={{color:"#94a3b8",fontWeight:700,marginBottom:12,fontSize:13}}>新規銘柄追加</div>
@@ -612,27 +676,42 @@ export default function App() {
                 </div>
               </div>
             )}
+
+            {/* 銘柄一覧テーブル */}
             <div style={S.table}>
               <div style={S.tableHeader}>
-                {["銘柄","コード","保有数","取得単価","現在値","評価額","損益","損益率","スコア","操作"].map(h=>(<span key={h} style={S.th}>{h}</span>))}
+                {["銘柄","コード","保有数","取得単価","現在値","目標株価","評価額","損益","損益率","スコア","操作"].map(h=>(<span key={h} style={S.th}>{h}</span>))}
               </div>
               {portfolio.map(h=>{
                 const pnl=(h.currentPrice-h.avgCost)*h.qty;
                 const pnlPct=((h.currentPrice-h.avgCost)/h.avgCost)*100;
                 const hsc=financialScore(calcAll(h.financials));
+                const tp=n(h.memo?.targetPrice);
+                const tpPct=tp?((h.currentPrice-tp)/tp*100):null;
                 return(
-                  <div key={h.id} style={{...S.tableRow,...(selected?.id===h.id?S.tableRowActive:{})}}>
+                  <div key={h.id} style={{...S.tableRow2,...(selected?.id===h.id?S.tableRowActive:{})}}>
                     <span style={{fontWeight:700,color:"#e2e8f0"}}>{h.name}<br/><span style={{color:"#475569",fontSize:11}}>{h.sector}</span></span>
                     <span><Tag color="#60a5fa">{h.ticker}</Tag></span>
                     <span style={{color:"#94a3b8"}}>{h.qty.toLocaleString()}</span>
                     <span style={{color:"#94a3b8"}}>¥{h.avgCost.toLocaleString()}</span>
                     <span style={{fontWeight:700,color:"#e2e8f0"}}>¥{h.currentPrice.toLocaleString()}</span>
+                    <span>
+                      {tp ? (
+                        <div>
+                          <div style={{color:"#a78bfa",fontWeight:700}}>¥{tp.toLocaleString()}</div>
+                          <div style={{fontSize:9,color:tpPct!=null&&tpPct>=0?"#4ade80":"#f87171"}}>
+                            {tpPct!=null?(tpPct>=0?"▲":"▼")+Math.abs(tpPct).toFixed(1)+"%":""}
+                          </div>
+                        </div>
+                      ) : <span style={{color:"#334155",fontSize:11}}>未設定</span>}
+                    </span>
                     <span>¥{(h.qty*h.currentPrice).toLocaleString()}</span>
                     <span><Δ val={pnl} fmt={v=>"¥"+Math.round(v).toLocaleString()}/></span>
                     <span><Δ val={pnlPct} fmt={v=>v.toFixed(2)+"%"}/></span>
                     <span style={{color:hsc!=null?scoreColor(hsc):"#475569",fontWeight:700}}>{hsc!=null?hsc+"pt":"—"}</span>
                     <span style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-                      <button style={S.miniBtn} onClick={()=>{handleSelect(h);setTab("detail");}}>詳細</button>
+                      <button style={S.miniBtn} onClick={()=>{handleSelect(h);setTab("detail");setDetailTab("memo");}}>メモ</button>
+                      <button style={S.miniBtn} onClick={()=>{handleSelect(h);setTab("detail");setDetailTab("metrics");}}>詳細</button>
                       <button style={{...S.miniBtn,...(compareIds.includes(h.id)?{color:"#4ade80",borderColor:"#4ade80"}:{})}} onClick={()=>toggleCompare(h.id)}>{compareIds.includes(h.id)?"比較中":"比較"}</button>
                       <button style={{...S.miniBtn,color:"#f87171",borderColor:"#f87171"}} onClick={()=>handleDeleteStock(h.id)}>削除</button>
                     </span>
@@ -641,6 +720,71 @@ export default function App() {
               })}
             </div>
             {portfolio.length===0&&<div style={{...S.card,textAlign:"center",color:"#475569",padding:40}}>「＋ 銘柄追加」から追加してください。</div>}
+
+            {/* ポートフォリオサマリー */}
+            {portfolio.length>0&&(()=>{
+              const sectorMap={};
+              portfolio.forEach(h=>{sectorMap[h.sector]=(sectorMap[h.sector]||0)+h.qty*h.currentPrice;});
+              const sectorData=Object.entries(sectorMap).map(([name,value])=>({name,value:Math.round(value)})).sort((a,b)=>b.value-a.value);
+              const totalPers=portfolio.map(h=>calcAll(h.financials).per).filter(v=>v&&v>0&&v<200);
+              const avgPer=totalPers.length>0?(totalPers.reduce((a,b)=>a+b,0)/totalPers.length).toFixed(1):null;
+              const sortedByPnl=[...portfolio].sort((a,b)=>((b.currentPrice-b.avgCost)/b.avgCost)-((a.currentPrice-a.avgCost)/a.avgCost));
+              const TAX_RATE=0.20315;
+              const afterTaxPnL=totalPnL>0?totalPnL*(1-TAX_RATE):totalPnL;
+              return(
+                <div style={{marginTop:24}}>
+                  <h3 style={{...S.sectionTitle,fontSize:15}}>ポートフォリオサマリー</h3>
+                  {/* KPI行 */}
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))",gap:12,marginBottom:20}}>
+                    {[
+                      ["投資元本",`¥${Math.round(totalCost).toLocaleString()}`,"#94a3b8"],
+                      ["評価額合計",`¥${Math.round(totalValue).toLocaleString()}`,"#e2e8f0"],
+                      ["含み損益（税引前）",`${totalPnL>=0?"▲":"▼"}¥${Math.round(Math.abs(totalPnL)).toLocaleString()}`,totalPnL>=0?"#4ade80":"#f87171"],
+                      ["含み損益（税引後概算）",`${afterTaxPnL>=0?"▲":"▼"}¥${Math.round(Math.abs(afterTaxPnL)).toLocaleString()}`,afterTaxPnL>=0?"#4ade80":"#f87171"],
+                      ["平均PER",avgPer?avgPer+"倍":"—","#60a5fa"],
+                      ["保有銘柄数",portfolio.length+"銘柄","#a78bfa"],
+                    ].map(([label,val,color])=>(
+                      <div key={label} style={{background:"#111827",borderRadius:8,padding:"12px 14px"}}>
+                        <div style={{color:"#475569",fontSize:11,marginBottom:4}}>{label}</div>
+                        <div style={{color,fontWeight:700,fontSize:15}}>{val}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* セクター配分 + 損益ランキング */}
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
+                    <div style={S.card}>
+                      <div style={{color:"#94a3b8",fontSize:13,fontWeight:700,marginBottom:12}}>セクター別配分</div>
+                      <ResponsiveContainer width="100%" height={200}>
+                        <BarChart data={sectorData} layout="vertical" margin={{left:10,right:40}}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#1e293b"/>
+                          <XAxis type="number" tick={{fill:"#64748b",fontSize:10}} tickFormatter={v=>fmtM(v)}/>
+                          <YAxis dataKey="name" type="category" tick={{fill:"#94a3b8",fontSize:11}} width={70}/>
+                          <Tooltip formatter={v=>"¥"+v.toLocaleString()} contentStyle={S.tooltip}/>
+                          <Bar dataKey="value" fill="#60a5fa" radius={[0,4,4,0]}/>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div style={S.card}>
+                      <div style={{color:"#94a3b8",fontSize:13,fontWeight:700,marginBottom:12}}>損益率ランキング</div>
+                      <ResponsiveContainer width="100%" height={200}>
+                        <BarChart data={sortedByPnl.map(h=>({name:h.ticker,損益率:parseFloat(((h.currentPrice-h.avgCost)/h.avgCost*100).toFixed(2))}))} layout="vertical" margin={{left:10,right:50}}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#1e293b"/>
+                          <XAxis type="number" tick={{fill:"#64748b",fontSize:10}} tickFormatter={v=>v+"%"}/>
+                          <YAxis dataKey="name" type="category" tick={{fill:"#94a3b8",fontSize:11}} width={50}/>
+                          <Tooltip formatter={v=>v+"%"} contentStyle={S.tooltip}/>
+                          <ReferenceLine x={0} stroke="#475569"/>
+                          <Bar dataKey="損益率" radius={[0,4,4,0]}
+                            fill="#4ade80"
+                            label={{position:"right",fill:"#94a3b8",fontSize:10,formatter:v=>v+"%"}}
+                          />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         )}
 
@@ -666,14 +810,102 @@ export default function App() {
                   </div>
                 </div>
                 <div style={{display:"flex",gap:4,marginBottom:20,borderBottom:"1px solid #1e293b",paddingBottom:8,flexWrap:"wrap"}}>
-                  {["metrics","input","ir"].map(t=>(
+                  {["metrics","memo","input","ir"].map(t=>(
                     <button key={t} style={{...S.navBtn,...(detailTab===t?S.navActive:{})}} onClick={()=>setDetailTab(t)}>
-                      {{"metrics":"財務指標","input":"数値入力","ir":"IRニュース"}[t]}
+                      {{"metrics":"財務指標","memo":"投資メモ","input":"数値入力","ir":"IRニュース"}[t]}
                     </button>
                   ))}
                 </div>
 
-                {detailTab==="metrics"&&(
+                {detailTab==="memo"&&(
+                  <div>
+                    <div style={{marginBottom:12,color:"#64748b",fontSize:12}}>投資判断・目標・メモを記録します。自動保存されます。</div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
+                      <div style={S.card}>
+                        <div style={{color:"#a78bfa",fontWeight:700,marginBottom:12,fontSize:13}}>🎯 目標・判断</div>
+                        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                          <FInput label="目標株価（円）" value={selected.memo?.targetPrice||""} onChange={v=>updateMemo(selected.id,"targetPrice",v)} numericOnly={true}/>
+                          {selected.memo?.targetPrice&&n(selected.memo.targetPrice)&&(
+                            <div style={{background:"#111827",borderRadius:6,padding:"10px 12px"}}>
+                              <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+                                <span style={{color:"#475569",fontSize:11}}>現在株価</span>
+                                <span style={{color:"#e2e8f0",fontWeight:700}}>¥{selected.currentPrice.toLocaleString()}</span>
+                              </div>
+                              <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+                                <span style={{color:"#475569",fontSize:11}}>目標株価</span>
+                                <span style={{color:"#a78bfa",fontWeight:700}}>¥{Number(selected.memo.targetPrice).toLocaleString()}</span>
+                              </div>
+                              <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+                                <span style={{color:"#475569",fontSize:11}}>目標まであと</span>
+                                <span style={{color:n(selected.memo.targetPrice)>selected.currentPrice?"#4ade80":"#f87171",fontWeight:700}}>
+                                  {((n(selected.memo.targetPrice)-selected.currentPrice)/selected.currentPrice*100).toFixed(1)}%
+                                </span>
+                              </div>
+                              {/* 進捗バー */}
+                              <div style={{height:6,background:"#1e293b",borderRadius:3,overflow:"hidden"}}>
+                                <div style={{
+                                  height:"100%",
+                                  width:`${Math.min(100,Math.max(0,(selected.currentPrice/n(selected.memo.targetPrice))*100))}%`,
+                                  background:"#a78bfa",
+                                  borderRadius:3
+                                }}/>
+                              </div>
+                              <div style={{display:"flex",justifyContent:"space-between",marginTop:4,fontSize:9,color:"#334155"}}>
+                                <span>¥0</span><span>目標 ¥{Number(selected.memo.targetPrice).toLocaleString()}</span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div style={S.card}>
+                        <div style={{color:"#4ade80",fontWeight:700,marginBottom:12,fontSize:13}}>📝 投資理由・メモ</div>
+                        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                          <div style={{display:"flex",flexDirection:"column",gap:3}}>
+                            <label style={{color:"#64748b",fontSize:10}}>投資理由・買った根拠</label>
+                            <textarea
+                              value={selected.memo?.buyReason||""}
+                              onChange={e=>updateMemo(selected.id,"buyReason",e.target.value.slice(0,300))}
+                              style={{...S.input,height:80,resize:"vertical",lineHeight:1.6}}
+                              placeholder="例: PERが割安で配当利回りも高い。業績回復トレンド。"
+                            />
+                          </div>
+                          <div style={{display:"flex",flexDirection:"column",gap:3}}>
+                            <label style={{color:"#64748b",fontSize:10}}>メモ・注意事項</label>
+                            <textarea
+                              value={selected.memo?.memo||""}
+                              onChange={e=>updateMemo(selected.id,"memo",e.target.value.slice(0,300))}
+                              style={{...S.input,height:80,resize:"vertical",lineHeight:1.6}}
+                              placeholder="例: 決算発表は8月。為替リスクに注意。"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    {/* 損益サマリー */}
+                    <div style={S.card}>
+                      <div style={{color:"#94a3b8",fontWeight:700,marginBottom:12,fontSize:13}}>💴 損益サマリー</div>
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))",gap:10}}>
+                        {[
+                          ["保有数量",selected.qty.toLocaleString()+"株","#94a3b8"],
+                          ["平均取得単価","¥"+selected.avgCost.toLocaleString(),"#94a3b8"],
+                          ["現在株価","¥"+selected.currentPrice.toLocaleString(),"#e2e8f0"],
+                          ["投資元本","¥"+(selected.qty*selected.avgCost).toLocaleString(),"#94a3b8"],
+                          ["評価額","¥"+(selected.qty*selected.currentPrice).toLocaleString(),"#e2e8f0"],
+                          ["含み損益（税引前）",(()=>{const p=(selected.currentPrice-selected.avgCost)*selected.qty;return(p>=0?"▲":"▼")+"¥"+Math.abs(Math.round(p)).toLocaleString();})(),((selected.currentPrice-selected.avgCost)*selected.qty)>=0?"#4ade80":"#f87171"],
+                          ["含み損益（税引後概算）",(()=>{const p=(selected.currentPrice-selected.avgCost)*selected.qty;const at=p>0?p*(1-0.20315):p;return(at>=0?"▲":"▼")+"¥"+Math.abs(Math.round(at)).toLocaleString();})(),((selected.currentPrice-selected.avgCost)*selected.qty)>=0?"#4ade80":"#f87171"],
+                          ["損益率",(((selected.currentPrice-selected.avgCost)/selected.avgCost)*100).toFixed(2)+"%",((selected.currentPrice-selected.avgCost)/selected.avgCost)>=0?"#4ade80":"#f87171"],
+                        ].map(([label,val,color])=>(
+                          <div key={label} style={{background:"#111827",borderRadius:8,padding:"10px 14px"}}>
+                            <div style={{color:"#475569",fontSize:11,marginBottom:3}}>{label}</div>
+                            <div style={{color,fontWeight:700,fontSize:14}}>{val}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+
                   <div>
                     <div style={{color:"#64748b",fontSize:12,marginBottom:12}}>「数値入力」タブの入力値から自動計算しています。</div>
                     <Section title="株価指標">
@@ -1303,9 +1535,10 @@ const S = {
   sectionTitle:{ fontSize:18, fontWeight:800, color:"#f1f5f9", margin:"0 0 16px 0", letterSpacing:1 },
   card:{ background:"#0d1424", border:"1px solid #1e293b", borderRadius:10, padding:20, marginBottom:16 },
   table:{ background:"#0d1424", border:"1px solid #1e293b", borderRadius:10, overflow:"hidden", marginBottom:16 },
-  tableHeader:{ display:"grid", gridTemplateColumns:"2fr 0.7fr 0.7fr 1fr 1fr 1.2fr 1.1fr 1fr 0.7fr 1.2fr", padding:"10px 16px", background:"#111827", gap:8 },
+  tableHeader:{ display:"grid", gridTemplateColumns:"2fr 0.6fr 0.7fr 0.9fr 0.9fr 0.9fr 1.1fr 1.1fr 0.9fr 0.6fr 1.3fr", padding:"10px 16px", background:"#111827", gap:8 },
   th:{ fontSize:10, color:"#475569", textTransform:"uppercase", letterSpacing:1 },
   tableRow:{ display:"grid", gridTemplateColumns:"2fr 0.7fr 0.7fr 1fr 1fr 1.2fr 1.1fr 1fr 0.7fr 1.2fr", padding:"12px 16px", gap:8, borderTop:"1px solid #1e293b", alignItems:"center" },
+  tableRow2:{ display:"grid", gridTemplateColumns:"2fr 0.6fr 0.7fr 0.9fr 0.9fr 0.9fr 1.1fr 1.1fr 0.9fr 0.6fr 1.3fr", padding:"12px 16px", gap:8, borderTop:"1px solid #1e293b", alignItems:"center" },
   tableRowActive:{ background:"#0f2a1a" },
   stockSelector:{ display:"flex", flexWrap:"wrap", gap:8, marginBottom:16 },
   chipBtn:{ background:"#111827", border:"1px solid #1e293b", color:"#94a3b8", padding:"6px 12px", borderRadius:20, cursor:"pointer", fontSize:12, fontFamily:"inherit" },
