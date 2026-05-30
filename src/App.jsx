@@ -315,18 +315,44 @@ const scoreColor = v => v >= 80 ? "#4ade80" : v >= 50 ? "#fbbf24" : "#f87171";
 const typeColor  = t => t==="決算"?"#4ade80":t==="配当"?"#fbbf24":t==="人事"?"#a78bfa":"#64748b";
 const COLORS = ["#4ade80","#60a5fa","#f59e0b","#a78bfa"];
 
+// ── localStorage ユーティリティ ───────────────────────────────────────────────
+const LS_KEY = "kabulens_portfolio_v1";
+const loadPortfolio = () => {
+  try {
+    const saved = localStorage.getItem(LS_KEY);
+    if (saved) return JSON.parse(saved);
+  } catch {}
+  return null;
+};
+const savePortfolio = (p) => {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(p)); } catch {}
+};
+
 export default function App() {
   const [tab, setTab] = useState("portfolio");
-  const [portfolio, setPortfolio] = useState(INITIAL_PORTFOLIO);
-  const [selected, setSelected] = useState(INITIAL_PORTFOLIO[0]);
+  const [portfolio, setPortfolio] = useState(() => loadPortfolio() || INITIAL_PORTFOLIO);
+  const [selected, setSelected] = useState(() => {
+    const p = loadPortfolio();
+    return p ? p[0] : INITIAL_PORTFOLIO[0];
+  });
   const [detailTab, setDetailTab] = useState("metrics");
   const [compareIds, setCompareIds] = useState([]);
   const [simParams, setSimParams] = useState({ years:"5", growthRate:"15", targetMargin:"15", targetPer:"20", targetEvEbitda:"", dividendRate:"2", reinvest:true });
-  const [simTab, setSimTab] = useState("scenario"); // scenario | margin | monte
+  const [simTab, setSimTab] = useState("scenario");
   const [irForm, setIrForm] = useState({ date:"", title:"", url:"", type:"決算" });
   const [showIrForm, setShowIrForm] = useState(false);
   const [addForm, setAddForm] = useState({ ticker:"", name:"", sector:"", qty:"", avgCost:"", currentPrice:"" });
   const [showAdd, setShowAdd] = useState(false);
+  const [saveMsg, setSaveMsg] = useState("");
+
+  // portfolioが変わるたびに自動保存
+  const setPortfolioAndSave = useCallback((updater) => {
+    setPortfolio(prev => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      savePortfolio(next);
+      return next;
+    });
+  }, []);
 
   const totalCost  = portfolio.reduce((s,h)=>s+h.qty*h.avgCost,0);
   const totalValue = portfolio.reduce((s,h)=>s+h.qty*h.currentPrice,0);
@@ -334,35 +360,35 @@ export default function App() {
   const totalPnLPct= (totalPnL/totalCost)*100;
 
   const updateF = useCallback((id,key,val)=>{
-    setPortfolio(p=>p.map(h=>h.id===id?{...h,financials:{...h.financials,[key]:val}}:h));
+    setPortfolioAndSave(p=>p.map(h=>h.id===id?{...h,financials:{...h.financials,[key]:val}}:h));
     if(selected?.id===id) setSelected(s=>({...s,financials:{...s.financials,[key]:val}}));
-  },[selected]);
+  },[selected, setPortfolioAndSave]);
 
   const handleSelect = h => setSelected(h);
 
   const handleAddStock = () => {
     const {ticker,name,sector,qty,avgCost,currentPrice}=addForm;
     if(!ticker||!name||!qty||!avgCost||!currentPrice) return;
-    setPortfolio(p=>[...p,{id:Date.now(),ticker,name,sector:sector||"—",qty:+qty,avgCost:+avgCost,currentPrice:+currentPrice,financials:{...EMPTY_F,price:currentPrice},irList:[]}]);
+    setPortfolioAndSave(p=>[...p,{id:Date.now(),ticker,name,sector:sector||"—",qty:+qty,avgCost:+avgCost,currentPrice:+currentPrice,financials:{...EMPTY_F,price:currentPrice},irList:[]}]);
     setAddForm({ticker:"",name:"",sector:"",qty:"",avgCost:"",currentPrice:""});
     setShowAdd(false);
   };
 
   const handleDeleteStock = useCallback((id)=>{
     if(!window.confirm("この銘柄を削除しますか？")) return;
-    setPortfolio(p=>p.filter(h=>h.id!==id));
+    setPortfolioAndSave(p=>p.filter(h=>h.id!==id));
     setCompareIds(p=>p.filter(x=>x!==id));
     if(selected?.id===id){const rem=portfolio.filter(h=>h.id!==id);setSelected(rem.length>0?rem[0]:null);}
-  },[selected,portfolio]);
+  },[selected,portfolio,setPortfolioAndSave]);
 
   const addIR = ()=>{
     if(!irForm.title||!irForm.date) return;
-    setPortfolio(p=>p.map(h=>h.id===selected.id?{...h,irList:[irForm,...(h.irList||[])]}:h));
+    setPortfolioAndSave(p=>p.map(h=>h.id===selected.id?{...h,irList:[irForm,...(h.irList||[])]}:h));
     setSelected(s=>({...s,irList:[irForm,...(s.irList||[])]}));
     setIrForm({date:"",title:"",url:"",type:"決算"}); setShowIrForm(false);
   };
   const deleteIR = idx=>{
-    setPortfolio(p=>p.map(h=>h.id===selected.id?{...h,irList:h.irList.filter((_,i)=>i!==idx)}:h));
+    setPortfolioAndSave(p=>p.map(h=>h.id===selected.id?{...h,irList:h.irList.filter((_,i)=>i!==idx)}:h));
     setSelected(s=>({...s,irList:s.irList.filter((_,i)=>i!==idx)}));
   };
   const toggleCompare = id=>setCompareIds(p=>p.includes(id)?p.filter(x=>x!==id):p.length<4?[...p,id]:p);
@@ -497,6 +523,13 @@ export default function App() {
               {{"portfolio":"ポートフォリオ","detail":"銘柄詳細","compare":"他社比較","simulation":"シミュレーション"}[t]}
             </button>
           ))}
+          <button style={{...S.miniBtn,fontSize:11,color:"#475569"}} onClick={()=>{
+            if(window.confirm("データをリセットしてサンプルデータに戻しますか？")){
+              savePortfolio(INITIAL_PORTFOLIO);
+              setPortfolio(INITIAL_PORTFOLIO);
+              setSelected(INITIAL_PORTFOLIO[0]);
+            }
+          }}>リセット</button>
         </nav>
       </header>
 
