@@ -352,10 +352,13 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, TS
       売上高: n(fd.sales) ? parseFloat(fmtM(n(fd.sales)).replace(/[^0-9.-]/g,"")) : null,
       営業利益: n(fd.opProfit) ? parseFloat(fmtM(n(fd.opProfit)).replace(/[^0-9.-]/g,"")) : null,
       純利益: n(fd.netProfit) ? parseFloat(fmtM(n(fd.netProfit)).replace(/[^0-9.-]/g,"")) : null,
+      EBITDA: ca.ebitda ? parseFloat(fmtM(ca.ebitda).replace(/[^0-9.-]/g,"")) : null,
       ROE: ca.roe ? parseFloat((ca.roe*100).toFixed(1)) : null,
       ROA: ca.roa ? parseFloat((ca.roa*100).toFixed(1)) : null,
       営業利益率: ca.opMargin ? parseFloat((ca.opMargin*100).toFixed(1)) : null,
+      粗利率: ca.grossMargin ? parseFloat((ca.grossMargin*100).toFixed(1)) : null,
       自己資本比率: ca.equityRatio ? parseFloat((ca.equityRatio*100).toFixed(1)) : null,
+      EV_EBITDA: ca.evEbitda ? parseFloat(ca.evEbitda.toFixed(2)) : null,
     }));
   }, [annualData]);
 
@@ -451,13 +454,15 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, TS
                   ["営業利益",    d => n(d.f.opProfit),        v => fmtM(v)],
                   ["経常利益",    d => n(d.f.ordProfit),       v => fmtM(v)],
                   ["当期純利益",  d => n(d.f.netProfit),       v => fmtM(v)],
-                  ["EBITDA",     d => n(d.f.ebitda),          v => fmtM(v)],
+                  ["EBITDA",     d => d.c.ebitda,             v => fmtM(v)],
+                  ["粗利率",      d => d.c.grossMargin,        v => pct(v)],
                   ["営業利益率",  d => d.c.opMargin,           v => pct(v)],
                   ["純利益率",    d => d.c.ordMargin,          v => pct(v)],
                   ["ROE",        d => d.c.roe,                v => pct(v)],
                   ["ROA",        d => d.c.roa,                v => pct(v)],
                   ["自己資本比率",d => d.c.equityRatio,        v => pct(v)],
                   ["PER",        d => d.c.per,                v => v?xfmt(v):"—"],
+                  ["EV/EBITDA",  d => d.c.evEbitda,           v => v?xfmt(v):"—"],
                   ["EPS",        d => d.c.eps,                v => v?"¥"+v.toFixed(1):"—"],
                   ["1株配当",    d => n(d.f.dividend),        v => v?"¥"+v:"—"],
                 ].map(([label, getter, formatter]) => (
@@ -505,7 +510,7 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, TS
           {/* 利益率・ROEトレンド */}
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
             <div style={S.card}>
-              <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:12 }}>利益率トレンド</div>
+              <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:12 }}>利益率トレンド（折れ線）</div>
               <ResponsiveContainer width="100%" height={180}>
                 <LineChart data={trendData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
@@ -513,6 +518,7 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, TS
                   <YAxis tick={{ fill:"#64748b", fontSize:10 }} tickFormatter={v => v+"%"} />
                   <Tooltip formatter={v => v+"%"} contentStyle={TS} itemStyle={{ color:"#e2e8f0" }} />
                   <Legend wrapperStyle={{ color:"#94a3b8", fontSize:11 }} />
+                  <Line type="monotone" dataKey="粗利率" stroke="#fbbf24" strokeWidth={2} dot={{ fill:"#fbbf24" }} connectNulls />
                   <Line type="monotone" dataKey="営業利益率" stroke="#4ade80" strokeWidth={2} dot={{ fill:"#4ade80" }} connectNulls />
                 </LineChart>
               </ResponsiveContainer>
@@ -528,6 +534,35 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, TS
                   <Legend wrapperStyle={{ color:"#94a3b8", fontSize:11 }} />
                   <Line type="monotone" dataKey="ROE" stroke="#4ade80" strokeWidth={2} dot={{ fill:"#4ade80" }} connectNulls />
                   <Line type="monotone" dataKey="ROA" stroke="#60a5fa" strokeWidth={2} dot={{ fill:"#60a5fa" }} connectNulls />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* EBITDAとEV/EBITDA推移 */}
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
+            <div style={S.card}>
+              <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:12 }}>EBITDA推移</div>
+              <ResponsiveContainer width="100%" height={180}>
+                <BarChart data={trendData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                  <XAxis dataKey="name" tick={{ fill:"#94a3b8", fontSize:11 }} />
+                  <YAxis tick={{ fill:"#64748b", fontSize:10 }} tickFormatter={v => v+"億"} />
+                  <Tooltip formatter={v => v+"億円"} contentStyle={TS} itemStyle={{ color:"#e2e8f0" }} />
+                  <Bar dataKey="EBITDA" fill="#60a5fa" radius={[3,3,0,0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <div style={S.card}>
+              <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:12 }}>EV/EBITDAトレンド</div>
+              <ResponsiveContainer width="100%" height={180}>
+                <LineChart data={trendData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                  <XAxis dataKey="name" tick={{ fill:"#94a3b8", fontSize:11 }} />
+                  <YAxis tick={{ fill:"#64748b", fontSize:10 }} tickFormatter={v => v+"x"} />
+                  <Tooltip formatter={v => v+"倍"} contentStyle={TS} itemStyle={{ color:"#e2e8f0" }} />
+                  <ReferenceLine y={10} stroke="#4ade80" strokeDasharray="4 4" label={{ value:"10x", fill:"#4ade80", fontSize:9 }} />
+                  <Line type="monotone" dataKey="EV_EBITDA" stroke="#a78bfa" strokeWidth={2} dot={{ fill:"#a78bfa" }} connectNulls name="EV/EBITDA" />
                 </LineChart>
               </ResponsiveContainer>
             </div>
