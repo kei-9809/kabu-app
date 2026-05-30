@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo } from "react";
 import {
   BarChart, Bar, LineChart, Line, AreaChart, Area,
+  RadarChart, Radar, PolarGrid, PolarAngleAxis,
   XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine, Legend
 } from "recharts";
@@ -123,22 +124,172 @@ const INITIAL_PORTFOLIO = [
     financials:{ price:"6850", shares:"2110000", sales:"6000000000000", grossProfit:"", opProfit:"500000000000", ordProfit:"", netProfit:"-800000000000", totalAssets:"50000000000000", equity:"8000000000000", curAssets:"", fixAssets:"", curLiab:"", fixLiab:"", ebitda:"900000000000", dividend:"", shinyoBairitu:"3.2" }, irList:[] },
 ];
 
-const Tag = ({ children, color="#4ade80" }) => (
-  <span style={{ background:color+"22", color, border:`1px solid ${color}44`, borderRadius:4, padding:"2px 8px", fontSize:11, fontWeight:600 }}>{children}</span>
-);
-const Δ = ({ val, fmt: f = v => v.toFixed(2) }) => (
-  <span style={{ color:val>=0?"#4ade80":"#f87171", fontWeight:700 }}>{val>=0?"▲":"▼"} {f(Math.abs(val))}</span>
-);
-const MBox = ({ label, value, color="#94a3b8", hint="", badge="" }) => (
-  <div style={{ background:"#111827", borderRadius:8, padding:"10px 14px" }}>
-    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-      <span style={{ color:"#475569", fontSize:11 }}>{label}</span>
-      {badge && <span style={{ background:"#0f2a1a", color:"#4ade80", fontSize:9, padding:"1px 5px", borderRadius:3 }}>{badge}</span>}
+// ── 指標説明データ ─────────────────────────────────────────────────────────────
+const METRIC_DESC = {
+  "PER": {
+    title:"PER（株価収益率）",
+    formula:"株価 ÷ EPS（1株純利益）",
+    what:"1株の純利益に対して株価が何倍かを示す。投資回収年数のイメージ。",
+    judge:"15倍未満 → 割安目安 / 15〜25倍 → 適正 / 25倍超 → 割高目安",
+    note:"成長株は高PERになりやすい。業種平均との比較が重要。"
+  },
+  "PBR": {
+    title:"PBR（株価純資産倍率）",
+    formula:"株価 ÷ BPS（1株純資産）",
+    what:"会社の純資産（解散価値）に対して株価が何倍かを示す。",
+    judge:"1倍以下 → 解散価値以下の超割安 / 1.5倍以下 → 割安 / 3倍超 → 割高目安",
+    note:"1倍割れが続く場合は構造的な問題がある可能性も。"
+  },
+  "PSR": {
+    title:"PSR（株価売上高倍率）",
+    formula:"時価総額 ÷ 売上高",
+    what:"売上高に対して時価総額が何倍かを示す。赤字企業の評価にも使える。",
+    judge:"1倍以下 → 割安 / 2倍以下 → 適正 / 5倍超 → 割高目安",
+    note:"利益が出ていないグロース株の割安度判断に特に有効。"
+  },
+  "EV/EBITDA": {
+    title:"EV/EBITDA倍率",
+    formula:"EV（企業価値）÷ EBITDA",
+    what:"企業を買収した場合、何年で投資を回収できるかを示す。国際比較に適した指標。",
+    judge:"10倍未満 → 割安 / 10〜15倍 → 適正 / 20倍超 → 割高目安",
+    note:"EV = 時価総額 + 純有利子負債。負債も含めた企業全体の価値で評価。"
+  },
+  "ROE": {
+    title:"ROE（自己資本利益率）",
+    formula:"当期純利益 ÷ 自己資本 × 100",
+    what:"株主が出資したお金でどれだけ利益を生んだかを示す。株主視点の効率指標。",
+    judge:"15%超 → 優良 / 10〜15% → 良好 / 5%未満 → 要注意",
+    note:"ROE8%超が日本企業への投資家からの要求水準（JPX指針）。"
+  },
+  "ROA": {
+    title:"ROA（総資産利益率）",
+    formula:"経常利益 ÷ 総資産 × 100",
+    what:"会社が持つすべての資産でどれだけ利益を生んだかを示す。経営効率の総合指標。",
+    judge:"5%超 → 優良 / 3〜5% → 良好 / 1%未満 → 要注意",
+    note:"業種によって水準が大きく異なる。製造業は低め、IT・サービス業は高めになりやすい。"
+  },
+  "ROIC": {
+    title:"ROIC（投下資本利益率）",
+    formula:"営業利益 ÷ （総資産 − 流動負債） × 100",
+    what:"事業に投下した資本でどれだけ利益を生んだかを示す。事業効率の本質的な指標。",
+    judge:"8%超 → 優良（WACCを上回る水準）/ 5%未満 → 要注意",
+    note:"WACC（加重平均資本コスト）を上回るかどうかが判断の鍵。"
+  },
+  "粗利率": {
+    title:"粗利率（売上高総利益率）",
+    formula:"売上総利益 ÷ 売上高 × 100",
+    what:"製品・サービスそのものの収益性。原価を除いた利益率。",
+    judge:"40%超 → 高付加価値 / 20%未満 → 薄利多売型",
+    note:"業種により大きく異なる。IT・ソフト系は60〜80%、製造業は20〜40%が目安。"
+  },
+  "営業利益率": {
+    title:"営業利益率（売上高営業利益率）",
+    formula:"営業利益 ÷ 売上高 × 100",
+    what:"本業で稼いだ利益率。販管費を差し引いた後の収益力を示す。",
+    judge:"10%超 → 優良 / 5〜10% → 良好 / 3%未満 → 要注意",
+    note:"継続的に改善しているかどうかのトレンドも重要。"
+  },
+  "経常利益率": {
+    title:"経常利益率（売上高経常利益率）",
+    formula:"経常利益 ÷ 売上高 × 100",
+    what:"財務活動（利息収入・支払利息など）も含めた通常の経営活動の利益率。",
+    judge:"営業利益率との乖離が大きい場合は財務構造を確認する。",
+    note:"経常利益 > 営業利益 なら財務が健全、逆なら借入コストが大きい。"
+  },
+  "自己資本比率": {
+    title:"自己資本比率",
+    formula:"純資産 ÷ 総資産 × 100",
+    what:"総資産のうち返済不要の自己資本が占める割合。財務の安全性の基本指標。",
+    judge:"40%超 → 安全 / 20〜40% → 普通 / 20%未満 → 要注意",
+    note:"高いほど安全だが、レバレッジを利かせた効率経営の場合は低めになることも。"
+  },
+  "流動比率": {
+    title:"流動比率",
+    formula:"流動資産 ÷ 流動負債 × 100",
+    what:"1年以内の支払い義務に対して、1年以内に現金化できる資産がどれだけあるかを示す。",
+    judge:"200%超 → 理想的 / 100%超 → 問題なし / 100%未満 → 短期的な支払い能力に懸念",
+    note:"業種によって異なる。小売業などは回転が速いため低めでも問題ないケースがある。"
+  },
+  "固定比率": {
+    title:"固定比率",
+    formula:"固定資産 ÷ 純資産 × 100",
+    what:"返済義務のない自己資本で固定資産をどれだけ賄えているかを示す。",
+    judge:"100%以下 → 健全（固定資産を自己資本で全額賄える）/ 100%超 → 一部を借入金で調達",
+    note:"100%超でも固定長期適合率が100%以下なら長期借入で賄えており問題は少ない。"
+  },
+  "固定長期適合率": {
+    title:"固定長期適合率",
+    formula:"固定資産 ÷ （純資産 + 固定負債） × 100",
+    what:"固定資産が長期資本（自己資本＋長期借入金）で賄われているかを示す。",
+    judge:"100%以下 → 健全 / 100%超 → 短期資金で固定資産を賄っており危険",
+    note:"固定比率より現実的な安全性指標。100%以下が必須条件。"
+  },
+  "配当利回り": {
+    title:"配当利回り",
+    formula:"1株配当 ÷ 株価 × 100",
+    what:"株価に対して配当金がどれだけの割合かを示す。インカムゲインの効率指標。",
+    judge:"3%超 → 高配当 / 1〜3% → 普通 / 1%未満 → 低配当（成長投資に回している可能性）",
+    note:"配当利回りが高すぎる場合は業績悪化による株価下落の可能性も疑う。"
+  },
+  "配当性向": {
+    title:"配当性向",
+    formula:"配当金総額 ÷ 当期純利益 × 100",
+    what:"純利益のうち配当として株主に還元した割合。",
+    judge:"30〜50% → 健全なバランス / 80%超 → 将来的な減配リスクあり / 100%超 → 赤字配当で要注意",
+    note:"成長企業は低め（内部留保重視）、成熟企業は高めになりやすい。"
+  },
+  "信用倍率": {
+    title:"信用倍率",
+    formula:"信用買残 ÷ 信用売残",
+    what:"信用取引で「買い」と「売り」のどちらが多いかを示す需給指標。",
+    judge:"1倍未満 → 売り優勢（株価上昇の可能性）/ 1〜5倍 → 普通 / 5倍超 → 買い過多（将来の売り圧力）",
+    note:"高い信用倍率は将来の「信用期日の売り」による下落圧力になる可能性がある。"
+  },
+  "時価総額": {
+    title:"時価総額",
+    formula:"株価 × 発行済株式数",
+    what:"市場が評価する企業の価値の合計。会社の規模を示す基本指標。",
+    judge:"大型株: 1兆円超 / 中型株: 1000億〜1兆円 / 小型株: 1000億円未満",
+    note:"時価総額は毎日変動する。PBRと組み合わせると割安度がわかる。"
+  },
+};
+
+// ── ポップアップ付きMBox ───────────────────────────────────────────────────────
+const MBox = ({ label, value, color="#94a3b8", hint="", badge="" }) => {
+  const [open, setOpen] = useState(false);
+  const desc = METRIC_DESC[label];
+  return (
+    <div style={{ background:"#111827", borderRadius:8, padding:"10px 14px", position:"relative" }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+        <span style={{ color:"#475569", fontSize:11, cursor: desc?"pointer":"default", display:"flex", alignItems:"center", gap:4 }}
+          onClick={()=>desc&&setOpen(v=>!v)}>
+          {label}
+          {desc && <span style={{ color:"#334155", fontSize:10, background:"#1e293b", borderRadius:"50%", width:14, height:14, display:"inline-flex", alignItems:"center", justifyContent:"center", lineHeight:1 }}>?</span>}
+        </span>
+        {badge && <span style={{ background:"#0f2a1a", color:"#4ade80", fontSize:9, padding:"1px 5px", borderRadius:3 }}>{badge}</span>}
+      </div>
+      <div style={{ color, fontWeight:700, fontSize:15, marginTop:3 }}>{value}</div>
+      {hint && <div style={{ color:"#334155", fontSize:10, marginTop:2 }}>{hint}</div>}
+      {/* ポップアップ */}
+      {open && desc && (
+        <div style={{ position:"absolute", zIndex:100, top:"100%", left:0, marginTop:4, width:280, background:"#0d1424", border:"1px solid #334155", borderRadius:10, padding:"14px 16px", boxShadow:"0 8px 32px rgba(0,0,0,0.6)" }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+            <span style={{ color:"#f1f5f9", fontWeight:700, fontSize:13 }}>{desc.title}</span>
+            <button onClick={()=>setOpen(false)} style={{ background:"none", border:"none", color:"#64748b", cursor:"pointer", fontSize:16, lineHeight:1, padding:"0 2px" }}>×</button>
+          </div>
+          <div style={{ background:"#111827", borderRadius:6, padding:"6px 10px", marginBottom:8, fontSize:11, color:"#64748b", fontFamily:"monospace" }}>
+            {desc.formula}
+          </div>
+          <div style={{ fontSize:12, color:"#94a3b8", marginBottom:8, lineHeight:1.7 }}>{desc.what}</div>
+          <div style={{ fontSize:11, color:"#475569", marginBottom:6, padding:"6px 8px", background:"#111827", borderRadius:6, lineHeight:1.6 }}>
+            <span style={{ color:"#4ade80" }}>📊 </span>{desc.judge}
+          </div>
+          {desc.note && <div style={{ fontSize:10, color:"#334155", lineHeight:1.6 }}>💡 {desc.note}</div>}
+        </div>
+      )}
     </div>
-    <div style={{ color, fontWeight:700, fontSize:15, marginTop:3 }}>{value}</div>
-    {hint && <div style={{ color:"#334155", fontSize:10, marginTop:2 }}>{hint}</div>}
-  </div>
-);
+  );
+};
 const Section = ({ title, children }) => (
   <div style={{ marginBottom:24 }}>
     <div style={{ fontSize:13, fontWeight:700, color:"#60a5fa", marginBottom:10, paddingBottom:6, borderBottom:"1px solid #1e293b" }}>{title}</div>
@@ -597,6 +748,116 @@ export default function App() {
                         <Tooltip formatter={v=>v+"%"} contentStyle={S.tooltip}/>
                         <ReferenceLine y={10} stroke="#4ade80" strokeDasharray="4 4" label={{value:"10%",fill:"#4ade80",fontSize:10}}/>
                         <Bar dataKey="営業利益率" fill="#4ade80" radius={[4,4,0,0]}/>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* レーダーチャート */}
+                <div style={S.card}>
+                  <div style={{color:"#94a3b8",fontWeight:700,marginBottom:4}}>🕸️ 総合レーダーチャート</div>
+                  <div style={{color:"#475569",fontSize:12,marginBottom:16}}>各指標を0〜100点に正規化して比較。外側ほど優秀。</div>
+                  <ResponsiveContainer width="100%" height={320}>
+                    <RadarChart data={(()=>{
+                      const normalize = (val, lo, hi, invert=false) => {
+                        if(val==null||isNaN(val)) return 0;
+                        const clamped = Math.min(Math.max(val,lo),hi);
+                        const score = (clamped-lo)/(hi-lo)*100;
+                        return invert ? 100-score : score;
+                      };
+                      return [
+                        { metric:"割安度\n(PER)", ...Object.fromEntries(compareStocks.map(h=>[h.ticker, normalize(calcAll(h.financials).per,5,40,true)])) },
+                        { metric:"収益性\n(ROE)", ...Object.fromEntries(compareStocks.map(h=>[h.ticker, normalize((calcAll(h.financials).roe||0)*100,0,30)])) },
+                        { metric:"効率性\n(ROA)", ...Object.fromEntries(compareStocks.map(h=>[h.ticker, normalize((calcAll(h.financials).roa||0)*100,0,15)])) },
+                        { metric:"利益率\n(営業)", ...Object.fromEntries(compareStocks.map(h=>[h.ticker, normalize((calcAll(h.financials).opMargin||0)*100,0,30)])) },
+                        { metric:"安全性\n(自己資本)", ...Object.fromEntries(compareStocks.map(h=>[h.ticker, normalize((calcAll(h.financials).equityRatio||0)*100,0,80)])) },
+                        { metric:"流動性\n(流動比率)", ...Object.fromEntries(compareStocks.map(h=>[h.ticker, normalize((calcAll(h.financials).currentRatio||0)*100,0,300)])) },
+                        { metric:"配当\n(利回り)", ...Object.fromEntries(compareStocks.map(h=>[h.ticker, normalize((calcAll(h.financials).dividendYield||0)*100,0,6)])) },
+                      ];
+                    })()}>
+                      <PolarGrid stroke="#1e293b"/>
+                      <PolarAngleAxis dataKey="metric" tick={{fill:"#64748b",fontSize:10}}/>
+                      {compareStocks.map((h,i)=>(
+                        <Radar key={h.id} name={h.ticker} dataKey={h.ticker} stroke={COLORS[i]} fill={COLORS[i]} fillOpacity={0.15} strokeWidth={2}/>
+                      ))}
+                      <Legend wrapperStyle={{color:"#94a3b8",fontSize:12}}/>
+                      <Tooltip formatter={v=>Math.round(v)+"点"} contentStyle={S.tooltip}/>
+                    </RadarChart>
+                  </ResponsiveContainer>
+                  <div style={{fontSize:10,color:"#334155",marginTop:8}}>※ 各指標を業界一般的な範囲で0〜100に正規化しています。絶対評価ではなく相対比較にご利用ください。</div>
+                </div>
+
+                {/* 収益性・安全性 4象限バブル */}
+                <div style={S.card}>
+                  <div style={{color:"#94a3b8",fontWeight:700,marginBottom:4}}>📍 収益性 vs 安全性マップ</div>
+                  <div style={{color:"#475569",fontSize:12,marginBottom:16}}>右上ほど「高収益＆高安全性」の理想企業。</div>
+                  <div style={{position:"relative",height:260,background:"#111827",borderRadius:8,overflow:"hidden"}}>
+                    {/* 象限ラベル */}
+                    <div style={{position:"absolute",top:8,left:8,fontSize:10,color:"#334155"}}>低収益・高安全</div>
+                    <div style={{position:"absolute",top:8,right:8,fontSize:10,color:"#4ade8044",textAlign:"right"}}>高収益・高安全 ✓</div>
+                    <div style={{position:"absolute",bottom:8,left:8,fontSize:10,color:"#f8717144"}}>低収益・低安全 ✗</div>
+                    <div style={{position:"absolute",bottom:8,right:8,fontSize:10,color:"#334155"}}>高収益・低安全</div>
+                    {/* 中央線 */}
+                    <div style={{position:"absolute",top:0,bottom:0,left:"50%",width:1,background:"#1e293b"}}/>
+                    <div style={{position:"absolute",left:0,right:0,top:"50%",height:1,background:"#1e293b"}}/>
+                    {/* 軸ラベル */}
+                    <div style={{position:"absolute",bottom:2,left:"50%",transform:"translateX(-50%)",fontSize:9,color:"#475569"}}>← 自己資本比率（安全性） →</div>
+                    {compareStocks.map((h,i)=>{
+                      const cm = calcAll(h.financials);
+                      const x = Math.min(Math.max((cm.equityRatio||0)*100, 0), 80)/80*85+7;
+                      const y = 100-Math.min(Math.max((cm.opMargin||0)*100, 0), 30)/30*85-7;
+                      return(
+                        <div key={h.id} style={{
+                          position:"absolute",
+                          left:`${x}%`, top:`${y}%`,
+                          transform:"translate(-50%,-50%)",
+                          background:COLORS[i],
+                          borderRadius:"50%",
+                          width:36, height:36,
+                          display:"flex", alignItems:"center", justifyContent:"center",
+                          fontSize:10, fontWeight:700, color:"#0a0f1a",
+                          boxShadow:`0 0 12px ${COLORS[i]}66`
+                        }}>{h.ticker}</div>
+                      );
+                    })}
+                  </div>
+                  <div style={{display:"flex",justifyContent:"center",gap:16,marginTop:8,flexWrap:"wrap"}}>
+                    {compareStocks.map((h,i)=>(
+                      <span key={h.id} style={{fontSize:11,color:COLORS[i]}}>● {h.ticker} {h.name}</span>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 複数指標横並びバー */}
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+                  <div style={S.card}>
+                    <div style={{color:"#94a3b8",fontSize:13,marginBottom:12}}>ROE・ROA・ROIC比較</div>
+                    <ResponsiveContainer width="100%" height={180}>
+                      <BarChart data={compareStocks.map(h=>{const cm=calcAll(h.financials);return{name:h.ticker,ROE:parseFloat(((cm.roe||0)*100).toFixed(1)),ROA:parseFloat(((cm.roa||0)*100).toFixed(1)),ROIC:parseFloat(((cm.roic||0)*100).toFixed(1))};})}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b"/>
+                        <XAxis dataKey="name" tick={{fill:"#94a3b8",fontSize:12}}/>
+                        <YAxis tick={{fill:"#64748b",fontSize:11}} tickFormatter={v=>v+"%"}/>
+                        <Tooltip formatter={v=>v+"%"} contentStyle={S.tooltip}/>
+                        <ReferenceLine y={15} stroke="#4ade80" strokeDasharray="4 4" label={{value:"15%",fill:"#4ade80",fontSize:9}}/>
+                        <Legend wrapperStyle={{color:"#94a3b8",fontSize:11}}/>
+                        <Bar dataKey="ROE" fill="#4ade80" radius={[3,3,0,0]}/>
+                        <Bar dataKey="ROA" fill="#60a5fa" radius={[3,3,0,0]}/>
+                        <Bar dataKey="ROIC" fill="#a78bfa" radius={[3,3,0,0]}/>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div style={S.card}>
+                    <div style={{color:"#94a3b8",fontSize:13,marginBottom:12}}>安全性指標比較</div>
+                    <ResponsiveContainer width="100%" height={180}>
+                      <BarChart data={compareStocks.map(h=>{const cm=calcAll(h.financials);return{name:h.ticker,自己資本比率:parseFloat(((cm.equityRatio||0)*100).toFixed(1)),流動比率:parseFloat(((cm.currentRatio||0)*100).toFixed(1))};})}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b"/>
+                        <XAxis dataKey="name" tick={{fill:"#94a3b8",fontSize:12}}/>
+                        <YAxis tick={{fill:"#64748b",fontSize:11}} tickFormatter={v=>v+"%"}/>
+                        <Tooltip formatter={v=>v+"%"} contentStyle={S.tooltip}/>
+                        <ReferenceLine y={100} stroke="#fbbf24" strokeDasharray="4 4" label={{value:"100%",fill:"#fbbf24",fontSize:9}}/>
+                        <Legend wrapperStyle={{color:"#94a3b8",fontSize:11}}/>
+                        <Bar dataKey="自己資本比率" fill="#60a5fa" radius={[3,3,0,0]}/>
+                        <Bar dataKey="流動比率" fill="#fbbf24" radius={[3,3,0,0]}/>
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
