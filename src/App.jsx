@@ -250,7 +250,15 @@ for (let y = CY-2; y <= CY; y++) {
   ["Q1","Q2","Q3","Q4"].forEach(q => QTR_KEYS.push(`${y}-${q}`));
 }
 
-// 来期予想フィールド（4項目のみ）
+const LS_UNDO = "kabulens_undo";
+const loadUndoData = () => {
+  try {
+    const d = localStorage.getItem(LS_UNDO);
+    return d ? JSON.parse(d) : null;
+  } catch { return null; }
+};
+const saveUndoData = d => { try { localStorage.setItem(LS_UNDO, JSON.stringify(d)); } catch {} };
+const clearUndoData = () => { try { localStorage.removeItem(LS_UNDO); } catch {} };
 const FORECAST_KEY = "forecast";
 const FORECAST_FIELDS = [
   { label:"予想売上高（円）",   key:"sales" },
@@ -733,7 +741,7 @@ export default function App() {
   const [detailTab, setDetailTab] = useState("metrics");
   const [compareIds, setCompareIds] = useState([]);
   const [baseYear, setBaseYear]   = useState(() => loadBaseYear());
-  const [undoData, setUndoData]   = useState(null); // {baseYear, portfolio}
+  const [undoData, setUndoData]   = useState(() => loadUndoData());
   const ANNUAL_KEYS = getAnnualKeys(baseYear);
   const [simParams, setSimParams] = useState({ years:"5", growthRate:"15", targetMargin:"15", targetPer:"20", targetEvEbitda:"", dividendRate:"2", reinvest:true });
   const [simTab, setSimTab]       = useState("scenario");
@@ -835,22 +843,33 @@ export default function App() {
     if (!window.confirm(msg)) return;
 
     // undo用に現在の状態を保存
-    setUndoData({ baseYear, portfolio });
+    const undo = { baseYear, portfolio };
+    setUndoData(undo);
+    saveUndoData(undo);
 
-    // 各銘柄のperiodsを1年繰り越し
+    // 各銘柄のperiodsを更新
     save(p => p.map(h => {
       const oldPeriods = h.periods || {};
       const newPeriods = {};
-      getAnnualKeys(nextBase).forEach(yr => {
-        const prevYr = String(parseInt(yr) - 1);
-        if (oldPeriods[prevYr]) newPeriods[yr] = oldPeriods[prevYr];
+
+      // 年次データ: 既存の年キーはそのまま維持（削除対象の最古年のみ除外）
+      const oldestYr = String(baseYear - 2);
+      Object.keys(oldPeriods).forEach(key => {
+        if (key === oldestYr) return; // 最古年は削除
+        if (!key.includes("-Q") && key !== FORECAST_KEY) {
+          newPeriods[key] = oldPeriods[key]; // 既存年次データはそのまま
+        }
       });
+
+      // 四半期データ: 最古年分のみ削除
       Object.keys(oldPeriods).forEach(key => {
         if (key.includes("-Q")) {
           const yr = parseInt(key.split("-")[0]);
-          if (yr >= nextBase - 2) newPeriods[key] = oldPeriods[key];
+          if (yr > parseInt(oldestYr)) newPeriods[key] = oldPeriods[key];
         }
       });
+
+      // forecastデータはそのまま
       if (oldPeriods[FORECAST_KEY]) newPeriods[FORECAST_KEY] = oldPeriods[FORECAST_KEY];
       return { ...h, periods: newPeriods };
     }));
@@ -867,6 +886,7 @@ export default function App() {
     setBaseYear(undoData.baseYear);
     saveBaseYear(undoData.baseYear);
     setUndoData(null);
+    clearUndoData();
   }, [undoData, save]);
 
   const toggleCompare = id => setCompareIds(p => p.includes(id) ? p.filter(x => x !== id) : p.length < 4 ? [...p, id] : p);
