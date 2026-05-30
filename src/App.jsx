@@ -1074,7 +1074,7 @@ export default function App() {
                 </div>
 
                 {detailTab === "metrics" && (
-                  <MetricsTab c={c} f={f} selected={selected} TS={TS} />
+                  <MetricsTab c={c} f={f} selected={portfolio.find(h=>h.id===selected.id)||selected} TS={TS} />
                 )}
 
                 {detailTab === "memo" && (
@@ -1138,7 +1138,7 @@ export default function App() {
                 )}
 
                 {detailTab === "input" && (
-                  <InputTab selected={selected} updatePeriod={updatePeriod} TS={TS} />
+                  <InputTab selected={portfolio.find(h=>h.id===selected.id)||selected} updatePeriod={updatePeriod} TS={TS} />
                 )}
 
                 {detailTab === "ir" && (
