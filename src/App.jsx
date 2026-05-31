@@ -157,8 +157,29 @@ function financialScore(c, criteria) {
     if (!def) return;
     const isGood  = def.dir === "lt" ? val < def.good  : val > def.good;
     const isGreat = def.dir === "lt" ? val < def.great : val > def.great;
+
+    // 加点
     const pts = isGreat ? def.greatPts : isGood ? def.goodPts : 0;
-    s += pts;
+    // 減点：良好基準から大きく乖離した場合
+    let penalty = 0;
+    if (!isGood) {
+      if (def.dir === "lt") {
+        // 小さいほど良い指標（PER,PBR等）：大きすぎると減点
+        const ratio = val / def.good; // 1.0 = 基準値ちょうど
+        if (ratio >= 3.0) penalty = -def.greatPts * 0.5; // 3倍以上 → 重減点
+        else if (ratio >= 2.0) penalty = -def.goodPts;   // 2倍以上 → 軽減点
+      } else {
+        // 大きいほど良い指標（ROE,成長率等）：マイナス値は減点
+        // ただし0〜good範囲は0pt（減点なし）、マイナス値のみ減点
+        if (val < 0) {
+          const absRatio = Math.abs(val) / Math.max(Math.abs(def.good), 1);
+          if (absRatio >= 2.0) penalty = -def.greatPts * 0.5;
+          else if (absRatio >= 1.0) penalty = -def.goodPts;
+        }
+      }
+    }
+
+    s += pts + penalty;
     t += def.greatPts;
   };
 
@@ -177,7 +198,9 @@ function financialScore(c, criteria) {
   if (c.salesGrowth != null) add2(c.salesGrowth, "salesGrowth");
   if (c.opGrowth != null)    add2(c.opGrowth,    "opGrowth");
 
-  return t > 0 ? Math.round((s / t) * 100) : null;
+  if (t <= 0) return null;
+  // スコアは0〜100にクランプ
+  return Math.min(100, Math.max(0, Math.round((s / t) * 100)));
 }
 
 // スコア項目のメタ情報（UI表示用）
@@ -203,10 +226,14 @@ const SCORE_CRITERIA = CRITERIA_META.map(m => {
   if (!d) return { label:m.label, good:"—", great:"—", cat:m.cat };
   const s = m.scale || 1;
   const fmt = (v) => m.unit === "%" ? (v*s).toFixed(0)+"%" : v+m.unit;
+  const penaltyDesc = d.dir === "lt"
+    ? "減点: "+fmt(d.good*2)+"超→-"+d.goodPts+"pt / "+fmt(d.good*3)+"超→-"+Math.round(d.greatPts*0.5)+"pt"
+    : "減点: マイナス値が基準の1倍超→-"+d.goodPts+"pt / 2倍超→-"+Math.round(d.greatPts*0.5)+"pt";
   return {
     label: m.label,
     good:  (d.dir==="lt" ? "<" : ">")+fmt(d.good)+": "+d.goodPts+"pt",
     great: (d.dir==="lt" ? "<" : ">")+fmt(d.great)+": "+d.greatPts+"pt",
+    penalty: penaltyDesc,
     cat:   m.cat,
   };
 });
@@ -622,17 +649,22 @@ function calcChg(cur, prev) {
 // スコアバッジ（モード表示付き）
 function ScoreBadge({ sc, stockId, large }) {
   const mode = loadScoreMode(stockId);
-  const modeLabel = mode === "value" ? "バリュー" : mode === "growth" ? "グロース" : mode === "custom" ? "カスタム" : "標準";
+  const modeLabel = mode === "value" ? "バリュー" : mode === "growth" ? "グロース" : mode === "custom" ? "カスタム" : null;
   const modeColor = mode === "value" ? "#60a5fa" : mode === "growth" ? "#4ade80" : mode === "custom" ? "#fbbf24" : "#94a3b8";
   if (sc == null) return null;
+  const tipText = SCORE_CRITERIA.map(c2 =>
+    c2.label+"["+c2.cat+"] 良好:"+c2.good+" 優良:"+c2.great+(c2.penalty ? " | "+c2.penalty : "")
+  ).join("\n");
   return (
-    <div style={{ display:"inline-flex", flexDirection:"column", alignItems:"center", gap:2 }}>
-      <span style={{ background:scoreColor(sc)+"22", color:scoreColor(sc), border:"1px solid "+scoreColor(sc)+"44", borderRadius:6, padding:"3px 8px", fontSize:large?16:13, fontWeight:700, whiteSpace:"nowrap" }}>
+    <div style={{ display:"inline-flex", flexDirection:"column", alignItems:"flex-start", gap:3 }} title={tipText}>
+      <span style={{ background:scoreColor(sc)+"22", color:scoreColor(sc), border:"1px solid "+scoreColor(sc)+"44", borderRadius:5, padding:"2px 7px", fontSize:large?15:12, fontWeight:700, whiteSpace:"nowrap", cursor:"help" }}>
         {sc}pt
       </span>
-      <span style={{ fontSize:10, background:modeColor+"22", color:modeColor, border:"1px solid "+modeColor+"44", borderRadius:4, padding:"1px 5px", whiteSpace:"nowrap" }}>
-        {modeLabel}
-      </span>
+      {modeLabel && (
+        <span style={{ fontSize:10, background:modeColor+"22", color:modeColor, border:"1px solid "+modeColor+"44", borderRadius:3, padding:"1px 5px", whiteSpace:"nowrap" }}>
+          {modeLabel}
+        </span>
+      )}
     </div>
   );
 }
@@ -1804,7 +1836,7 @@ function WatchDetail({ watchSelected, watchlist, baseYear, annualKeys, qtrKeys, 
           <Tag color="#f59e0b">{watchSelected.ticker}</Tag>
           <Tag color="#a78bfa">{watchSelected.sector}</Tag>
           <span style={{ background:"#1a1200", color:"#f59e0b", border:"1px solid #f59e0b44", borderRadius:6, padding:"4px 10px", fontSize:R.sm }}>👀 保有候補</span>
-          {sc != null && <ScoreBadge sc={sc} stockId={selected?.id} />}
+          {sc != null && <ScoreBadge sc={sc} stockId={selected?.id} large={true} />}
         </div>
         <div style={{ textAlign:"right" }}>
           <div style={{ fontSize:24, fontWeight:900, color:"#f1f5f9" }}>¥{watchSelected.currentPrice.toLocaleString()}</div>
