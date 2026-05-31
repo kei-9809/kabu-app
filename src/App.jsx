@@ -31,20 +31,23 @@ function calcAll(f) {
   const depTangible = n(f.depTangible);
   const depIntangible = n(f.depIntangible);
   const taxExp = n(f.taxExp); // 法人税等
+  const intExp = n(f.intExp); // 支払利息
 
   // EBITDA自動計算
   const ebitdaManual = n(f.ebitda);
   const ebitdaCalc = op != null ? op + (depTangible||0) + (depIntangible||0) : null;
   const ebitda = ebitdaManual != null ? ebitdaManual : ebitdaCalc;
 
-  // 実効税率: 法人税等 ÷ 税引前純利益(=経常利益で近似)
-  // 入力がなければデフォルト30%
+  // 実効税率: 法人税等 ÷ 経常利益で近似、未入力は30%
   const taxRate = (taxExp != null && ord != null && ord > 0)
     ? Math.min(Math.max(taxExp / ord, 0), 0.5)
     : 0.30;
   // NOPAT = 営業利益 × (1 - 実効税率)
   const nopat = op != null ? op * (1 - taxRate) : null;
   const ic = ta != null && cl != null ? ta - cl : null;
+
+  // 借入金利自動計算 = 支払利息 ÷ 固定負債（有利子負債の近似）
+  const kdAuto = (intExp != null && fl != null && fl > 0) ? intExp / fl : null;
 
   const marketCap = price != null && shares != null ? price * shares * 1000 : null;
   const netDebt = ta != null && eq != null && ca != null ? (ta - eq) - ca : null;
@@ -53,7 +56,7 @@ function calcAll(f) {
   const bps = eq != null && shares > 0 ? eq / (shares * 1000) : null;
   return {
     marketCap, ev, eps, bps, ebitda, ebitdaCalc, depTangible, depIntangible,
-    taxRate, nopat,
+    taxRate, nopat, kdAuto,
     grossMargin: safe(gp, sales), opMargin: safe(op, sales), ordMargin: safe(ord, sales),
     netMargin: safe(net, sales),
     roe: safe(net, eq), roa: safe(ord, ta),
@@ -275,6 +278,7 @@ const INPUT_FIELDS = [
   { label:"減価償却費（円）", key:"depTangible", hint:"有形固定資産の減価償却費" },
   { label:"償却費（円）", key:"depIntangible", hint:"無形固定資産・のれん等" },
   { label:"法人税等（円）", key:"taxExp", hint:"P/Lの法人税・住民税・事業税の合計 ※ROIC計算に使用" },
+  { label:"支払利息（円）", key:"intExp", hint:"営業外費用の支払利息 ※借入金利自動計算に使用" },
   { label:"1株配当（円）", key:"dividend" },
   { label:"信用倍率（倍）", key:"shinyoBairitu" },
 ]; 
@@ -365,6 +369,7 @@ const PERIOD_FIELDS = [
   { label:"減価償却費（円）",        key:"depTangible",   hint:"有形固定資産の減価償却費" },
   { label:"償却費（円）",            key:"depIntangible", hint:"無形固定資産・のれん等" },
   { label:"法人税等（円）",           key:"taxExp",        hint:"P/Lの法人税・住民税・事業税 ※ROIC計算に使用" },
+  { label:"支払利息（円）",          key:"intExp",        hint:"営業外費用の支払利息 ※借入金利自動計算" },
   { label:"1株配当（円）",           key:"dividend" },
   { label:"信用倍率（倍）",          key:"shinyoBairitu" },
 ];
@@ -468,11 +473,14 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
   // WACC計算（cc・ffの後に定義）
   const waccResult = useMemo(() => {
     const beta = parseFloat(waccParams.beta);
-    const kd   = parseFloat(waccParams.kd) / 100;
     const rf   = parseFloat(waccParams.rf) / 100;
     const rp   = parseFloat(waccParams.rp) / 100;
-    if (isNaN(beta) || isNaN(kd) || isNaN(rf) || isNaN(rp)) return null;
+    if (isNaN(beta) || isNaN(rf) || isNaN(rp)) return null;
     if (!cc || !cc.marketCap) return null;
+    // 借入金利: 手動入力 > 支払利息から自動計算 > 入力なし
+    const kdManual = waccParams.kd !== "" ? parseFloat(waccParams.kd) / 100 : null;
+    const kd = kdManual != null ? kdManual : (cc.kdAuto != null ? cc.kdAuto : null);
+    if (kd === null) return null;
     const ke = rf + beta * rp;
     const E = cc.marketCap;
     const fl2 = n(ff.fixLiab);
@@ -483,6 +491,7 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
     const wacc = ke * (E / V) + kd * (1 - t) * (D / V);
     const roic = cc.roic || 0;
     const spread = roic - wacc;
+    const kdSource = kdManual != null ? "手動入力" : "支払利息から自動計算";
     const checks = [
       { label:"ROIC > WACC（価値創造）",    ok: spread > 0,   val: pct(roic)+" > "+pct(wacc), impact:"high" },
       { label:"スプレッド > 2%（余裕あり）", ok: spread > 0.02, val: (spread*100).toFixed(2)+"%", impact:"high" },
@@ -501,7 +510,7 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
     const verdictColor = verdict === "強い買い候補" ? "#4ade80" :
                          verdict === "買い候補"     ? "#34d399" :
                          verdict === "中立・様子見" ? "#fbbf24" : "#f87171";
-    return { ke, kd, wacc, E, D, V, t, spread, checks, score, verdict, verdictColor };
+    return { ke, kd, kdSource, wacc, E, D, V, t, spread, checks, score, verdict, verdictColor };
   }, [waccParams, cc, ff]);
 
   // 今期予想指標の計算
@@ -625,12 +634,12 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
             {showWacc && (
               <div style={{ marginBottom:16 }}>
                 <div style={{ color:"#475569", fontSize:R_CURRENT.sm, marginBottom:12 }}>
-                  β・借入金利を入力してください。Rf・市場リスクプレミアムはデフォルト値を変更可能です。
+                  β・借入金利を入力してください。支払利息を数値入力タブに入力すると借入金利が自動計算されます。Rf・市場リスクプレミアムはデフォルト値を変更可能です。
                 </div>
                 <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(min(160px,45vw),1fr))", gap:12 }}>
                   {[
                     ["β（ベータ）", "beta", "Yahoo Finance等で確認", "1.2"],
-                    ["借入金利 Kd（%）", "kd", "例: 1.5", ""],
+                    ["借入金利 Kd（%）手動入力", "kd", cc.kdAuto != null ? `空欄で自動計算値 ${(cc.kdAuto*100).toFixed(2)}% を使用` : "支払利息を入力すると自動計算", ""],
                     ["リスクフリーレート Rf（%）", "rf", "日本国債10年利回り", "1.5"],
                     ["市場リスクプレミアム（%）", "rp", "日本株超過リターン目安", "5.5"],
                   ].map(([label, key, hint, placeholder]) => (
@@ -654,7 +663,7 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
                 <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(min(150px,45vw),1fr))", gap:10, marginBottom:16 }}>
                   {[
                     ["株主資本コスト Ke", pct(waccResult.ke), "#60a5fa", `Rf${(parseFloat(waccParams.rf)).toFixed(1)}% + β${waccParams.beta}×RP${waccParams.rp}%`],
-                    ["負債コスト Kd(税後)", pct(waccResult.kd*(1-waccResult.t)), "#94a3b8", `${waccParams.kd}%×(1-${(waccResult.t*100).toFixed(0)}%)`],
+                    ["負債コスト Kd(税後)", pct(waccResult.kd*(1-waccResult.t)), "#94a3b8", waccResult.kdSource+"・税後"],
                     ["WACC", pct(waccResult.wacc), "#a78bfa", `E/V=${(waccResult.E/waccResult.V*100).toFixed(0)}% D/V=${(waccResult.D/waccResult.V*100).toFixed(0)}%`],
                     ["ROIC", pct(cc.roic||0), cc.roic&&cc.roic>waccResult.wacc?"#4ade80":"#f87171", cc.taxRate?`実効税率${(cc.taxRate*100).toFixed(1)}%`:"税率30%"],
                     ["スプレッド(ROIC-WACC)", pct(waccResult.spread), waccResult.spread>0?"#4ade80":waccResult.spread>-0.01?"#fbbf24":"#f87171", waccResult.spread>0?"価値創造":"価値毀損"],
@@ -700,7 +709,7 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
               </div>
             ) : (
               <div style={{ color:"#475569", fontSize:R_CURRENT.sm, padding:"12px 0" }}>
-                β（ベータ）と借入金利（Kd）を入力するとWACC・投資判断分析が表示されます。
+                βを入力してください。借入金利は支払利息から自動計算、または手動入力できます。
               </div>
             )}
           </div>
