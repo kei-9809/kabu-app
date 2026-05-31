@@ -81,21 +81,24 @@ function financialScore(c) {
   add(c.roe != null && c.roe > 0.10, 10); add(c.roa != null && c.roa > 0.05, 8);
   add(c.grossMargin != null && c.grossMargin > 0.30, 8); add(c.opMargin != null && c.opMargin > 0.10, 8);
   add(c.currentRatio != null && c.currentRatio > 1.5, 8); add(c.equityRatio != null && c.equityRatio > 0.30, 8);
+  // Rule of 40（前年比売上成長率が必要なため c.rule40 として渡す）
+  if (c.rule40 != null) add(c.rule40 >= 30, 10);
   return t > 0 ? Math.round((s / t) * 100) : null;
 }
 
 // スコアの説明
 const SCORE_CRITERIA = [
-  { label:"PER < 20倍",       pts:10, hint:"株価収益率" },
-  { label:"PBR < 2倍",        pts:10, hint:"株価純資産倍率" },
-  { label:"PSR < 3倍",        pts:8,  hint:"株価売上高倍率" },
-  { label:"EV/EBITDA < 15倍", pts:10, hint:"企業価値倍率" },
-  { label:"ROE > 10%",        pts:10, hint:"自己資本利益率" },
-  { label:"ROA > 5%",         pts:8,  hint:"総資産利益率" },
-  { label:"粗利率 > 30%",     pts:8,  hint:"売上総利益率" },
-  { label:"営業利益率 > 10%", pts:8,  hint:"営業効率" },
-  { label:"流動比率 > 150%",  pts:8,  hint:"短期安全性" },
-  { label:"自己資本比率 > 30%",pts:8, hint:"財務健全性" },
+  { label:"PER < 20倍",        pts:10, hint:"株価収益率" },
+  { label:"PBR < 2倍",         pts:10, hint:"株価純資産倍率" },
+  { label:"PSR < 3倍",         pts:8,  hint:"株価売上高倍率" },
+  { label:"EV/EBITDA < 15倍",  pts:10, hint:"企業価値倍率" },
+  { label:"ROE > 10%",         pts:10, hint:"自己資本利益率" },
+  { label:"ROA > 5%",          pts:8,  hint:"総資産利益率" },
+  { label:"粗利率 > 30%",      pts:8,  hint:"売上総利益率" },
+  { label:"営業利益率 > 10%",  pts:8,  hint:"営業効率" },
+  { label:"流動比率 > 150%",   pts:8,  hint:"短期安全性" },
+  { label:"自己資本比率 > 30%", pts:8,  hint:"財務健全性" },
+  { label:"Rule of 40 ≥ 30",  pts:10, hint:"グロース健全性（日本基準）" },
 ];
 
 // periodsベースでスコア計算するヘルパー
@@ -112,7 +115,16 @@ function scoreFromPeriods(h, globalBaseYear) {
   const merged = Object.values(fd).some(v => v !== "" && v != null)
     ? { ...fd, price: f.price||fd.price, shinyoBairitu: fd.shinyoBairitu||f.shinyoBairitu }
     : f;
-  return financialScore(calcAll(merged));
+  const c = calcAll(merged);
+  // Rule of 40計算（前年売上と比較）
+  const prevKey = String(stockBase - 1);
+  const prevFd = periods[prevKey] || {};
+  const curSales = n(merged.sales);
+  const prevSales = n(prevFd.sales);
+  const salesGrowth = curSales && prevSales && prevSales > 0 ? (curSales - prevSales) / prevSales * 100 : null;
+  const opMarginPct = c.opMargin != null ? c.opMargin * 100 : null;
+  const rule40 = salesGrowth != null && opMarginPct != null ? salesGrowth + opMarginPct : null;
+  return financialScore({ ...c, rule40 });
 }
 
 const LS_KEY = "kabulens_v2";
@@ -1633,9 +1645,13 @@ export default function App() {
     const qty = parseFloat(moveForm.qty);
     const avgCost = parseFloat(moveForm.avgCost);
     if (!qty || !avgCost) return;
-    const ph = { ...wh, id:Date.now(), qty, avgCost, isWatch:false };
+    // idはそのまま引き継ぐ（データが全て保持される）
+    const ph = { ...wh, qty, avgCost, isWatch:false };
     save(p => [...p, ph]);
     saveWatch2(p => p.filter(w => w.id !== wh.id));
+    setSelected(ph);
+    setWatchSelected(null);
+    setPortfolioMode("portfolio");
     setMoveForm({ qty:"", avgCost:"", id:null });
   };
 
@@ -2069,6 +2085,12 @@ export default function App() {
                       <button style={S.miniBtn} onClick={() => { setSelected(h); setTab("detail"); setDetailTab("memo"); }}>メモ</button>
                       <button style={S.miniBtn} onClick={() => { setSelected(h); setTab("detail"); setDetailTab("metrics"); }}>詳細</button>
                       <button style={{ ...S.miniBtn, ...(compareIds.includes(h.id)?{ color:"#4ade80", borderColor:"#4ade80" }:{}) }} onClick={() => toggleCompare(h.id)}>{compareIds.includes(h.id)?"比較中":"比較"}</button>
+                      <button style={{ ...S.miniBtn, color:"#f59e0b", borderColor:"#f59e0b" }} onClick={() => {
+                        if (!window.confirm(h.name+" を保有候補リストに移動します。データはそのまま保持されます。")) return;
+                        saveWatch2(p => [...p, { ...h, isWatch:true }]);
+                        save(p => p.filter(x => x.id !== h.id));
+                        if (selected?.id === h.id) setSelected(portfolio.find(x => x.id !== h.id) || null);
+                      }}>候補へ</button>
                       <button style={{ ...S.miniBtn, color:"#f87171", borderColor:"#f87171" }} onClick={() => deleteStock(h.id)}>削除</button>
                     </span>
                   </div>
