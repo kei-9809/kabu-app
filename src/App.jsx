@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line,
   RadarChart, Radar, PolarGrid, PolarAngleAxis,
@@ -118,14 +118,66 @@ const DESC = {
   "時価総額":{ title:"時価総額", formula:"株価 × 発行済株式数", what:"市場が評価する企業の価値の合計。会社の規模を示す基本指標。", judge:"大型:1兆超 / 中型:1000億〜1兆 / 小型:1000億未満", note:"毎日変動する。PBRと組み合わせると割安度がわかる。" },
 };
 
+const makeS = R => ({
+  root:    { minHeight:"100vh", background:"#0a0f1a", fontFamily:"'DM Mono','Courier New',monospace", color:"#e2e8f0", fontSize:R.base },
+  header:  { display:"flex", alignItems:"center", justifyContent:"space-between", padding:R.scale==="sm"?"10px 12px":"14px 24px", background:"#0d1424", borderBottom:"1px solid #1e293b", flexWrap:"wrap", gap:8 },
+  navBtn:  { background:"transparent", border:"1px solid #1e293b", color:"#64748b", padding:R.scale==="sm"?"5px 10px":"7px 16px", borderRadius:6, cursor:"pointer", fontSize:R.sm, fontFamily:"inherit" },
+  navOn:   { background:"#0f2a1a", border:"1px solid #4ade80", color:"#4ade80" },
+  sbItem:  { flex:1, padding:R.scale==="sm"?"10px 12px":"14px 20px", borderRight:"1px solid #1e293b", minWidth:R.scale==="sm"?80:120 },
+  sbLabel: { fontSize:R.sm, color:"#475569", marginBottom:4, textTransform:"uppercase", letterSpacing:1 },
+  sbVal:   { fontSize:R.xxl, fontWeight:800 },
+  h2:      { fontSize:R.xl, fontWeight:800, color:"#f1f5f9", margin:"0 0 16px 0", letterSpacing:1 },
+  card:    { background:"#0d1424", border:"1px solid #1e293b", borderRadius:10, padding:R.scale==="sm"?14:20, marginBottom:16 },
+  table:   { background:"#0d1424", border:"1px solid #1e293b", borderRadius:10, overflow:"hidden", marginBottom:16 },
+  chips:   { display:"flex", flexWrap:"wrap", gap:8, marginBottom:16 },
+  chip:    { background:"#111827", border:"1px solid #1e293b", color:"#94a3b8", padding:R.scale==="sm"?"5px 10px":"7px 16px", borderRadius:20, cursor:"pointer", fontSize:R.sm, fontFamily:"inherit" },
+  chipOn:  { background:"#0f2a1a", border:"1px solid #4ade80", color:"#4ade80" },
+  addBtn:  { background:"#0f2a1a", border:"1px solid #4ade80", color:"#4ade80", padding:R.scale==="sm"?"7px 14px":"9px 20px", borderRadius:6, cursor:"pointer", fontSize:R.md, fontFamily:"inherit", fontWeight:700 },
+  miniBtn: { background:"#111827", border:"1px solid #334155", color:"#64748b", padding:R.scale==="sm"?"4px 8px":"6px 14px", borderRadius:4, cursor:"pointer", fontSize:R.sm, fontFamily:"inherit" },
+  input:   { background:"#111827", border:"1px solid #1e293b", color:"#e2e8f0", padding:R.scale==="sm"?"8px 10px":"10px 14px", borderRadius:6, fontSize:R.md, fontFamily:"inherit", outline:"none", width:"100%", boxSizing:"border-box" },
+  sel:     { background:"#111827", border:"1px solid #1e293b", color:"#e2e8f0", padding:R.scale==="sm"?"8px 10px":"10px 14px", borderRadius:6, fontSize:R.md, fontFamily:"inherit", width:"100%" },
+  kpi:     { background:"#111827", borderRadius:8, padding:R.scale==="sm"?"10px 12px":"14px 16px" },
+  kpiL:    { color:"#475569", fontSize:R.sm, marginBottom:4 },
+  kpiV:    { fontWeight:700, fontSize:R.lg },
+});
+
+// グローバルデフォルト（外部コンポーネント用・PCサイズ）
+const R_DEFAULT = { scale:"lg", base:16, sm:16, md:16, lg:18, xl:22, xxl:26, chartSm:200, chartMd:250, chartLg:300, chartXl:320, grid2:"1fr 1fr", grid3:"1fr 1fr 1fr", isMobile:false };
+let S = makeS(R_DEFAULT);
+
 const PIE_COLORS = ["#60a5fa","#4ade80","#f59e0b","#a78bfa","#f87171","#34d399","#fb7185","#38bdf8"];
 const CMP_COLORS = ["#4ade80","#60a5fa","#f59e0b","#a78bfa"];
 const scoreColor = v => v >= 80 ? "#4ade80" : v >= 50 ? "#fbbf24" : "#f87171";
 const typeColor = t => ({ "決算":"#4ade80","配当":"#fbbf24","人事":"#a78bfa" }[t] || "#64748b");
-const TS = { background:"#0d1424", border:"1px solid #1e293b", borderRadius:6, color:"#e2e8f0", fontSize:12 };
+
+// レスポンシブ対応：画面幅でフォントスケールを決定
+function useResponsive() {
+  const [w, setW] = useState(() => typeof window !== "undefined" ? window.innerWidth : 1200);
+  useEffect(() => {
+    const handler = () => setW(window.innerWidth);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
+  if (w < 600) return {
+    scale:"sm", base:14, sm:12, md:14, lg:16, xl:20, xxl:22,
+    chartSm:160, chartMd:200, chartLg:240, chartXl:280,
+    grid2:"1fr", grid3:"1fr", isMobile:true,
+  };
+  if (w < 1024) return {
+    scale:"md", base:15, sm:14, md:15, lg:17, xl:20, xxl:24,
+    chartSm:180, chartMd:220, chartLg:260, chartXl:300,
+    grid2:"1fr 1fr", grid3:"1fr 1fr", isMobile:false,
+  };
+  return {
+    scale:"lg", base:16, sm:16, md:16, lg:18, xl:22, xxl:26,
+    chartSm:200, chartMd:250, chartLg:300, chartXl:320,
+    grid2:"1fr 1fr", grid3:"1fr 1fr 1fr", isMobile:false,
+  };
+}
+const TS = { background:"#0d1424", border:"1px solid #1e293b", borderRadius:6, color:"#e2e8f0", fontSize:16 };
 
 const Tag = ({ children, color="#4ade80" }) => (
-  <span style={{ background:color+"22", color, border:`1px solid ${color}44`, borderRadius:4, padding:"2px 8px", fontSize:11, fontWeight:600 }}>{children}</span>
+  <span style={{ background:color+"22", color, border:`1px solid ${color}44`, borderRadius:4, padding:"2px 8px", fontSize:16, fontWeight:600 }}>{children}</span>
 );
 
 const Delta = ({ val, fmt = v => v.toFixed(2) }) => (
@@ -140,25 +192,25 @@ const MBox = ({ label, value, color="#94a3b8", hint="", badge="" }) => {
   return (
     <div style={{ background:"#111827", borderRadius:8, padding:"10px 14px", position:"relative" }}>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-        <span style={{ color:"#475569", fontSize:11, cursor:desc?"pointer":"default", display:"flex", alignItems:"center", gap:4 }}
+        <span style={{ color:"#475569", fontSize:16, cursor:desc?"pointer":"default", display:"flex", alignItems:"center", gap:4 }}
           onClick={() => desc && setOpen(v => !v)}>
           {label}
-          {desc && <span style={{ color:"#334155", fontSize:10, background:"#1e293b", borderRadius:"50%", width:14, height:14, display:"inline-flex", alignItems:"center", justifyContent:"center" }}>?</span>}
+          {desc && <span style={{ color:"#334155", fontSize:16, background:"#1e293b", borderRadius:"50%", width:14, height:14, display:"inline-flex", alignItems:"center", justifyContent:"center" }}>?</span>}
         </span>
-        {badge && <span style={{ background:"#0f2a1a", color:"#4ade80", fontSize:9, padding:"1px 5px", borderRadius:3 }}>{badge}</span>}
+        {badge && <span style={{ background:"#0f2a1a", color:"#4ade80", fontSize:16, padding:"1px 5px", borderRadius:3 }}>{badge}</span>}
       </div>
-      <div style={{ color, fontWeight:700, fontSize:15, marginTop:3 }}>{value}</div>
-      {hint && <div style={{ color:"#334155", fontSize:10, marginTop:2 }}>{hint}</div>}
+      <div style={{ color, fontWeight:700, fontSize:16, marginTop:3 }}>{value}</div>
+      {hint && <div style={{ color:"#334155", fontSize:16, marginTop:2 }}>{hint}</div>}
       {open && desc && (
         <div style={{ position:"absolute", zIndex:200, top:"100%", left:0, marginTop:4, width:280, background:"#0d1424", border:"1px solid #334155", borderRadius:10, padding:"14px 16px", boxShadow:"0 8px 32px rgba(0,0,0,0.8)" }}>
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
-            <span style={{ color:"#f1f5f9", fontWeight:700, fontSize:13 }}>{desc.title}</span>
+            <span style={{ color:"#f1f5f9", fontWeight:700, fontSize:16 }}>{desc.title}</span>
             <button onClick={() => setOpen(false)} style={{ background:"none", border:"none", color:"#64748b", cursor:"pointer", fontSize:18, lineHeight:1 }}>x</button>
           </div>
-          <div style={{ background:"#111827", borderRadius:6, padding:"6px 10px", marginBottom:8, fontSize:11, color:"#60a5fa", fontFamily:"monospace" }}>{desc.formula}</div>
-          <div style={{ fontSize:12, color:"#cbd5e1", marginBottom:8, lineHeight:1.7 }}>{desc.what}</div>
-          <div style={{ fontSize:11, color:"#94a3b8", marginBottom:6, padding:"6px 8px", background:"#111827", borderRadius:6, lineHeight:1.6 }}>{desc.judge}</div>
-          {desc.note && <div style={{ fontSize:10, color:"#64748b", lineHeight:1.6 }}>{desc.note}</div>}
+          <div style={{ background:"#111827", borderRadius:6, padding:"6px 10px", marginBottom:8, fontSize:16, color:"#60a5fa", fontFamily:"monospace" }}>{desc.formula}</div>
+          <div style={{ fontSize:16, color:"#cbd5e1", marginBottom:8, lineHeight:1.7 }}>{desc.what}</div>
+          <div style={{ fontSize:16, color:"#94a3b8", marginBottom:6, padding:"6px 8px", background:"#111827", borderRadius:6, lineHeight:1.6 }}>{desc.judge}</div>
+          {desc.note && <div style={{ fontSize:16, color:"#64748b", lineHeight:1.6 }}>{desc.note}</div>}
         </div>
       )}
     </div>
@@ -167,8 +219,8 @@ const MBox = ({ label, value, color="#94a3b8", hint="", badge="" }) => {
 
 const Sec = ({ title, children }) => (
   <div style={{ marginBottom:20 }}>
-    <div style={{ fontSize:13, fontWeight:700, color:"#60a5fa", marginBottom:10, paddingBottom:6, borderBottom:"1px solid #1e293b" }}>{title}</div>
-    <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(145px,1fr))", gap:10 }}>{children}</div>
+    <div style={{ fontSize:16, fontWeight:700, color:"#60a5fa", marginBottom:10, paddingBottom:6, borderBottom:"1px solid #1e293b" }}>{title}</div>
+    <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(min(145px,45vw),1fr))", gap:10 }}>{children}</div>
   </div>
 );
 
@@ -183,12 +235,12 @@ const FInput = ({ label, value, onChange, hint="", numOnly=false, inputType="tex
   };
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
-      <label style={{ color:"#64748b", fontSize:10 }}>{label}</label>
+      <label style={{ color:"#64748b", fontSize:16 }}>{label}</label>
       <input value={value} onChange={handleChange} style={S.input}
         placeholder={numOnly?"数値":inputType==="date"?"2025-05-08":inputType==="url"?"https://...":""}
         inputMode={numOnly||inputType==="ticker"?"decimal":"text"}
       />
-      {hint && <span style={{ color:"#334155", fontSize:9 }}>{hint}</span>}
+      {hint && <span style={{ color:"#334155", fontSize:16 }}>{hint}</span>}
     </div>
   );
 };
@@ -223,7 +275,7 @@ function ToggleLineChart({ data, lines, yFormatter, tooltipFormatter, height=200
       <div style={{ display:"flex", flexWrap:"wrap", gap:"6px 14px", marginBottom:10 }}>
         {lines.map(({ key, color, name }) => (
           <span key={key} onClick={() => toggle(key)}
-            style={{ display:"flex", alignItems:"center", gap:5, fontSize:12, color: hidden[key] ? "#334155" : "#94a3b8", cursor:"pointer", userSelect:"none" }}>
+            style={{ display:"flex", alignItems:"center", gap:5, fontSize:16, color: hidden[key] ? "#334155" : "#94a3b8", cursor:"pointer", userSelect:"none" }}>
             <span style={{ width:14, height:3, background: hidden[key] ? "#334155" : color, display:"inline-block", borderRadius:2, flexShrink:0 }} />
             {name || key}
           </span>
@@ -232,12 +284,12 @@ function ToggleLineChart({ data, lines, yFormatter, tooltipFormatter, height=200
       <ResponsiveContainer width="100%" height={height}>
         <LineChart data={data}>
           <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-          <XAxis dataKey="name" tick={{ fill:"#94a3b8", fontSize:12 }} />
-          <YAxis tick={{ fill:"#64748b", fontSize:11 }} tickFormatter={yFormatter} />
+          <XAxis dataKey="name" tick={{ fill:"#94a3b8", fontSize:R.sm }} />
+          <YAxis tick={{ fill:"#64748b", fontSize:R.sm }} tickFormatter={yFormatter} />
           <Tooltip formatter={tooltipFormatter} contentStyle={TS} itemStyle={{ color:"#e2e8f0" }} />
           {refLines.map(r => (
             <ReferenceLine key={r.label} y={r.y} stroke={r.color} strokeDasharray="4 4"
-              label={{ value:r.label, fill:r.color, fontSize:10 }} />
+              label={{ value:r.label, fill:r.color, fontSize:16 }} />
           ))}
           {lines.map(({ key, color, name }) => (
             hidden[key] ? null :
@@ -324,7 +376,7 @@ function calcChg(cur, prev) {
 }
 
 // 財務指標タブ（多期間対応）
-function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, TS }) {
+function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R, TS }) {
   const [metricsView, setMetricsView] = useState("current");
 
   const annualData = useMemo(() => {
@@ -422,12 +474,12 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, TS
       {metricsView === "current" && (
         <div>
           {latestAnnual && (
-            <div style={{ marginBottom:12, padding:"6px 12px", background:"#111827", borderRadius:6, fontSize:11, color:"#64748b" }}>
+            <div style={{ marginBottom:12, padding:"6px 12px", background:"#111827", borderRadius:6, fontSize:16, color:"#64748b" }}>
               財務数値: <span style={{ color:"#4ade80" }}>{latestAnnual.label}本決算</span> を使用 / 株価・信用倍率: 現在の入力値
             </div>
           )}
           {!latestAnnual && (
-            <div style={{ marginBottom:12, padding:"6px 12px", background:"#111827", borderRadius:6, fontSize:11, color:"#fbbf24" }}>
+            <div style={{ marginBottom:12, padding:"6px 12px", background:"#111827", borderRadius:6, fontSize:16, color:"#fbbf24" }}>
               本決算データ未入力です。「数値入力」タブの「本決算（年次）」から入力してください。
             </div>
           )}
@@ -476,14 +528,14 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, TS
           {/* 年次比較テーブル */}
           <div style={{ ...S.card, overflowX:"auto", marginBottom:16 }}>
             <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:12 }}>年次財務指標比較（前期比変化率付き）</div>
-            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:16 }}>
               <thead>
                 <tr style={{ borderBottom:"1px solid #1e293b" }}>
-                  <th style={{ textAlign:"left", padding:"6px 10px", color:"#475569", fontSize:11 }}>指標</th>
+                  <th style={{ textAlign:"left", padding:"6px 10px", color:"#475569", fontSize:16 }}>指標</th>
                   {annualData.map(({ label, key }, i) => (
-                    <th key={key} style={{ textAlign:"right", padding:"6px 10px", color:"#60a5fa", fontSize:11, minWidth:100 }}>
+                    <th key={key} style={{ textAlign:"right", padding:"6px 10px", color:"#60a5fa", fontSize:16, minWidth:100 }}>
                       {label}
-                      {i > 0 && <span style={{ display:"block", color:"#334155", fontSize:9 }}>前年比</span>}
+                      {i > 0 && <span style={{ display:"block", color:"#334155", fontSize:16 }}>前年比</span>}
                     </th>
                   ))}
                 </tr>
@@ -519,12 +571,12 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, TS
                   // セクションヘッダー行
                   if (getter === null) return (
                     <tr key={label}>
-                      <td colSpan={annualData.length+1} style={{ padding:"8px 10px", color:"#475569", fontSize:10, background:"#111827", letterSpacing:1 }}>{label}</td>
+                      <td colSpan={annualData.length+1} style={{ padding:"8px 10px", color:"#475569", fontSize:16, background:"#111827", letterSpacing:1 }}>{label}</td>
                     </tr>
                   );
                   return (
                   <tr key={label} style={{ borderBottom:"1px solid #1e293b" }}>
-                    <td style={{ padding:"6px 10px", color:"#64748b", fontSize:11 }}>{label}</td>
+                    <td style={{ padding:"6px 10px", color:"#64748b", fontSize:16 }}>{label}</td>
                     {annualData.map(({ key }, i) => {
                       const cur = getter(annualData[i]);
                       const prev = i > 0 ? getter(annualData[i-1]) : null;
@@ -532,7 +584,7 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, TS
                       return (
                         <td key={key} style={{ textAlign:"right", padding:"6px 10px" }}>
                           <div style={{ color:"#e2e8f0", fontWeight:600 }}>{formatter(cur)}</div>
-                          {i > 0 && <div style={{ color:chgColor(chg), fontSize:10 }}>{chgStr(chg)}</div>}
+                          {i > 0 && <div style={{ color:chgColor(chg), fontSize:16 }}>{chgStr(chg)}</div>}
                         </td>
                       );
                     })}
@@ -546,7 +598,7 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, TS
           {/* 売上高・営業利益・純利益グラフ */}
           <div style={S.card}>
             <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:4 }}>売上高・営業利益・純利益推移</div>
-            <div style={{ color:"#475569", fontSize:11, marginBottom:12 }}>凡例をクリックで表示/非表示</div>
+            <div style={{ color:"#475569", fontSize:16, marginBottom:12 }}>凡例をクリックで表示/非表示</div>
             <ToggleLineChart
               data={annualData.map(({ label, f: fd }) => ({
                 name: label,
@@ -563,7 +615,7 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, TS
               ]}
               yFormatter={v => v+"億"}
               tooltipFormatter={v => v+"億円"}
-              height={220}
+              height={R.chartMd}
               TS={TS}
             />
           </div>
@@ -571,7 +623,7 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, TS
           {/* 利益率トレンド */}
           <div style={S.card}>
             <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:4 }}>利益率トレンド</div>
-            <div style={{ color:"#475569", fontSize:11, marginBottom:12 }}>凡例をクリックで表示/非表示</div>
+            <div style={{ color:"#475569", fontSize:16, marginBottom:12 }}>凡例をクリックで表示/非表示</div>
             <ToggleLineChart
               data={trendData}
               lines={[
@@ -582,16 +634,16 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, TS
               ]}
               yFormatter={v => v+"%"}
               tooltipFormatter={v => v+"%"}
-              height={220}
+              height={R.chartMd}
               TS={TS}
             />
           </div>
 
           {/* ROE・ROAトレンド / EV/EBITDA */}
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
+          <div style={{ display:"grid", gridTemplateColumns:R.grid2, gap:16 }}>
             <div style={S.card}>
               <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:4 }}>ROE・ROAトレンド</div>
-              <div style={{ color:"#475569", fontSize:11, marginBottom:8 }}>凡例をクリックで表示/非表示</div>
+              <div style={{ color:"#475569", fontSize:16, marginBottom:8 }}>凡例をクリックで表示/非表示</div>
               <ToggleLineChart
                 data={trendData}
                 lines={[
@@ -600,13 +652,13 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, TS
                 ]}
                 yFormatter={v => v+"%"}
                 tooltipFormatter={v => v+"%"}
-                height={200}
+                height={R.chartMd}
                 TS={TS}
               />
             </div>
             <div style={S.card}>
               <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:4 }}>EV/EBITDAトレンド</div>
-              <div style={{ color:"#475569", fontSize:11, marginBottom:8 }}>凡例をクリックで表示/非表示</div>
+              <div style={{ color:"#475569", fontSize:16, marginBottom:8 }}>凡例をクリックで表示/非表示</div>
               <ToggleLineChart
                 data={trendData}
                 lines={[
@@ -614,7 +666,7 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, TS
                 ]}
                 yFormatter={v => v+"x"}
                 tooltipFormatter={v => v+"倍"}
-                height={200}
+                height={R.chartMd}
                 refLines={[{ y:10, label:"10x", color:"#4ade80" }]}
                 TS={TS}
               />
@@ -627,12 +679,12 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, TS
         <div>
           <div style={{ ...S.card, overflowX:"auto", marginBottom:16 }}>
             <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:12 }}>四半期財務指標（前年同期比付き）</div>
-            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:11 }}>
+            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:16 }}>
               <thead>
                 <tr style={{ borderBottom:"1px solid #1e293b" }}>
-                  <th style={{ textAlign:"left", padding:"6px 8px", color:"#475569", fontSize:10 }}>指標</th>
+                  <th style={{ textAlign:"left", padding:"6px 8px", color:"#475569", fontSize:16 }}>指標</th>
                   {qtrData.map(({ label, key }) => (
-                    <th key={key} style={{ textAlign:"right", padding:"6px 8px", color:"#60a5fa", fontSize:10, minWidth:80 }}>{label}</th>
+                    <th key={key} style={{ textAlign:"right", padding:"6px 8px", color:"#60a5fa", fontSize:16, minWidth:80 }}>{label}</th>
                   ))}
                 </tr>
               </thead>
@@ -652,7 +704,7 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, TS
                       return (
                         <td key={key} style={{ textAlign:"right", padding:"6px 8px" }}>
                           <div style={{ color:"#e2e8f0" }}>{formatter(cur)}</div>
-                          {prevYr != null && <div style={{ color:chgColor(chg), fontSize:9 }}>{chgStr(chg)}</div>}
+                          {prevYr != null && <div style={{ color:chgColor(chg), fontSize:16 }}>{chgStr(chg)}</div>}
                         </td>
                       );
                     })}
@@ -665,17 +717,17 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, TS
           {/* 四半期売上推移グラフ */}
           <div style={S.card}>
             <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:12 }}>四半期売上高・営業利益推移</div>
-            <ResponsiveContainer width="100%" height={200}>
+            <ResponsiveContainer width="100%" height={R.chartMd}>
               <BarChart data={qtrData.map(({ label, f: fd }) => ({
                 name: label,
                 売上高: n(fd.sales) ? Math.round(n(fd.sales)/1e8)/10 : null,
                 営業利益: n(fd.opProfit) ? Math.round(n(fd.opProfit)/1e8)/10 : null,
               }))}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                <XAxis dataKey="name" tick={{ fill:"#94a3b8", fontSize:9 }} interval={0} angle={-30} textAnchor="end" height={40} />
-                <YAxis tick={{ fill:"#64748b", fontSize:10 }} tickFormatter={v => v+"億"} />
+                <XAxis dataKey="name" tick={{ fill:"#94a3b8", fontSize:R.sm }} interval={0} angle={-30} textAnchor="end" height={40} />
+                <YAxis tick={{ fill:"#64748b", fontSize:R.sm }} tickFormatter={v => v+"億"} />
                 <Tooltip formatter={v => v+"億円"} contentStyle={TS} itemStyle={{ color:"#e2e8f0" }} />
-                <Legend wrapperStyle={{ color:"#94a3b8", fontSize:11 }} />
+                <Legend wrapperStyle={{ color:"#94a3b8", fontSize:R.sm }} />
                 <Bar dataKey="売上高" fill="#60a5fa" radius={[2,2,0,0]} />
                 <Bar dataKey="営業利益" fill="#4ade80" radius={[2,2,0,0]} />
               </BarChart>
@@ -701,7 +753,7 @@ function InputTab({ selected, periods, updatePeriod, baseYear, annualKeys, qtrKe
 
   return (
     <div>
-      <div style={{ marginBottom:12, padding:10, background:"#111827", borderRadius:6, fontSize:11, color:"#475569" }}>
+      <div style={{ marginBottom:12, padding:10, background:"#111827", borderRadius:6, fontSize:16, color:"#475569" }}>
         参考先:{" "}
         <a href="https://finance.yahoo.co.jp" target="_blank" rel="noreferrer" style={{ color:"#60a5fa" }}>Yahoo Finance</a>
         {" / "}<a href="https://www.kabutan.jp" target="_blank" rel="noreferrer" style={{ color:"#60a5fa" }}>株探</a>
@@ -723,10 +775,10 @@ function InputTab({ selected, periods, updatePeriod, baseYear, annualKeys, qtrKe
           </div>
           <div style={{ ...S.card, border:"1px solid #334155" }}>
             <div style={{ color:"#60a5fa", fontWeight:700, marginBottom:16 }}>{activeYear}年 本決算データ</div>
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))", gap:14 }}>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(min(200px,45vw),1fr))", gap:14 }}>
               {PERIOD_FIELDS.map(({ label, key, hint }) => (
                 <div key={key} style={{ display:"flex", flexDirection:"column", gap:3 }}>
-                  <label style={{ color:"#64748b", fontSize:10 }}>{label}</label>
+                  <label style={{ color:"#64748b", fontSize:16 }}>{label}</label>
                   <input
                     value={periods[activeYear]?.[key] || ""}
                     onChange={e => handleChange(activeYear, key, e.target.value)}
@@ -734,7 +786,7 @@ function InputTab({ selected, periods, updatePeriod, baseYear, annualKeys, qtrKe
                     placeholder="数値を入力"
                     inputMode="decimal"
                   />
-                  {hint && <span style={{ color:"#334155", fontSize:9 }}>{hint}</span>}
+                  {hint && <span style={{ color:"#334155", fontSize:16 }}>{hint}</span>}
                 </div>
               ))}
             </div>
@@ -744,19 +796,19 @@ function InputTab({ selected, periods, updatePeriod, baseYear, annualKeys, qtrKe
           {activeYear === String(baseYear+1) && (
             <div style={{ ...S.card, border:"1px solid #fbbf2444" }}>
               <div style={{ color:"#fbbf24", fontWeight:700, marginBottom:8 }}>今期予想データ</div>
-              <div style={{ color:"#475569", fontSize:11, marginBottom:14 }}>
+              <div style={{ color:"#475569", fontSize:16, marginBottom:14 }}>
                 株価・株式数・純資産は最新本決算を自動継承。予想PER・PSR・配当利回り・営業利益率の計算に使用されます。
               </div>
-              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))", gap:14 }}>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(min(200px,45vw),1fr))", gap:14 }}>
                 {FORECAST_FIELDS.map(({ label, key, hint }) => (
                   <div key={key} style={{ display:"flex", flexDirection:"column", gap:3 }}>
-                    <label style={{ color:"#64748b", fontSize:10 }}>{label}</label>
+                    <label style={{ color:"#64748b", fontSize:16 }}>{label}</label>
                     <input
                       value={periods[FORECAST_KEY]?.[key] || ""}
                       onChange={e => handleChange(FORECAST_KEY, key, e.target.value)}
                       style={S.input} placeholder="数値を入力" inputMode="decimal"
                     />
-                    {hint && <span style={{ color:"#334155", fontSize:9 }}>{hint}</span>}
+                    {hint && <span style={{ color:"#334155", fontSize:16 }}>{hint}</span>}
                   </div>
                 ))}
               </div>
@@ -766,7 +818,7 @@ function InputTab({ selected, periods, updatePeriod, baseYear, annualKeys, qtrKe
           {/* 4年並べて比較表示 */}
           <div style={{ ...S.card, overflowX:"auto" }}>
             <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:12 }}>4年分 入力済みデータ確認</div>
-            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:11 }}>
+            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:16 }}>
               <thead>
                 <tr style={{ borderBottom:"1px solid #1e293b" }}>
                   <th style={{ textAlign:"left", padding:"6px 10px", color:"#475569" }}>項目</th>
@@ -797,20 +849,20 @@ function InputTab({ selected, periods, updatePeriod, baseYear, annualKeys, qtrKe
               <button key={yr} style={{ ...S.navBtn, ...(activeQtrYear===yr?S.navOn:{}) }} onClick={() => setActiveQtrYear(yr)}>{yr}年</button>
             ))}
           </div>
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(2,1fr)", gap:16 }}>
+          <div style={{ display:"grid", gridTemplateColumns:R.grid2, gap:16 }}>
             {["Q1","Q2","Q3","Q4"].map(q => {
               const key = activeQtrYear+"-"+q;
               return (
                 <div key={key} style={{ ...S.card, border:"1px solid #334155" }}>
                   <div style={{ color:"#fbbf24", fontWeight:700, marginBottom:12 }}>{activeQtrYear}年 {q}</div>
-                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+                  <div style={{ display:"grid", gridTemplateColumns:R.grid2, gap:10 }}>
                     {PERIOD_FIELDS.filter(f2 => ["price","shares","sales","opProfit","netProfit","totalAssets","equity"].includes(f2.key)).map(({ label, key: fk, hint }) => (
                       <div key={fk} style={{ display:"flex", flexDirection:"column", gap:3 }}>
-                        <label style={{ color:"#64748b", fontSize:10 }}>{label}</label>
+                        <label style={{ color:"#64748b", fontSize:16 }}>{label}</label>
                         <input
                           value={periods[key]?.[fk] || ""}
                           onChange={e => handleChange(key, fk, e.target.value)}
-                          style={{ ...S.input, fontSize:12 }}
+                          style={{ ...S.input, fontSize:16 }}
                           placeholder="数値"
                           inputMode="decimal"
                         />
@@ -828,6 +880,8 @@ function InputTab({ selected, periods, updatePeriod, baseYear, annualKeys, qtrKe
 }
 
 export default function App() {
+  const R = useResponsive();
+  S = makeS(R);
   const [tab, setTab]             = useState("portfolio");
   const [portfolio, setPortfolio] = useState(() => loadData() || INIT);
   const [selected, setSelected]   = useState(() => (loadData() || INIT)[0]);
@@ -1087,17 +1141,17 @@ export default function App() {
         <div style={{ display:"flex", alignItems:"center", gap:8 }}>
           <span style={{ fontSize:22 }}>📈</span>
           <span style={{ fontSize:22, fontWeight:900, color:"#f1f5f9", letterSpacing:2 }}>KABU<span style={{ color:"#4ade80" }}>LENS</span></span>
-          <span style={{ fontSize:11, color:"#334155" }}>日本株専用</span>
+          <span style={{ fontSize:16, color:"#334155" }}>日本株専用</span>
         </div>
         <nav style={{ display:"flex", gap:4, flexWrap:"wrap", alignItems:"center" }}>
           {[["portfolio","ポートフォリオ"],["detail","銘柄詳細"],["compare","他社比較"],["simulation","シミュレーション"]].map(([k,v]) => (
             <button key={k} style={{ ...S.navBtn, ...(tab===k?S.navOn:{}) }} onClick={() => setTab(k)}>{v}</button>
           ))}
-          <button style={{ ...S.miniBtn, color:"#a78bfa", borderColor:"#a78bfa", fontSize:11 }} onClick={handleAdvanceYear}>
+          <button style={{ ...S.miniBtn, color:"#a78bfa", borderColor:"#a78bfa", fontSize:16 }} onClick={handleAdvanceYear}>
             📅 {baseYear}→{baseYear+1}年 更新
           </button>
           {undoData && (
-            <button style={{ ...S.miniBtn, color:"#fbbf24", borderColor:"#fbbf24", fontSize:11 }} onClick={handleUndoYear}>
+            <button style={{ ...S.miniBtn, color:"#fbbf24", borderColor:"#fbbf24", fontSize:16 }} onClick={handleUndoYear}>
               ↩ 更新を元に戻す
             </button>
           )}
@@ -1105,19 +1159,19 @@ export default function App() {
       </header>
 
       <div style={{ display:"flex", background:"#0d1424", borderBottom:"1px solid #1e293b", flexWrap:"wrap" }}>
-        <div style={S.sbItem}>
+        <div style={{ ...S.sbItem, minWidth:R.isMobile?"50%":"120px" }}>
           <div style={S.sbLabel}>評価額合計</div>
           <div style={S.sbVal}>¥{Math.round(tv).toLocaleString()}</div>
         </div>
-        <div style={S.sbItem}>
+        <div style={{ ...S.sbItem, minWidth:R.isMobile?"50%":"120px" }}>
           <div style={S.sbLabel}>損益</div>
           <div style={S.sbVal}><Delta val={tPnL} fmt={v => "¥"+Math.round(v).toLocaleString()} /></div>
         </div>
-        <div style={S.sbItem}>
+        <div style={{ ...S.sbItem, minWidth:R.isMobile?"50%":"120px" }}>
           <div style={S.sbLabel}>損益率</div>
           <div style={S.sbVal}><Delta val={tPnLPct} fmt={v => v.toFixed(2)+"%"} /></div>
         </div>
-        <div style={S.sbItem}>
+        <div style={{ ...S.sbItem, minWidth:R.isMobile?"50%":"120px" }}>
           <div style={S.sbLabel}>保有銘柄数</div>
           <div style={S.sbVal}>{portfolio.length}銘柄</div>
         </div>
@@ -1143,20 +1197,20 @@ export default function App() {
             {showPriceUpdate && (
               <div style={{ ...S.card, marginBottom:16, border:"1px solid #fbbf2444" }}>
                 <div style={{ color:"#fbbf24", fontWeight:700, marginBottom:8 }}>📊 現在株価の一括更新</div>
-                <div style={{ color:"#64748b", fontSize:11, marginBottom:12 }}>Yahoo Finance / 株探などで確認した最新株価を入力してください。</div>
-                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))", gap:10, marginBottom:12 }}>
+                <div style={{ color:"#64748b", fontSize:16, marginBottom:12 }}>Yahoo Finance / 株探などで確認した最新株価を入力してください。</div>
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(min(200px,45vw),1fr))", gap:10, marginBottom:12 }}>
                   {portfolio.map(h => (
                     <div key={h.id} style={{ display:"flex", flexDirection:"column", gap:3 }}>
-                      <label style={{ color:"#64748b", fontSize:10 }}>{h.name}（{h.ticker}）</label>
+                      <label style={{ color:"#64748b", fontSize:16 }}>{h.name}（{h.ticker}）</label>
                       <div style={{ display:"flex", gap:6, alignItems:"center" }}>
                         <input
                           value={priceInputs[h.id] ?? String(h.currentPrice)}
                           onChange={e => { const v = e.target.value; if (v===""||/^\d*\.?\d*$/.test(v)) setPriceInputs(p => ({ ...p, [h.id]:v })); }}
                           style={{ ...S.input, flex:1 }} inputMode="decimal"
                         />
-                        <span style={{ color:"#475569", fontSize:11 }}>円</span>
+                        <span style={{ color:"#475569", fontSize:16 }}>円</span>
                       </div>
-                      <span style={{ fontSize:9, color:"#334155" }}>前回: ¥{h.currentPrice.toLocaleString()}</span>
+                      <span style={{ fontSize:16, color:"#334155" }}>前回: ¥{h.currentPrice.toLocaleString()}</span>
                     </div>
                   ))}
                 </div>
@@ -1170,7 +1224,7 @@ export default function App() {
             {showAdd && (
               <div style={{ ...S.card, marginBottom:16 }}>
                 <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:12 }}>新規銘柄追加</div>
-                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))", gap:12 }}>
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(min(160px,45vw),1fr))", gap:12 }}>
                   <FInput label="証券コード（例: 7203）" value={addForm.ticker} onChange={v => setAddForm(p => ({ ...p, ticker:v }))} inputType="ticker" />
                   <FInput label="銘柄名" value={addForm.name} onChange={v => setAddForm(p => ({ ...p, name:v }))} maxLen={30} />
                   <FInput label="セクター" value={addForm.sector} onChange={v => setAddForm(p => ({ ...p, sector:v }))} maxLen={20} />
@@ -1185,10 +1239,11 @@ export default function App() {
               </div>
             )}
 
-            <div style={S.table}>
+            <div style={{ ...S.table, overflowX:"auto" }}>
+              <div style={{ minWidth:800 }}>
               <div style={{ display:"grid", gridTemplateColumns:"2fr 0.6fr 0.7fr 0.9fr 0.9fr 0.9fr 1.1fr 1fr 0.6fr 1.3fr", padding:"10px 16px", background:"#111827", gap:8 }}>
                 {["銘柄","コード","保有数","取得単価","現在値","目標株価","評価額","損益率","スコア","操作"].map(h => (
-                  <span key={h} style={{ fontSize:10, color:"#475569", textTransform:"uppercase" }}>{h}</span>
+                  <span key={h} style={{ fontSize:R.sm, color:"#475569", textTransform:"uppercase" }}>{h}</span>
                 ))}
               </div>
               {portfolio.map(h => {
@@ -1198,7 +1253,7 @@ export default function App() {
                 const tpPct = tp ? ((h.currentPrice-tp)/tp*100) : null;
                 return (
                   <div key={h.id} style={{ display:"grid", gridTemplateColumns:"2fr 0.6fr 0.7fr 0.9fr 0.9fr 0.9fr 1.1fr 1fr 0.6fr 1.3fr", padding:"12px 16px", gap:8, borderTop:"1px solid #1e293b", alignItems:"center", ...(selected?.id===h.id?{ background:"#0f2a1a" }:{}) }}>
-                    <span style={{ fontWeight:700, color:"#e2e8f0" }}>{h.name}<br/><span style={{ color:"#475569", fontSize:11 }}>{h.sector}</span></span>
+                    <span style={{ fontWeight:700, color:"#e2e8f0" }}>{h.name}<br/><span style={{ color:"#475569", fontSize:R.sm }}>{h.sector}</span></span>
                     <span><Tag color="#60a5fa">{h.ticker}</Tag></span>
                     <span style={{ color:"#94a3b8" }}>{h.qty.toLocaleString()}</span>
                     <span style={{ color:"#94a3b8" }}>¥{h.avgCost.toLocaleString()}</span>
@@ -1206,10 +1261,10 @@ export default function App() {
                     <span>
                       {tp ? (
                         <div>
-                          <div style={{ color:"#a78bfa", fontWeight:700, fontSize:13 }}>¥{tp.toLocaleString()}</div>
-                          {tpPct != null && <div style={{ fontSize:9, color:tpPct>=0?"#4ade80":"#f87171" }}>{tpPct>=0?"▲":"▼"}{Math.abs(tpPct).toFixed(1)}%</div>}
+                          <div style={{ color:"#a78bfa", fontWeight:700, fontSize:R.sm }}>¥{tp.toLocaleString()}</div>
+                          {tpPct != null && <div style={{ fontSize:R.sm, color:tpPct>=0?"#4ade80":"#f87171" }}>{tpPct>=0?"▲":"▼"}{Math.abs(tpPct).toFixed(1)}%</div>}
                         </div>
-                      ) : <span style={{ color:"#334155", fontSize:11 }}>未設定</span>}
+                      ) : <span style={{ color:"#334155", fontSize:R.sm }}>未設定</span>}
                     </span>
                     <span style={{ color:"#e2e8f0" }}>¥{(h.qty*h.currentPrice).toLocaleString()}</span>
                     <span><Delta val={pnlPct} fmt={v => v.toFixed(2)+"%"} /></span>
@@ -1223,13 +1278,14 @@ export default function App() {
                   </div>
                 );
               })}
+              </div>
             </div>
             {portfolio.length === 0 && <div style={{ ...S.card, textAlign:"center", color:"#475569", padding:40 }}>「+ 銘柄追加」から追加してください。</div>}
 
             {summary && (
               <div style={{ marginTop:24 }}>
-                <h3 style={{ fontSize:15, fontWeight:800, color:"#f1f5f9", margin:"0 0 16px 0" }}>ポートフォリオサマリー</h3>
-                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))", gap:12, marginBottom:20 }}>
+                <h3 style={{ fontSize:16, fontWeight:800, color:"#f1f5f9", margin:"0 0 16px 0" }}>ポートフォリオサマリー</h3>
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(min(160px,45vw),1fr))", gap:12, marginBottom:20 }}>
                   <div style={S.kpi}><div style={S.kpiL}>投資元本</div><div style={{ ...S.kpiV, color:"#94a3b8" }}>¥{Math.round(tc).toLocaleString()}</div></div>
                   <div style={S.kpi}><div style={S.kpiL}>評価額合計</div><div style={{ ...S.kpiV, color:"#e2e8f0" }}>¥{Math.round(tv).toLocaleString()}</div></div>
                   <div style={S.kpi}><div style={S.kpiL}>含み損益（税引前）</div><div style={{ ...S.kpiV, color:tPnL>=0?"#4ade80":"#f87171" }}>{tPnL>=0?"▲":"▼"}¥{Math.round(Math.abs(tPnL)).toLocaleString()}</div></div>
@@ -1237,10 +1293,10 @@ export default function App() {
                   <div style={S.kpi}><div style={S.kpiL}>平均PER</div><div style={{ ...S.kpiV, color:"#60a5fa" }}>{summary.avgPer?summary.avgPer+"倍":"—"}</div></div>
                   <div style={S.kpi}><div style={S.kpiL}>保有銘柄数</div><div style={{ ...S.kpiV, color:"#a78bfa" }}>{portfolio.length}銘柄</div></div>
                 </div>
-                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
+                <div style={{ display:"grid", gridTemplateColumns:R.grid2, gap:16 }}>
                   <div style={S.card}>
                     <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:12 }}>セクター別配分</div>
-                    <ResponsiveContainer width="100%" height={200}>
+                    <ResponsiveContainer width="100%" height={R.chartMd}>
                       <PieChart>
                         <Pie data={summary.sectorData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={3}>
                           {summary.sectorData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i%8]} />)}
@@ -1252,7 +1308,7 @@ export default function App() {
                       {summary.sectorData.map((d, i) => {
                         const tot = summary.sectorData.reduce((a, b) => a+b.value, 0);
                         return (
-                          <span key={d.name} style={{ display:"flex", alignItems:"center", gap:5, fontSize:11, color:"#94a3b8" }}>
+                          <span key={d.name} style={{ display:"flex", alignItems:"center", gap:5, fontSize:16, color:"#94a3b8" }}>
                             <span style={{ width:10, height:10, borderRadius:2, background:PIE_COLORS[i%8], display:"inline-block", flexShrink:0 }} />
                             {d.name} {((d.value/tot)*100).toFixed(0)}%
                           </span>
@@ -1262,12 +1318,12 @@ export default function App() {
                   </div>
                   <div style={S.card}>
                     <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:12 }}>損益率ランキング</div>
-                    <ResponsiveContainer width="100%" height={200}>
+                    <ResponsiveContainer width="100%" height={R.chartMd}>
                       <BarChart layout="vertical" margin={{ left:10, right:20 }}
                         data={summary.sortedPnl.map(h => ({ name:h.name.length>8?h.name.slice(0,8)+"…":h.name, v:parseFloat(((h.currentPrice-h.avgCost)/h.avgCost*100).toFixed(2)) }))}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                        <XAxis type="number" tick={{ fill:"#64748b", fontSize:10 }} tickFormatter={v => v+"%"} />
-                        <YAxis dataKey="name" type="category" tick={{ fill:"#94a3b8", fontSize:11 }} width={90} />
+                        <XAxis type="number" tick={{ fill:"#64748b", fontSize:R.sm }} tickFormatter={v => v+"%"} />
+                        <YAxis dataKey="name" type="category" tick={{ fill:"#94a3b8", fontSize:R.sm }} width={90} />
                         <Tooltip formatter={v => [v+"%","損益率"]} contentStyle={TS} labelStyle={{ color:"#94a3b8" }} itemStyle={{ color:"#e2e8f0" }} />
                         <ReferenceLine x={0} stroke="#475569" />
                         <Bar dataKey="v" fill="#4ade80" radius={[0,4,4,0]} />
@@ -1296,7 +1352,7 @@ export default function App() {
                     <span style={{ fontSize:20, fontWeight:800, color:"#f1f5f9" }}>{selected.name}</span>
                     <Tag color="#60a5fa">{selected.ticker}</Tag>
                     <Tag color="#a78bfa">{selected.sector}</Tag>
-                    {sc != null && <span style={{ background:scoreColor(sc)+"22", color:scoreColor(sc), border:`1px solid ${scoreColor(sc)}44`, borderRadius:6, padding:"4px 10px", fontSize:13, fontWeight:700 }}>総合スコア {sc}pt</span>}
+                    {sc != null && <span style={{ background:scoreColor(sc)+"22", color:scoreColor(sc), border:`1px solid ${scoreColor(sc)}44`, borderRadius:6, padding:"4px 10px", fontSize:16, fontWeight:700 }}>総合スコア {sc}pt</span>}
                   </div>
                   <div style={{ textAlign:"right" }}>
                     <div style={{ fontSize:24, fontWeight:900, color:"#f1f5f9" }}>¥{selected.currentPrice.toLocaleString()}</div>
@@ -1310,27 +1366,27 @@ export default function App() {
                 </div>
 
                 {detailTab === "metrics" && (
-                  <MetricsTab c={c} f={f} selected={portfolio.find(h=>h.id===selected.id)||selected} periods={(portfolio.find(h=>h.id===selected.id)||selected).periods||{}} baseYear={baseYear} annualKeys={ANNUAL_KEYS} qtrKeys={QTR_KEYS} TS={TS} />
+                  <MetricsTab c={c} f={f} selected={portfolio.find(h=>h.id===selected.id)||selected} periods={(portfolio.find(h=>h.id===selected.id)||selected).periods||{}} baseYear={baseYear} annualKeys={ANNUAL_KEYS} qtrKeys={QTR_KEYS} R={R} TS={TS} />
                 )}
 
                 {detailTab === "memo" && (
                   <div>
-                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:16 }}>
+                    <div style={{ display:"grid", gridTemplateColumns:R.grid2, gap:16, marginBottom:16 }}>
                       <div style={S.card}>
                         <div style={{ color:"#a78bfa", fontWeight:700, marginBottom:12 }}>目標・判断</div>
                         <FInput label="目標株価（円）" value={selected.memo?.targetPrice||""} onChange={v => updateMemo(selected.id,"targetPrice",v)} numOnly={true} />
                         {selected.memo?.targetPrice && n(selected.memo.targetPrice) && (
                           <div style={{ marginTop:12, background:"#111827", borderRadius:6, padding:"10px 12px" }}>
                             <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
-                              <span style={{ color:"#475569", fontSize:11 }}>現在株価</span>
+                              <span style={{ color:"#475569", fontSize:16 }}>現在株価</span>
                               <span style={{ color:"#e2e8f0", fontWeight:700 }}>¥{selected.currentPrice.toLocaleString()}</span>
                             </div>
                             <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
-                              <span style={{ color:"#475569", fontSize:11 }}>目標株価</span>
+                              <span style={{ color:"#475569", fontSize:16 }}>目標株価</span>
                               <span style={{ color:"#a78bfa", fontWeight:700 }}>¥{Number(selected.memo.targetPrice).toLocaleString()}</span>
                             </div>
                             <div style={{ display:"flex", justifyContent:"space-between", marginBottom:8 }}>
-                              <span style={{ color:"#475569", fontSize:11 }}>目標まであと</span>
+                              <span style={{ color:"#475569", fontSize:16 }}>目標まであと</span>
                               <span style={{ color:n(selected.memo.targetPrice)>selected.currentPrice?"#4ade80":"#f87171", fontWeight:700 }}>
                                 {((n(selected.memo.targetPrice)-selected.currentPrice)/selected.currentPrice*100).toFixed(1)}%
                               </span>
@@ -1345,13 +1401,13 @@ export default function App() {
                         <div style={{ color:"#4ade80", fontWeight:700, marginBottom:12 }}>投資理由・メモ</div>
                         <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
                           <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
-                            <label style={{ color:"#64748b", fontSize:10 }}>投資理由・買った根拠</label>
+                            <label style={{ color:"#64748b", fontSize:16 }}>投資理由・買った根拠</label>
                             <textarea value={selected.memo?.buyReason||""} onChange={e => updateMemo(selected.id,"buyReason",e.target.value.slice(0,300))}
                               style={{ ...S.input, height:80, resize:"vertical", lineHeight:1.6 }}
                               placeholder="例: PERが割安で配当利回りも高い。業績回復トレンド。" />
                           </div>
                           <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
-                            <label style={{ color:"#64748b", fontSize:10 }}>メモ・注意事項</label>
+                            <label style={{ color:"#64748b", fontSize:16 }}>メモ・注意事項</label>
                             <textarea value={selected.memo?.memo||""} onChange={e => updateMemo(selected.id,"memo",e.target.value.slice(0,300))}
                               style={{ ...S.input, height:80, resize:"vertical", lineHeight:1.6 }}
                               placeholder="例: 決算発表は8月。為替リスクに注意。" />
@@ -1361,11 +1417,11 @@ export default function App() {
                     </div>
                     <div style={S.card}>
                       <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:12 }}>損益サマリー</div>
-                      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))", gap:10 }}>
+                      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(min(160px,45vw),1fr))", gap:10 }}>
                         {pnlSummary.map(([label, val, color]) => (
                           <div key={label} style={{ background:"#111827", borderRadius:8, padding:"10px 14px" }}>
-                            <div style={{ color:"#475569", fontSize:11, marginBottom:3 }}>{label}</div>
-                            <div style={{ color, fontWeight:700, fontSize:14 }}>{val}</div>
+                            <div style={{ color:"#475569", fontSize:16, marginBottom:3 }}>{label}</div>
+                            <div style={{ color, fontWeight:700, fontSize:16 }}>{val}</div>
                           </div>
                         ))}
                       </div>
@@ -1380,15 +1436,15 @@ export default function App() {
                 {detailTab === "ir" && (
                   <div>
                     <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
-                      <span style={{ color:"#64748b", fontSize:13 }}>IRニュース・適時開示情報</span>
+                      <span style={{ color:"#64748b", fontSize:16 }}>IRニュース・適時開示情報</span>
                       <button style={S.addBtn} onClick={() => setShowIrForm(v => !v)}>+ 追加</button>
                     </div>
                     {showIrForm && (
                       <div style={{ ...S.card, marginBottom:16 }}>
-                        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:12 }}>
+                        <div style={{ display:"grid", gridTemplateColumns:R.grid2, gap:12, marginBottom:12 }}>
                           <FInput label="日付（例: 2025-05-08）" value={irForm.date} onChange={v => setIrForm(p => ({ ...p, date:v }))} inputType="date" />
                           <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
-                            <label style={{ color:"#64748b", fontSize:10 }}>種別</label>
+                            <label style={{ color:"#64748b", fontSize:16 }}>種別</label>
                             <select value={irForm.type} style={S.sel} onChange={e => setIrForm(p => ({ ...p, type:e.target.value }))}>
                               {["決算","配当","人事","自社株買い","その他"].map(t => <option key={t}>{t}</option>)}
                             </select>
@@ -1403,10 +1459,10 @@ export default function App() {
                     {(selected.irList||[]).map((item, i) => (
                       <div key={i} style={{ ...S.card, marginBottom:12 }}>
                         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
-                          <div style={{ display:"flex", gap:8 }}><Tag color={typeColor(item.type)}>{item.type}</Tag><span style={{ color:"#475569", fontSize:12 }}>{item.date}</span></div>
+                          <div style={{ display:"flex", gap:8 }}><Tag color={typeColor(item.type)}>{item.type}</Tag><span style={{ color:"#475569", fontSize:16 }}>{item.date}</span></div>
                           <button style={{ ...S.miniBtn, color:"#f87171", borderColor:"#f87171" }} onClick={() => deleteIR(i)}>削除</button>
                         </div>
-                        <div style={{ fontWeight:700, color:"#f1f5f9", fontSize:14 }}>
+                        <div style={{ fontWeight:700, color:"#f1f5f9", fontSize:16 }}>
                           {item.url ? <a href={item.url} target="_blank" rel="noreferrer" style={{ color:"#f1f5f9", textDecoration:"none" }}>{item.title} ↗</a> : item.title}
                         </div>
                       </div>
@@ -1421,7 +1477,7 @@ export default function App() {
         {tab === "compare" && (
           <div>
             <h2 style={S.h2}>他社比較</h2>
-            <div style={{ marginBottom:8, color:"#64748b", fontSize:13 }}>比較したい銘柄を選択してください（最大4社）</div>
+            <div style={{ marginBottom:8, color:"#64748b", fontSize:16 }}>比較したい銘柄を選択してください（最大4社）</div>
             <div style={S.chips}>
               {portfolio.map(h => (
                 <button key={h.id} style={{ ...S.chip, ...(compareIds.includes(h.id)?S.chipOn:{}) }} onClick={() => toggleCompare(h.id)}>{h.ticker} {h.name}</button>
@@ -1432,13 +1488,13 @@ export default function App() {
             ) : (
               <>
                 <div style={{ ...S.card, overflowX:"auto", marginBottom:20 }}>
-                  <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+                  <table style={{ width:"100%", borderCollapse:"collapse", fontSize:16 }}>
                     <thead>
                       <tr style={{ borderBottom:"1px solid #1e293b" }}>
-                        <th style={{ textAlign:"left", padding:"8px 12px", color:"#475569", fontSize:11, minWidth:150 }}>指標</th>
+                        <th style={{ textAlign:"left", padding:"8px 12px", color:"#475569", fontSize:16, minWidth:150 }}>指標</th>
                         {cmpStocks.map((h, i) => (
                           <th key={h.id} style={{ textAlign:"right", padding:"8px 12px", color:CMP_COLORS[i], minWidth:110 }}>
-                            {h.ticker}<br/><span style={{ fontSize:10, color:"#475569" }}>{h.name}</span>
+                            {h.ticker}<br/><span style={{ fontSize:16, color:"#475569" }}>{h.name}</span>
                           </th>
                         ))}
                       </tr>
@@ -1461,7 +1517,7 @@ export default function App() {
                         ["時価総額",   h => calcAll(h.financials).marketCap,       v => v?fmtM(v):"—",      () => "#e2e8f0"],
                       ].map(([label, getter, formatter, colorFn]) => (
                         <tr key={label} style={{ borderBottom:"1px solid #1e293b" }}>
-                          <td style={{ padding:"8px 12px", color:"#64748b", fontSize:12 }}>{label}</td>
+                          <td style={{ padding:"8px 12px", color:"#64748b", fontSize:16 }}>{label}</td>
                           {cmpStocks.map(h => {
                             const val = getter(h);
                             return <td key={h.id} style={{ textAlign:"right", padding:"8px 12px", color:colorFn(val), fontWeight:700 }}>{formatter(val)}</td>;
@@ -1474,15 +1530,15 @@ export default function App() {
 
                 <div style={S.card}>
                   <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:4 }}>総合レーダーチャート</div>
-                  <div style={{ color:"#475569", fontSize:12, marginBottom:12 }}>各指標を0〜100点に正規化して比較。外側ほど優秀。</div>
-                  <ResponsiveContainer width="100%" height={300}>
+                  <div style={{ color:"#475569", fontSize:16, marginBottom:12 }}>各指標を0〜100点に正規化して比較。外側ほど優秀。</div>
+                  <ResponsiveContainer width="100%" height={R.chartXl}>
                     <RadarChart data={radarData}>
                       <PolarGrid stroke="#1e293b" />
-                      <PolarAngleAxis dataKey="m" tick={{ fill:"#64748b", fontSize:11 }} />
+                      <PolarAngleAxis dataKey="m" tick={{ fill:"#64748b", fontSize:R.sm }} />
                       {cmpStocks.map((h, i) => (
                         <Radar key={h.id} name={h.ticker} dataKey={h.ticker} stroke={CMP_COLORS[i]} fill={CMP_COLORS[i]} fillOpacity={0.15} strokeWidth={2} />
                       ))}
-                      <Legend wrapperStyle={{ color:"#94a3b8", fontSize:12 }} />
+                      <Legend wrapperStyle={{ color:"#94a3b8", fontSize:R.sm }} />
                       <Tooltip formatter={v => Math.round(v)+"点"} contentStyle={TS} itemStyle={{ color:"#e2e8f0" }} />
                     </RadarChart>
                   </ResponsiveContainer>
@@ -1490,12 +1546,12 @@ export default function App() {
 
                 <div style={S.card}>
                   <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:4 }}>収益性 vs 安全性マップ</div>
-                  <div style={{ color:"#475569", fontSize:12, marginBottom:12 }}>右上ほど「高収益・高安全性」の理想企業。</div>
+                  <div style={{ color:"#475569", fontSize:16, marginBottom:12 }}>右上ほど「高収益・高安全性」の理想企業。</div>
                   <div style={{ position:"relative", height:240, background:"#111827", borderRadius:8, overflow:"hidden" }}>
-                    <div style={{ position:"absolute", top:8, left:8, fontSize:10, color:"#334155" }}>低収益・高安全</div>
-                    <div style={{ position:"absolute", top:8, right:8, fontSize:10, color:"#4ade8044" }}>高収益・高安全</div>
-                    <div style={{ position:"absolute", bottom:8, left:8, fontSize:10, color:"#f8717144" }}>低収益・低安全</div>
-                    <div style={{ position:"absolute", bottom:8, right:8, fontSize:10, color:"#334155" }}>高収益・低安全</div>
+                    <div style={{ position:"absolute", top:8, left:8, fontSize:16, color:"#334155" }}>低収益・高安全</div>
+                    <div style={{ position:"absolute", top:8, right:8, fontSize:16, color:"#4ade8044" }}>高収益・高安全</div>
+                    <div style={{ position:"absolute", bottom:8, left:8, fontSize:16, color:"#f8717144" }}>低収益・低安全</div>
+                    <div style={{ position:"absolute", bottom:8, right:8, fontSize:16, color:"#334155" }}>高収益・低安全</div>
                     <div style={{ position:"absolute", top:0, bottom:0, left:"50%", width:1, background:"#1e293b" }} />
                     <div style={{ position:"absolute", left:0, right:0, top:"50%", height:1, background:"#1e293b" }} />
                     {cmpStocks.map((h, i) => {
@@ -1503,31 +1559,31 @@ export default function App() {
                       const px = Math.min(Math.max((cm.equityRatio||0)*100,0),80)/80*85+7;
                       const py = 100-Math.min(Math.max((cm.opMargin||0)*100,0),30)/30*85-7;
                       return (
-                        <div key={h.id} style={{ position:"absolute", left:`${px}%`, top:`${py}%`, transform:"translate(-50%,-50%)", background:CMP_COLORS[i], borderRadius:"50%", width:36, height:36, display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, fontWeight:700, color:"#0a0f1a", boxShadow:`0 0 12px ${CMP_COLORS[i]}66` }}>
+                        <div key={h.id} style={{ position:"absolute", left:`${px}%`, top:`${py}%`, transform:"translate(-50%,-50%)", background:CMP_COLORS[i], borderRadius:"50%", width:36, height:36, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, fontWeight:700, color:"#0a0f1a", boxShadow:`0 0 12px ${CMP_COLORS[i]}66` }}>
                           {h.ticker}
                         </div>
                       );
                     })}
                   </div>
                   <div style={{ display:"flex", justifyContent:"center", gap:16, marginTop:8, flexWrap:"wrap" }}>
-                    {cmpStocks.map((h, i) => <span key={h.id} style={{ fontSize:11, color:CMP_COLORS[i] }}>● {h.ticker} {h.name}</span>)}
+                    {cmpStocks.map((h, i) => <span key={h.id} style={{ fontSize:16, color:CMP_COLORS[i] }}>● {h.ticker} {h.name}</span>)}
                   </div>
                 </div>
 
-                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
+                <div style={{ display:"grid", gridTemplateColumns:R.grid2, gap:16 }}>
                   <div style={S.card}>
-                    <div style={{ color:"#94a3b8", fontSize:13, marginBottom:12 }}>ROE・ROA・ROIC比較</div>
-                    <ResponsiveContainer width="100%" height={180}>
+                    <div style={{ color:"#94a3b8", fontSize:16, marginBottom:12 }}>ROE・ROA・ROIC比較</div>
+                    <ResponsiveContainer width="100%" height={R.chartSm}>
                       <BarChart data={cmpStocks.map(h => {
                         const cm = calcAll(h.financials);
                         return { name:h.ticker, ROE:parseFloat(((cm.roe||0)*100).toFixed(1)), ROA:parseFloat(((cm.roa||0)*100).toFixed(1)), ROIC:parseFloat(((cm.roic||0)*100).toFixed(1)) };
                       })}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                        <XAxis dataKey="name" tick={{ fill:"#94a3b8", fontSize:12 }} />
-                        <YAxis tick={{ fill:"#64748b", fontSize:11 }} tickFormatter={v => v+"%"} />
+                        <XAxis dataKey="name" tick={{ fill:"#94a3b8", fontSize:R.sm }} />
+                        <YAxis tick={{ fill:"#64748b", fontSize:R.sm }} tickFormatter={v => v+"%"} />
                         <Tooltip formatter={v => v+"%"} contentStyle={TS} itemStyle={{ color:"#e2e8f0" }} />
                         <ReferenceLine y={15} stroke="#4ade80" strokeDasharray="4 4" />
-                        <Legend wrapperStyle={{ color:"#94a3b8", fontSize:11 }} />
+                        <Legend wrapperStyle={{ color:"#94a3b8", fontSize:R.sm }} />
                         <Bar dataKey="ROE" fill="#4ade80" radius={[3,3,0,0]} />
                         <Bar dataKey="ROA" fill="#60a5fa" radius={[3,3,0,0]} />
                         <Bar dataKey="ROIC" fill="#a78bfa" radius={[3,3,0,0]} />
@@ -1535,12 +1591,12 @@ export default function App() {
                     </ResponsiveContainer>
                   </div>
                   <div style={S.card}>
-                    <div style={{ color:"#94a3b8", fontSize:13, marginBottom:12 }}>PER比較</div>
-                    <ResponsiveContainer width="100%" height={180}>
+                    <div style={{ color:"#94a3b8", fontSize:16, marginBottom:12 }}>PER比較</div>
+                    <ResponsiveContainer width="100%" height={R.chartSm}>
                       <BarChart data={cmpStocks.map(h => ({ name:h.ticker, PER:parseFloat((calcAll(h.financials).per||0).toFixed(2)) }))}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                        <XAxis dataKey="name" tick={{ fill:"#94a3b8", fontSize:12 }} />
-                        <YAxis tick={{ fill:"#64748b", fontSize:11 }} tickFormatter={v => v+"x"} />
+                        <XAxis dataKey="name" tick={{ fill:"#94a3b8", fontSize:R.sm }} />
+                        <YAxis tick={{ fill:"#64748b", fontSize:R.sm }} tickFormatter={v => v+"x"} />
                         <Tooltip formatter={v => v+"倍"} contentStyle={TS} itemStyle={{ color:"#e2e8f0" }} />
                         <ReferenceLine y={15} stroke="#4ade80" strokeDasharray="4 4" />
                         <Bar dataKey="PER" fill="#818cf8" radius={[4,4,0,0]} />
@@ -1566,7 +1622,7 @@ export default function App() {
               <>
                 <div style={{ ...S.card, marginBottom:16 }}>
                   <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:12 }}>設定 — {selected.name}（{selected.ticker}）</div>
-                  <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(155px,1fr))", gap:12 }}>
+                  <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(min(155px,45vw),1fr))", gap:12 }}>
                     <FInput label="予測年数（年）" value={simParams.years} onChange={v => setSimParams(p => ({ ...p, years:v }))} numOnly={true} />
                     <FInput label="売上成長率（基本）%" value={simParams.growthRate} onChange={v => setSimParams(p => ({ ...p, growthRate:v }))} numOnly={true} />
                     <FInput label="目標営業利益率 %" value={simParams.targetMargin} onChange={v => setSimParams(p => ({ ...p, targetMargin:v }))} numOnly={true} />
@@ -1574,13 +1630,13 @@ export default function App() {
                     <FInput label="目標EV/EBITDA（任意）" value={simParams.targetEvEbitda} onChange={v => setSimParams(p => ({ ...p, targetEvEbitda:v }))} numOnly={true} />
                     <FInput label="配当利回り %" value={simParams.dividendRate} onChange={v => setSimParams(p => ({ ...p, dividendRate:v }))} numOnly={true} />
                     <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
-                      <label style={{ color:"#64748b", fontSize:10 }}>配当再投資</label>
+                      <label style={{ color:"#64748b", fontSize:16 }}>配当再投資</label>
                       <button style={{ ...S.miniBtn, padding:"8px 12px", color:simParams.reinvest?"#4ade80":"#64748b", borderColor:simParams.reinvest?"#4ade80":"#334155" }} onClick={() => setSimParams(p => ({ ...p, reinvest:!p.reinvest }))}>
                         {simParams.reinvest?"あり（複利）":"なし（単純）"}
                       </button>
                     </div>
                   </div>
-                  <div style={{ marginTop:10, fontSize:11, color:"#334155" }}>強気: 成長率x1.6 / 弱気: 成長率x0.4（自動計算）</div>
+                  <div style={{ marginTop:10, fontSize:16, color:"#334155" }}>強気: 成長率x1.6 / 弱気: 成長率x0.4（自動計算）</div>
                 </div>
 
                 <div style={{ display:"flex", gap:4, marginBottom:16, flexWrap:"wrap" }}>
@@ -1593,10 +1649,10 @@ export default function App() {
                   <div>
                     <div style={S.card}>
                       <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:4 }}>株価推定（3シナリオ）</div>
-                      <div style={{ color:"#475569", fontSize:12, marginBottom:12 }}>
+                      <div style={{ color:"#475569", fontSize:16, marginBottom:12 }}>
                         強気: {Math.round(+simParams.growthRate*1.6)}% / 基本: {simParams.growthRate}% / 弱気: {Math.round(+simParams.growthRate*0.4)}%
                       </div>
-                      <ResponsiveContainer width="100%" height={280}>
+                      <ResponsiveContainer width="100%" height={R.chartXl}>
                         <AreaChart data={simRows()}>
                           <defs>
                             <linearGradient id="gbull" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#4ade80" stopOpacity={0.2}/><stop offset="95%" stopColor="#4ade80" stopOpacity={0}/></linearGradient>
@@ -1604,12 +1660,12 @@ export default function App() {
                             <linearGradient id="gbear" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#f87171" stopOpacity={0.15}/><stop offset="95%" stopColor="#f87171" stopOpacity={0}/></linearGradient>
                           </defs>
                           <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                          <XAxis dataKey="year" tick={{ fill:"#94a3b8", fontSize:12 }} />
-                          <YAxis tick={{ fill:"#64748b", fontSize:11 }} tickFormatter={v => v?.toLocaleString()} />
+                          <XAxis dataKey="year" tick={{ fill:"#94a3b8", fontSize:R.sm }} />
+                          <YAxis tick={{ fill:"#64748b", fontSize:R.sm }} tickFormatter={v => v?.toLocaleString()} />
                           <Tooltip formatter={v => v?"¥"+v?.toLocaleString():"—"} contentStyle={TS} itemStyle={{ color:"#e2e8f0" }} />
-                          <ReferenceLine y={n(f.price)||selected.currentPrice} stroke="#f59e0b" strokeDasharray="4 4" label={{ value:"現在株価", fill:"#f59e0b", fontSize:10 }} />
-                          <ReferenceLine y={selected.avgCost} stroke="#a78bfa" strokeDasharray="4 4" label={{ value:"取得単価", fill:"#a78bfa", fontSize:10 }} />
-                          <Legend wrapperStyle={{ color:"#94a3b8", fontSize:12 }} />
+                          <ReferenceLine y={n(f.price)||selected.currentPrice} stroke="#f59e0b" strokeDasharray="4 4" label={{ value:"現在株価", fill:"#f59e0b", fontSize:16 }} />
+                          <ReferenceLine y={selected.avgCost} stroke="#a78bfa" strokeDasharray="4 4" label={{ value:"取得単価", fill:"#a78bfa", fontSize:16 }} />
+                          <Legend wrapperStyle={{ color:"#94a3b8", fontSize:R.sm }} />
                           <Area type="monotone" dataKey="bull" stroke="#4ade80" strokeWidth={2} fill="url(#gbull)" name="強気" />
                           <Area type="monotone" dataKey="base" stroke="#60a5fa" strokeWidth={2} fill="url(#gbase)" name="基本" />
                           <Area type="monotone" dataKey="bear" stroke="#f87171" strokeWidth={2} fill="url(#gbear)" name="弱気" />
@@ -1618,7 +1674,7 @@ export default function App() {
                       </ResponsiveContainer>
                     </div>
 
-                    <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))", gap:12, marginBottom:16 }}>
+                    <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(min(200px,45vw),1fr))", gap:12, marginBottom:16 }}>
                       {[["bull","強気","#4ade80"],["base","基本","#60a5fa"],["bear","弱気","#f87171"]].map(([key, label, color]) => {
                         const rows = simRows();
                         const last = rows[rows.length-1]?.[key];
@@ -1627,24 +1683,24 @@ export default function App() {
                         return (
                           <div key={key} style={{ background:"#111827", border:`1px solid ${color}33`, borderRadius:8, padding:"12px 16px" }}>
                             <div style={{ color, fontWeight:700, marginBottom:8 }}>{label}シナリオ</div>
-                            <div style={{ color:"#475569", fontSize:11, marginBottom:4 }}>最終推定株価</div>
+                            <div style={{ color:"#475569", fontSize:16, marginBottom:4 }}>最終推定株価</div>
                             <div style={{ color, fontWeight:700, fontSize:18, marginBottom:8 }}>{"¥"+(last?.toLocaleString()||"—")}</div>
-                            <div style={{ color:"#475569", fontSize:11 }}>年率: <span style={{ color }}>{cagr?cagr+"%":"—"}</span></div>
-                            <div style={{ color:"#475569", fontSize:11, marginTop:4 }}>取得単価超え: <span style={{ color }}>{breakY===0?"すでに超過":breakY>0?breakY+"年後":"期間内に未達"}</span></div>
+                            <div style={{ color:"#475569", fontSize:16 }}>年率: <span style={{ color }}>{cagr?cagr+"%":"—"}</span></div>
+                            <div style={{ color:"#475569", fontSize:16, marginTop:4 }}>取得単価超え: <span style={{ color }}>{breakY===0?"すでに超過":breakY>0?breakY+"年後":"期間内に未達"}</span></div>
                           </div>
                         );
                       })}
                     </div>
 
-                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
+                    <div style={{ display:"grid", gridTemplateColumns:R.grid2, gap:16 }}>
                       <div style={S.card}>
                         <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:4 }}>配当累計</div>
-                        <div style={{ color:"#475569", fontSize:12, marginBottom:8 }}>利回り{simParams.dividendRate}% {simParams.reinvest?"複利":"単純"}</div>
-                        <ResponsiveContainer width="100%" height={160}>
+                        <div style={{ color:"#475569", fontSize:16, marginBottom:8 }}>利回り{simParams.dividendRate}% {simParams.reinvest?"複利":"単純"}</div>
+                        <ResponsiveContainer width="100%" height={R.chartSm}>
                           <BarChart data={simRows()}>
                             <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                            <XAxis dataKey="year" tick={{ fill:"#94a3b8", fontSize:11 }} />
-                            <YAxis tick={{ fill:"#64748b", fontSize:10 }} tickFormatter={v => v?.toLocaleString()} />
+                            <XAxis dataKey="year" tick={{ fill:"#94a3b8", fontSize:R.sm }} />
+                            <YAxis tick={{ fill:"#64748b", fontSize:R.sm }} tickFormatter={v => v?.toLocaleString()} />
                             <Tooltip formatter={v => "¥"+v?.toLocaleString()} contentStyle={TS} itemStyle={{ color:"#e2e8f0" }} />
                             <Bar dataKey="dc" fill="#fbbf24" radius={[4,4,0,0]} name="配当累計" />
                           </BarChart>
@@ -1652,14 +1708,14 @@ export default function App() {
                       </div>
                       <div style={S.card}>
                         <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:4 }}>売上・営業利益推移</div>
-                        <div style={{ color:"#475569", fontSize:12, marginBottom:8 }}>成長率{simParams.growthRate}% x 利益率{simParams.targetMargin}%</div>
-                        <ResponsiveContainer width="100%" height={160}>
+                        <div style={{ color:"#475569", fontSize:16, marginBottom:8 }}>成長率{simParams.growthRate}% x 利益率{simParams.targetMargin}%</div>
+                        <ResponsiveContainer width="100%" height={R.chartSm}>
                           <LineChart data={simRows()}>
                             <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                            <XAxis dataKey="year" tick={{ fill:"#94a3b8", fontSize:11 }} />
-                            <YAxis tick={{ fill:"#64748b", fontSize:10 }} tickFormatter={v => fmtM(v)} />
+                            <XAxis dataKey="year" tick={{ fill:"#94a3b8", fontSize:R.sm }} />
+                            <YAxis tick={{ fill:"#64748b", fontSize:R.sm }} tickFormatter={v => fmtM(v)} />
                             <Tooltip formatter={v => fmtM(v)} contentStyle={TS} itemStyle={{ color:"#e2e8f0" }} />
-                            <Legend wrapperStyle={{ color:"#94a3b8", fontSize:11 }} />
+                            <Legend wrapperStyle={{ color:"#94a3b8", fontSize:R.sm }} />
                             <Line type="monotone" dataKey="ps" stroke="#60a5fa" strokeWidth={2} dot={false} name="売上" />
                             <Line type="monotone" dataKey="po" stroke="#4ade80" strokeWidth={2} dot={false} name="営業利益" />
                           </LineChart>
@@ -1670,11 +1726,11 @@ export default function App() {
                     <div style={S.card}>
                       <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:12 }}>サマリーテーブル</div>
                       <div style={{ overflowX:"auto" }}>
-                        <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+                        <table style={{ width:"100%", borderCollapse:"collapse", fontSize:16 }}>
                           <thead>
                             <tr style={{ borderBottom:"1px solid #1e293b" }}>
                               {["年","強気株価","基本株価","弱気株価","EV法","EPS","売上","営業利益","配当累計"].map(h => (
-                                <th key={h} style={{ textAlign:"right", padding:"6px 10px", color:"#475569", fontSize:11, whiteSpace:"nowrap" }}>{h}</th>
+                                <th key={h} style={{ textAlign:"right", padding:"6px 10px", color:"#475569", fontSize:16, whiteSpace:"nowrap" }}>{h}</th>
                               ))}
                             </tr>
                           </thead>
@@ -1705,20 +1761,20 @@ export default function App() {
                       <div style={S.card}><span style={{ color:"#64748b" }}>純利益・発行済株式数・目標PERを入力すると計算されます。</span></div>
                     ) : (
                       <div>
-                        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:16, marginBottom:16 }}>
+                        <div style={{ display:"grid", gridTemplateColumns:R.grid3, gap:16, marginBottom:16 }}>
                           <div style={{ background:"#111827", borderRadius:8, padding:16, textAlign:"center" }}>
-                            <div style={{ color:"#475569", fontSize:11, marginBottom:6 }}>適正株価（PERベース）</div>
+                            <div style={{ color:"#475569", fontSize:16, marginBottom:6 }}>適正株価（PERベース）</div>
                             <div style={{ color:"#f1f5f9", fontWeight:900, fontSize:28 }}>¥{safetyMargin.fair.toLocaleString()}</div>
-                            <div style={{ color:"#475569", fontSize:10, marginTop:4 }}>目標PER {simParams.targetPer}倍 x EPS</div>
+                            <div style={{ color:"#475569", fontSize:16, marginTop:4 }}>目標PER {simParams.targetPer}倍 x EPS</div>
                           </div>
                           <div style={{ background:"#111827", borderRadius:8, padding:16, textAlign:"center" }}>
-                            <div style={{ color:"#475569", fontSize:11, marginBottom:6 }}>現在株価</div>
+                            <div style={{ color:"#475569", fontSize:16, marginBottom:6 }}>現在株価</div>
                             <div style={{ color:"#f1f5f9", fontWeight:900, fontSize:28 }}>¥{safetyMargin.price.toLocaleString()}</div>
                           </div>
                           <div style={{ background:safetyMargin.margin>0?"#0f2a1a":"#2a0f0f", border:`1px solid ${safetyMargin.margin>0?"#4ade80":"#f87171"}44`, borderRadius:8, padding:16, textAlign:"center" }}>
-                            <div style={{ color:"#475569", fontSize:11, marginBottom:6 }}>安全余裕率</div>
+                            <div style={{ color:"#475569", fontSize:16, marginBottom:6 }}>安全余裕率</div>
                             <div style={{ color:safetyMargin.margin>0?"#4ade80":"#f87171", fontWeight:900, fontSize:28 }}>{safetyMargin.margin>0?"+":""}{safetyMargin.margin.toFixed(1)}%</div>
-                            <div style={{ color:"#475569", fontSize:10, marginTop:4 }}>{safetyMargin.margin>0?"割安（買い余地あり）":"割高（適正価格超え）"}</div>
+                            <div style={{ color:"#475569", fontSize:16, marginTop:4 }}>{safetyMargin.margin>0?"割安（買い余地あり）":"割高（適正価格超え）"}</div>
                           </div>
                         </div>
                         <div style={S.card}>
@@ -1726,25 +1782,25 @@ export default function App() {
                           <div style={{ position:"relative", height:60, background:"#111827", borderRadius:8, overflow:"hidden", marginBottom:8 }}>
                             <div style={{ position:"absolute", inset:0, background:"linear-gradient(to right, #f87171, #fbbf24, #4ade80)", opacity:0.15 }} />
                             <div style={{ position:"absolute", top:0, bottom:0, left:"50%", width:2, background:"#4ade80", opacity:0.6 }} />
-                            <div style={{ position:"absolute", top:4, left:"50%", transform:"translateX(-50%)", color:"#4ade80", fontSize:9, whiteSpace:"nowrap" }}>適正 ¥{safetyMargin.fair.toLocaleString()}</div>
+                            <div style={{ position:"absolute", top:4, left:"50%", transform:"translateX(-50%)", color:"#4ade80", fontSize:16, whiteSpace:"nowrap" }}>適正 ¥{safetyMargin.fair.toLocaleString()}</div>
                             <div style={{ position:"absolute", top:0, bottom:0, left:`${50-Math.min(Math.max(safetyMargin.margin,-50),50)}%`, width:3, background:"#f59e0b", borderRadius:2 }}>
-                              <div style={{ position:"absolute", bottom:4, left:"50%", transform:"translateX(-50%)", color:"#f59e0b", fontSize:9, whiteSpace:"nowrap" }}>現在 ¥{safetyMargin.price.toLocaleString()}</div>
+                              <div style={{ position:"absolute", bottom:4, left:"50%", transform:"translateX(-50%)", color:"#f59e0b", fontSize:16, whiteSpace:"nowrap" }}>現在 ¥{safetyMargin.price.toLocaleString()}</div>
                             </div>
                           </div>
-                          <div style={{ display:"flex", justifyContent:"space-between", fontSize:10, color:"#334155" }}>
+                          <div style={{ display:"flex", justifyContent:"space-between", fontSize:16, color:"#334155" }}>
                             <span>割高</span><span>適正</span><span>割安</span>
                           </div>
                         </div>
                         {c.eps && c.eps > 0 && (
                           <div style={S.card}>
                             <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:12 }}>PER感度分析</div>
-                            <ResponsiveContainer width="100%" height={180}>
+                            <ResponsiveContainer width="100%" height={R.chartSm}>
                               <BarChart data={[10,12,15,18,20,25,30].map(p => ({ per:p+"倍", v:Math.round(c.eps*p) }))}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                                <XAxis dataKey="per" tick={{ fill:"#94a3b8", fontSize:11 }} />
-                                <YAxis tick={{ fill:"#64748b", fontSize:10 }} tickFormatter={v => v.toLocaleString()} />
+                                <XAxis dataKey="per" tick={{ fill:"#94a3b8", fontSize:R.sm }} />
+                                <YAxis tick={{ fill:"#64748b", fontSize:R.sm }} tickFormatter={v => v.toLocaleString()} />
                                 <Tooltip formatter={v => "¥"+v.toLocaleString()} contentStyle={TS} itemStyle={{ color:"#e2e8f0" }} />
-                                <ReferenceLine y={safetyMargin.price} stroke="#f59e0b" strokeDasharray="4 4" label={{ value:"現在株価", fill:"#f59e0b", fontSize:9 }} />
+                                <ReferenceLine y={safetyMargin.price} stroke="#f59e0b" strokeDasharray="4 4" label={{ value:"現在株価", fill:"#f59e0b", fontSize:16 }} />
                                 <Bar dataKey="v" fill="#60a5fa" radius={[4,4,0,0]} />
                               </BarChart>
                             </ResponsiveContainer>
@@ -1763,8 +1819,8 @@ export default function App() {
                       <div>
                         <div style={S.card}>
                           <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:4 }}>モンテカルロシミュレーション（1,000回試行）</div>
-                          <div style={{ color:"#475569", fontSize:12, marginBottom:16 }}>成長率にランダムなブレとPERの変動を加えた{simParams.years}年後の株価分布です。</div>
-                          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))", gap:10, marginBottom:20 }}>
+                          <div style={{ color:"#475569", fontSize:16, marginBottom:16 }}>成長率にランダムなブレとPERの変動を加えた{simParams.years}年後の株価分布です。</div>
+                          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(min(140px,45vw),1fr))", gap:10, marginBottom:20 }}>
                             {[
                               ["10%ile",     monteData.p10,  "#f87171"],
                               ["25%ile",     monteData.p25,  "#fbbf24"],
@@ -1774,30 +1830,30 @@ export default function App() {
                               ["平均値",     monteData.mean, "#e2e8f0"],
                             ].map(([label, val, color]) => (
                               <div key={label} style={{ background:"#111827", borderRadius:8, padding:"10px 12px" }}>
-                                <div style={{ color:"#475569", fontSize:10, marginBottom:4 }}>{label}</div>
-                                <div style={{ color, fontWeight:700, fontSize:15 }}>¥{val?.toLocaleString()}</div>
+                                <div style={{ color:"#475569", fontSize:16, marginBottom:4 }}>{label}</div>
+                                <div style={{ color, fontWeight:700, fontSize:16 }}>¥{val?.toLocaleString()}</div>
                               </div>
                             ))}
                           </div>
                           <div style={{ background:"#111827", borderRadius:8, padding:"12px 16px", marginBottom:16 }}>
                             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
-                              <span style={{ color:"#94a3b8", fontSize:13 }}>現在株価より上昇する確率</span>
+                              <span style={{ color:"#94a3b8", fontSize:16 }}>現在株価より上昇する確率</span>
                               <span style={{ color:monteData.probUp>50?"#4ade80":"#f87171", fontWeight:700, fontSize:20 }}>{monteData.probUp.toFixed(1)}%</span>
                             </div>
                             <div style={{ height:8, background:"#1e293b", borderRadius:4, overflow:"hidden" }}>
                               <div style={{ height:"100%", width:`${monteData.probUp}%`, background:monteData.probUp>50?"#4ade80":"#f87171", borderRadius:4 }} />
                             </div>
-                            <div style={{ display:"flex", justifyContent:"space-between", marginTop:4, fontSize:10, color:"#334155" }}>
+                            <div style={{ display:"flex", justifyContent:"space-between", marginTop:4, fontSize:16, color:"#334155" }}>
                               <span>現在 ¥{monteData.price.toLocaleString()}</span>
                               <span>{(100-monteData.probUp).toFixed(1)}% が下落</span>
                             </div>
                           </div>
-                          <div style={{ color:"#94a3b8", fontSize:13, marginBottom:12 }}>{simParams.years}年後の株価分布（ヒストグラム）</div>
-                          <ResponsiveContainer width="100%" height={200}>
+                          <div style={{ color:"#94a3b8", fontSize:16, marginBottom:12 }}>{simParams.years}年後の株価分布（ヒストグラム）</div>
+                          <ResponsiveContainer width="100%" height={R.chartMd}>
                             <BarChart data={monteData.bins}>
                               <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                              <XAxis dataKey="range" tick={{ fill:"#64748b", fontSize:9 }} interval={3} />
-                              <YAxis tick={{ fill:"#64748b", fontSize:10 }} tickFormatter={v => v+"件"} />
+                              <XAxis dataKey="range" tick={{ fill:"#64748b", fontSize:R.sm }} interval={3} />
+                              <YAxis tick={{ fill:"#64748b", fontSize:R.sm }} tickFormatter={v => v+"件"} />
                               <Tooltip formatter={v => v+"件"} contentStyle={TS} itemStyle={{ color:"#e2e8f0" }} />
                               <Bar dataKey="count" fill="#60a5fa" radius={[2,2,0,0]} />
                             </BarChart>
@@ -1815,26 +1871,3 @@ export default function App() {
     </div>
   );
 }
-
-const S = {
-  root:    { minHeight:"100vh", background:"#0a0f1a", fontFamily:"'DM Mono','Courier New',monospace", color:"#e2e8f0", fontSize:14 },
-  header:  { display:"flex", alignItems:"center", justifyContent:"space-between", padding:"12px 24px", background:"#0d1424", borderBottom:"1px solid #1e293b", flexWrap:"wrap", gap:8 },
-  navBtn:  { background:"transparent", border:"1px solid #1e293b", color:"#64748b", padding:"6px 14px", borderRadius:6, cursor:"pointer", fontSize:13, fontFamily:"inherit" },
-  navOn:   { background:"#0f2a1a", border:"1px solid #4ade80", color:"#4ade80" },
-  sbItem:  { flex:1, padding:"12px 20px", borderRight:"1px solid #1e293b", minWidth:120 },
-  sbLabel: { fontSize:12, color:"#475569", marginBottom:4, textTransform:"uppercase", letterSpacing:1 },
-  sbVal:   { fontSize:22, fontWeight:800 },
-  h2:      { fontSize:20, fontWeight:800, color:"#f1f5f9", margin:"0 0 16px 0", letterSpacing:1 },
-  card:    { background:"#0d1424", border:"1px solid #1e293b", borderRadius:10, padding:20, marginBottom:16 },
-  table:   { background:"#0d1424", border:"1px solid #1e293b", borderRadius:10, overflow:"hidden", marginBottom:16 },
-  chips:   { display:"flex", flexWrap:"wrap", gap:8, marginBottom:16 },
-  chip:    { background:"#111827", border:"1px solid #1e293b", color:"#94a3b8", padding:"6px 14px", borderRadius:20, cursor:"pointer", fontSize:13, fontFamily:"inherit" },
-  chipOn:  { background:"#0f2a1a", border:"1px solid #4ade80", color:"#4ade80" },
-  addBtn:  { background:"#0f2a1a", border:"1px solid #4ade80", color:"#4ade80", padding:"8px 18px", borderRadius:6, cursor:"pointer", fontSize:14, fontFamily:"inherit", fontWeight:700 },
-  miniBtn: { background:"#111827", border:"1px solid #334155", color:"#64748b", padding:"5px 12px", borderRadius:4, cursor:"pointer", fontSize:12, fontFamily:"inherit" },
-  input:   { background:"#111827", border:"1px solid #1e293b", color:"#e2e8f0", padding:"8px 12px", borderRadius:6, fontSize:14, fontFamily:"inherit", outline:"none", width:"100%", boxSizing:"border-box" },
-  sel:     { background:"#111827", border:"1px solid #1e293b", color:"#e2e8f0", padding:"8px 12px", borderRadius:6, fontSize:14, fontFamily:"inherit", width:"100%" },
-  kpi:     { background:"#111827", borderRadius:8, padding:"12px 14px" },
-  kpiL:    { color:"#475569", fontSize:12, marginBottom:4 },
-  kpiV:    { fontWeight:700, fontSize:16 },
-};
