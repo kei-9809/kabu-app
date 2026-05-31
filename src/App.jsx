@@ -1187,7 +1187,7 @@ export default function App() {
         </div>
       </div>
 
-      <main style={{ padding:R.scale==="sm"?16:40, maxWidth:1400, margin:"0 auto" }}>
+      <main style={{ padding:R.scale==="sm"?"16px 16px":"40px 60px", maxWidth:1300, margin:"0 auto" }}>
 
         {tab === "portfolio" && (
           <div>
