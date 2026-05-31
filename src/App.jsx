@@ -574,24 +574,39 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
   }, [waccParams, cc, ff, fc]);
 
   const trendData = useMemo(() => {
-    return annualData.map(({ label, f: fd, c: ca }) => ({
-      name: label,
-      売上高: n(fd.sales) ? parseFloat(fmtM(n(fd.sales)).replace(/[^0-9.-]/g,"")) : null,
-      営業利益: n(fd.opProfit) ? parseFloat(fmtM(n(fd.opProfit)).replace(/[^0-9.-]/g,"")) : null,
-      純利益: n(fd.netProfit) ? parseFloat(fmtM(n(fd.netProfit)).replace(/[^0-9.-]/g,"")) : null,
-      EBITDA: ca.ebitda ? parseFloat(fmtM(ca.ebitda).replace(/[^0-9.-]/g,"")) : null,
-      ROE: ca.roe ? parseFloat((ca.roe*100).toFixed(1)) : null,
-      ROA: ca.roa ? parseFloat((ca.roa*100).toFixed(1)) : null,
-      営業利益率: ca.opMargin ? parseFloat((ca.opMargin*100).toFixed(1)) : null,
-      経常利益率: ca.ordMargin ? parseFloat((ca.ordMargin*100).toFixed(1)) : null,
-      純利益率: ca.netMargin ? parseFloat((ca.netMargin*100).toFixed(1)) : null,
-      粗利率: ca.grossMargin ? parseFloat((ca.grossMargin*100).toFixed(1)) : null,
-      自己資本比率: ca.equityRatio ? parseFloat((ca.equityRatio*100).toFixed(1)) : null,
-      EV_EBITDA: ca.evEbitda ? parseFloat(ca.evEbitda.toFixed(2)) : null,
-      PER: ca.per ? parseFloat(ca.per.toFixed(2)) : null,
-      PBR: ca.pbr ? parseFloat(ca.pbr.toFixed(2)) : null,
-      PSR: ca.psr ? parseFloat(ca.psr.toFixed(2)) : null,
-    }));
+    return annualData.map(({ label, f: fd, c: ca }, i) => {
+      // 売上成長率（前年比）
+      const prevSales = i > 0 ? n(annualData[i-1].f.sales) : null;
+      const curSales = n(fd.sales);
+      const salesGrowth = (curSales != null && prevSales != null && prevSales > 0)
+        ? parseFloat(((curSales - prevSales) / prevSales * 100).toFixed(1))
+        : null;
+      // Rule of 40 = 売上成長率(%) + 営業利益率(%)
+      const opMarginPct = ca.opMargin != null ? parseFloat((ca.opMargin*100).toFixed(1)) : null;
+      const rule40 = (salesGrowth != null && opMarginPct != null)
+        ? parseFloat((salesGrowth + opMarginPct).toFixed(1))
+        : null;
+      return {
+        name: label,
+        売上高: curSales ? parseFloat(fmtM(curSales).replace(/[^0-9.-]/g,"")) : null,
+        営業利益: n(fd.opProfit) ? parseFloat(fmtM(n(fd.opProfit)).replace(/[^0-9.-]/g,"")) : null,
+        純利益: n(fd.netProfit) ? parseFloat(fmtM(n(fd.netProfit)).replace(/[^0-9.-]/g,"")) : null,
+        EBITDA: ca.ebitda ? parseFloat(fmtM(ca.ebitda).replace(/[^0-9.-]/g,"")) : null,
+        ROE: ca.roe ? parseFloat((ca.roe*100).toFixed(1)) : null,
+        ROA: ca.roa ? parseFloat((ca.roa*100).toFixed(1)) : null,
+        営業利益率: opMarginPct,
+        経常利益率: ca.ordMargin ? parseFloat((ca.ordMargin*100).toFixed(1)) : null,
+        純利益率: ca.netMargin ? parseFloat((ca.netMargin*100).toFixed(1)) : null,
+        粗利率: ca.grossMargin ? parseFloat((ca.grossMargin*100).toFixed(1)) : null,
+        自己資本比率: ca.equityRatio ? parseFloat((ca.equityRatio*100).toFixed(1)) : null,
+        EV_EBITDA: ca.evEbitda ? parseFloat(ca.evEbitda.toFixed(2)) : null,
+        PER: ca.per ? parseFloat(ca.per.toFixed(2)) : null,
+        PBR: ca.pbr ? parseFloat(ca.pbr.toFixed(2)) : null,
+        PSR: ca.psr ? parseFloat(ca.psr.toFixed(2)) : null,
+        売上成長率: salesGrowth,
+        Rule40: rule40,
+      };
+    });
   }, [annualData]);
 
   const qtrData = useMemo(() => {
@@ -654,6 +669,45 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
             <MBox label="営業利益率" value={cc.opMargin?pct(cc.opMargin):"—"} color={cc.opMargin&&cc.opMargin>0.10?"#4ade80":"#94a3b8"} hint="10%超で優良" />
             <MBox label="経常利益率" value={cc.ordMargin?pct(cc.ordMargin):"—"} color="#94a3b8" />
           </Sec>
+
+          {/* Rule of 40 セクション */}
+          {(r40 => (
+            <Sec title="グロース指標（Rule of 40）">
+              <MBox
+                label="売上成長率(YoY)"
+                value={r40.salesGrowth != null ? (r40.salesGrowth >= 0 ? "+" : "") + r40.salesGrowth.toFixed(1) + "%" : "—"}
+                color={r40.salesGrowth == null ? "#94a3b8" : r40.salesGrowth >= 20 ? "#4ade80" : r40.salesGrowth >= 10 ? "#fbbf24" : "#94a3b8"}
+                hint={"前年(" + r40.prevYrKey + "年)比"}
+              />
+              <MBox
+                label="Rule of 40"
+                value={r40.rule40 != null ? r40.rule40.toFixed(1) : "—"}
+                color={r40.rule40Color}
+                hint="売上成長率% + 営業利益率%"
+                badge={r40.rule40 != null && r40.rule40 >= 40 ? "優良" : ""}
+              />
+              <div style={{ gridColumn:"1/-1", background:"#111827", borderRadius:8, padding:"10px 14px", fontSize:R_CURRENT.sm, color:"#64748b", lineHeight:1.8 }}>
+                <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:4 }}>Rule of 40 とは</div>
+                <div>SaaS・グロース株の健全性指標。<span style={{ color:"#60a5fa" }}>売上成長率(%) + 営業利益率(%)</span> が40以上なら優良。</div>
+                <div style={{ marginTop:4 }}>赤字成長企業でも売上成長率が高ければ評価できる。例: 成長率50% + 利益率-5% = 45点 → 優良</div>
+                <div style={{ marginTop:4, display:"flex", gap:12 }}>
+                  <span style={{ color:"#4ade80" }}>● 40以上: 優良</span>
+                  <span style={{ color:"#fbbf24" }}>● 20〜40: 要成長</span>
+                  <span style={{ color:"#f87171" }}>● 20未満: 要注意</span>
+                </div>
+              </div>
+            </Sec>
+          ))((prevYrKey => {
+            const prevFd = periods[prevYrKey] || {};
+            const prevSales = n(prevFd.sales);
+            const curSales = n(ff.sales);
+            const salesGrowth = (curSales != null && prevSales != null && prevSales > 0)
+              ? (curSales - prevSales) / prevSales * 100 : null;
+            const opMarginPct = cc.opMargin != null ? cc.opMargin * 100 : null;
+            const rule40 = salesGrowth != null && opMarginPct != null ? salesGrowth + opMarginPct : null;
+            const rule40Color = rule40 == null ? "#94a3b8" : rule40 >= 40 ? "#4ade80" : rule40 >= 20 ? "#fbbf24" : "#f87171";
+            return { salesGrowth, rule40, rule40Color, prevYrKey };
+          })(String(baseYear - 1)))}
           <Sec title="安全性">
             <MBox label="自己資本比率" value={cc.equityRatio?pct(cc.equityRatio):"—"} color={cc.equityRatio&&cc.equityRatio>0.40?"#4ade80":"#94a3b8"} hint="40%超が安全" />
             <MBox label="流動比率" value={cc.currentRatio?pct(cc.currentRatio):"—"} color={cc.currentRatio&&cc.currentRatio>2?"#4ade80":cc.currentRatio&&cc.currentRatio>1?"#fbbf24":"#f87171"} hint="200%超が理想" />
@@ -980,6 +1034,27 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
               </div>
             )}
           </div>
+
+          {/* Rule of 40グラフ */}
+          <div style={S.card}>
+            <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:4 }}>Rule of 40 トレンド</div>
+            <div style={{ color:"#475569", fontSize:R_CURRENT.sm, marginBottom:12 }}>
+              売上成長率(%) + 営業利益率(%)。40以上が優良。凡例をクリックで表示/非表示。
+            </div>
+            <ToggleLineChart
+              data={trendData}
+              lines={[
+                { key:"Rule40", color:"#4ade80", name:"Rule of 40" },
+                { key:"売上成長率", color:"#60a5fa" },
+                { key:"営業利益率", color:"#fbbf24" },
+              ]}
+              yFormatter={v => v+"%"}
+              tooltipFormatter={v => v+"%"}
+              height={R_CURRENT.chartMd}
+              refLines={[{ y:40, label:"40", color:"#4ade80" }, { y:0, label:"0", color:"#475569" }]}
+              TS={TS}
+            />
+          </div>
         </div>
       )}
 
@@ -1134,15 +1209,14 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
 
 // 数値入力タブ（多期間対応）
 // 銘柄ごとのundo ボタン
-function StockUndoButton({ selected, updatePeriod, S }) {
+function StockUndoButton({ selected, updatePeriod, S, undoTrigger }) {
   const undoKey = "kabulens_undo_stock_"+selected.id;
-  const [saved, setSaved] = useState(() => {
-    try { const d = localStorage.getItem(undoKey); return d ? JSON.parse(d) : null; } catch { return null; }
-  });
-  // selectedが変わったら再読み込み
+  const [saved, setSaved] = useState(null);
+
   useEffect(() => {
     try { const d = localStorage.getItem(undoKey); setSaved(d ? JSON.parse(d) : null); } catch { setSaved(null); }
-  }, [selected.id]);
+  }, [selected.id, undoTrigger]);
+
   if (!saved) return null;
   return (
     <button
@@ -1164,6 +1238,7 @@ function InputTab({ selected, periods, updatePeriod, baseYear, annualKeys, qtrKe
   const [inputView, setInputView] = useState("annual"); // annual | qtr
   const [activeYear, setActiveYear] = useState(String(baseYear));
   const [activeQtrYear, setActiveQtrYear] = useState(String(baseYear));
+  const [undoTrigger, setUndoTrigger] = useState(0);
 
   const handleChange = (periodKey, fieldKey, val) => {
     if (val === "" || val === "-" || /^-?\d*\.?\d*$/.test(val)) {
@@ -1236,11 +1311,12 @@ function InputTab({ selected, periods, updatePeriod, baseYear, annualKeys, qtrKe
               if (oldPeriods[FORECAST_KEY]) newPeriods[FORECAST_KEY] = oldPeriods[FORECAST_KEY];
               updatePeriod(selected.id, "__meta__", "latestFiscalYear", String(next));
               updatePeriod(selected.id, "__meta__", "__periods__", newPeriods);
+              setUndoTrigger(t => t + 1);
             }}
           >
             📅 {getStockBaseYear(selected, baseYear)}→{getStockBaseYear(selected, baseYear)+1}年 更新
           </button>
-          <StockUndoButton selected={selected} updatePeriod={updatePeriod} S={S} />
+          <StockUndoButton selected={selected} updatePeriod={updatePeriod} S={S} undoTrigger={undoTrigger} />
         </div>
       </div>
 
