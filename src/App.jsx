@@ -495,7 +495,8 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
     const checks = [
       { label:"ROIC > WACC（価値創造）",    ok: spread > 0,   val: pct(roic)+" > "+pct(wacc), impact:"high" },
       { label:"スプレッド > 2%（余裕あり）", ok: spread > 0.02, val: (spread*100).toFixed(2)+"%", impact:"high" },
-      { label:"PER < 20倍",                ok: cc.per != null && cc.per < 20, val: cc.per ? xfmt(cc.per) : "—", impact:"mid" },
+      { label:"予想PER < 20倍",            ok: fc ? (fc.per != null && fc.per < 20) : (cc.per != null && cc.per < 20),
+                                           val: fc ? (fc.per ? xfmt(fc.per)+"(予想)" : "—") : (cc.per ? xfmt(cc.per)+"(実績)" : "—"), impact:"mid" },
       { label:"ROE > 10%",                 ok: cc.roe != null && cc.roe > 0.10, val: cc.roe ? pct(cc.roe) : "—", impact:"mid" },
       { label:"自己資本比率 > 30%",         ok: cc.equityRatio != null && cc.equityRatio > 0.30, val: cc.equityRatio ? pct(cc.equityRatio) : "—", impact:"mid" },
       { label:"営業利益率 > 10%",           ok: cc.opMargin != null && cc.opMargin > 0.10, val: cc.opMargin ? pct(cc.opMargin) : "—", impact:"mid" },
@@ -511,7 +512,7 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
                          verdict === "買い候補"     ? "#34d399" :
                          verdict === "中立・様子見" ? "#fbbf24" : "#f87171";
     return { ke, kd, kdSource, wacc, E, D, V, t, spread, checks, score, verdict, verdictColor };
-  }, [waccParams, cc, ff]);
+  }, [waccParams, cc, ff, fc]);
 
   // 今期予想指標の計算
   const fc = useMemo(() => {
@@ -646,11 +647,11 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
                       style={S.input} placeholder="1.2" inputMode="decimal"
                     />
                     <a
-                      href={`https://finance.yahoo.co.jp/quote/${selected?.ticker}.T`}
+                      href={`https://www.buffett-code.com/company/${selected?.ticker}/`}
                       target="_blank" rel="noreferrer"
                       style={{ color:"#60a5fa", fontSize:R_CURRENT.sm, textDecoration:"none" }}
                     >
-                      📊 Yahoo Finance({selected?.ticker})でβを確認 ↗
+                      📊 バフェットコード({selected?.ticker})でβを確認 ↗
                     </a>
                   </div>
                   {/* 借入金利・Rf・RPは配列で */}
