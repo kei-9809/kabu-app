@@ -1133,6 +1133,33 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
 }
 
 // 数値入力タブ（多期間対応）
+// 銘柄ごとのundo ボタン
+function StockUndoButton({ selected, updatePeriod, S }) {
+  const undoKey = "kabulens_undo_stock_"+selected.id;
+  const [saved, setSaved] = useState(() => {
+    try { const d = localStorage.getItem(undoKey); return d ? JSON.parse(d) : null; } catch { return null; }
+  });
+  // selectedが変わったら再読み込み
+  useEffect(() => {
+    try { const d = localStorage.getItem(undoKey); setSaved(d ? JSON.parse(d) : null); } catch { setSaved(null); }
+  }, [selected.id]);
+  if (!saved) return null;
+  return (
+    <button
+      style={{ ...S.miniBtn, color:"#fbbf24", borderColor:"#fbbf24" }}
+      onClick={() => {
+        if (!window.confirm(selected.name+" の決算年更新を元に戻します。よろしいですか？")) return;
+        updatePeriod(selected.id, "__meta__", "latestFiscalYear", String(saved.stockBase));
+        updatePeriod(selected.id, "__meta__", "__periods__", saved.periods);
+        try { localStorage.removeItem(undoKey); } catch {}
+        setSaved(null);
+      }}
+    >
+      ↩ 更新を元に戻す
+    </button>
+  );
+}
+
 function InputTab({ selected, periods, updatePeriod, baseYear, annualKeys, qtrKeys, TS }) {
   const [inputView, setInputView] = useState("annual"); // annual | qtr
   const [activeYear, setActiveYear] = useState(String(baseYear));
@@ -1183,8 +1210,37 @@ function InputTab({ selected, periods, updatePeriod, baseYear, annualKeys, qtrKe
             <span style={{ color:"#334155", fontSize:R_CURRENT.sm }}>この年を基準に±2年が表示されます</span>
           </div>
         </div>
-        <div style={{ marginTop:10, fontSize:R_CURRENT.sm, color:"#475569" }}>
+        <div style={{ marginTop:10, fontSize:R_CURRENT.sm, color:"#475569", marginBottom:12 }}>
           現在の表示範囲: {annualKeys[0]}年 〜 {annualKeys[annualKeys.length-1]}年（財務指標は{annualKeys[annualKeys.length-2]}年を使用）
+        </div>
+        {/* 銘柄ごとの年次更新ボタン */}
+        <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>
+          <button
+            style={{ ...S.miniBtn, color:"#a78bfa", borderColor:"#a78bfa" }}
+            onClick={() => {
+              const stockBase = getStockBaseYear(selected, baseYear);
+              const next = stockBase + 1;
+              const oldestYr = String(stockBase - 2);
+              if (!window.confirm(selected.name+" の決算年を "+stockBase+"→"+next+"年 に進めます。\n\n"+oldestYr+"年のデータは削除されます。\nよろしいですか？")) return;
+              // undo用に保存
+              const undoKey = "kabulens_undo_stock_"+selected.id;
+              try { localStorage.setItem(undoKey, JSON.stringify({ stockBase, periods: selected.periods || {} })); } catch {}
+              // 最古年削除
+              const oldPeriods = selected.periods || {};
+              const newPeriods = {};
+              Object.keys(oldPeriods).forEach(key => {
+                if (key === oldestYr) return;
+                if (key.includes("-Q") && key.startsWith(oldestYr)) return;
+                newPeriods[key] = oldPeriods[key];
+              });
+              if (oldPeriods[FORECAST_KEY]) newPeriods[FORECAST_KEY] = oldPeriods[FORECAST_KEY];
+              updatePeriod(selected.id, "__meta__", "latestFiscalYear", String(next));
+              updatePeriod(selected.id, "__meta__", "__periods__", newPeriods);
+            }}
+          >
+            📅 {getStockBaseYear(selected, baseYear)}→{getStockBaseYear(selected, baseYear)+1}年 更新
+          </button>
+          <StockUndoButton selected={selected} updatePeriod={updatePeriod} S={S} />
         </div>
       </div>
 
@@ -1407,15 +1463,20 @@ export default function App() {
   const updatePeriod = useCallback((id, periodKey, fieldKey, val) => {
     save(p => p.map(h => {
       if (h.id !== id) return h;
-      // __meta__ は銘柄のルートプロパティを更新
-      if (periodKey === "__meta__") return { ...h, [fieldKey]: val };
+      if (periodKey === "__meta__") {
+        if (fieldKey === "__periods__") return { ...h, periods: val }; // periodsをまるごと更新
+        return { ...h, [fieldKey]: val };
+      }
       const periods = { ...(h.periods || {}) };
       periods[periodKey] = { ...(periods[periodKey] || {}), [fieldKey]: val };
       return { ...h, periods };
     }));
     if (selected?.id === id) {
       setSelected(s => {
-        if (periodKey === "__meta__") return { ...s, [fieldKey]: val };
+        if (periodKey === "__meta__") {
+          if (fieldKey === "__periods__") return { ...s, periods: val };
+          return { ...s, [fieldKey]: val };
+        }
         const periods = { ...(s.periods || {}) };
         periods[periodKey] = { ...(periods[periodKey] || {}), [fieldKey]: val };
         return { ...s, periods };
@@ -1708,14 +1769,6 @@ export default function App() {
           {[["portfolio","ポートフォリオ"],["detail","銘柄詳細"],["compare","他社比較"],["simulation","シミュレーション"]].map(([k,v]) => (
             <button key={k} style={{ ...S.navBtn, ...(tab===k?S.navOn:{}) }} onClick={() => setTab(k)}>{v}</button>
           ))}
-          <button style={{ ...S.miniBtn, color:"#a78bfa", borderColor:"#a78bfa", fontSize:16 }} onClick={handleAdvanceYear}>
-            📅 {baseYear}→{baseYear+1}年 更新
-          </button>
-          {undoData && (
-            <button style={{ ...S.miniBtn, color:"#fbbf24", borderColor:"#fbbf24", fontSize:16 }} onClick={handleUndoYear}>
-              ↩ 更新を元に戻す
-            </button>
-          )}
           <div style={{ display:"flex", alignItems:"center", gap:4, background:"#111827", border:"1px solid #334155", borderRadius:6, padding:"2px 6px" }}>
             <button style={{ background:"none", border:"none", color:"#94a3b8", cursor:"pointer", fontSize:16, padding:"0 4px", fontFamily:"inherit" }} onClick={() => setZoom(z => Math.max(50, z-10))}>−</button>
             <span style={{ color:"#64748b", fontSize:12, minWidth:36, textAlign:"center" }}>{zoom}%</span>
