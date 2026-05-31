@@ -81,8 +81,8 @@ function financialScore(c) {
   add(c.roe != null && c.roe > 0.10, 10); add(c.roa != null && c.roa > 0.05, 8);
   add(c.grossMargin != null && c.grossMargin > 0.30, 8); add(c.opMargin != null && c.opMargin > 0.10, 8);
   add(c.currentRatio != null && c.currentRatio > 1.5, 8); add(c.equityRatio != null && c.equityRatio > 0.30, 8);
-  // Rule of 40（前年比売上成長率が必要なため c.rule40 として渡す）
-  if (c.rule40 != null) add(c.rule40 >= 30, 10);
+  // Rule of 40（20以上で10pt、15以上で5pt）
+  if (c.rule40 != null) { add(c.rule40 >= 20, 10); if (c.rule40 >= 15 && c.rule40 < 20) { s += 5; t += 10; } }
   return t > 0 ? Math.round((s / t) * 100) : null;
 }
 
@@ -98,7 +98,7 @@ const SCORE_CRITERIA = [
   { label:"営業利益率 > 10%",  pts:8,  hint:"営業効率" },
   { label:"流動比率 > 150%",   pts:8,  hint:"短期安全性" },
   { label:"自己資本比率 > 30%", pts:8,  hint:"財務健全性" },
-  { label:"Rule of 40 ≥ 30",  pts:10, hint:"グロース健全性（日本基準）" },
+  { label:"Rule of 40 ≥ 20(10pt) / ≥15(5pt)", pts:10, hint:"グロース健全性（日本基準）" },
 ];
 
 // periodsベースでスコア計算するヘルパー
@@ -696,7 +696,7 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
                 value={r40.rule40 != null ? r40.rule40.toFixed(1) : "—"}
                 color={r40.rule40Color}
                 hint="売上成長率% + 営業利益率%"
-                badge={r40.rule40 != null && r40.rule40 >= 30 ? (r40.rule40 >= 40 ? "優良" : "良好") : ""}
+                badge={r40.rule40 != null && r40.rule40 >= 20 ? "優良" : r40.rule40 != null && r40.rule40 >= 15 ? "良好" : ""}
               />
               <div style={{ gridColumn:"1/-1", background:"#111827", borderRadius:8, padding:"10px 14px", fontSize:R_CURRENT.sm, color:"#64748b", lineHeight:1.8 }}>
                 <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:4 }}>Rule of 40 とは</div>
@@ -717,7 +717,7 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
               ? (curSales - prevSales) / prevSales * 100 : null;
             const opMarginPct = cc.opMargin != null ? cc.opMargin * 100 : null;
             const rule40 = salesGrowth != null && opMarginPct != null ? salesGrowth + opMarginPct : null;
-            const rule40Color = rule40 == null ? "#94a3b8" : rule40 >= 30 ? "#4ade80" : rule40 >= 20 ? "#34d399" : rule40 >= 10 ? "#fbbf24" : "#f87171";
+            const rule40Color = rule40 == null ? "#94a3b8" : rule40 >= 20 ? "#4ade80" : rule40 >= 15 ? "#34d399" : rule40 >= 10 ? "#fbbf24" : "#f87171";
             return { salesGrowth, rule40, rule40Color, prevYrKey };
           })(String(baseYear - 1)))}
           <Sec title="安全性">
@@ -1063,7 +1063,7 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
               yFormatter={v => v+"%"}
               tooltipFormatter={v => v+"%"}
               height={R_CURRENT.chartMd}
-              refLines={[{ y:30, label:"30(日本基準優良)", color:"#4ade80" }, { y:40, label:"40(米国基準)", color:"#34d399" }]}
+              refLines={[{ y:20, label:"20(優良)", color:"#4ade80" }, { y:15, label:"15(良好)", color:"#34d399" }, { y:40, label:"40(米国基準)", color:"#475569" }]}
               TS={TS}
             />
           </div>
