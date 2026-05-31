@@ -84,7 +84,38 @@ function financialScore(c) {
   return t > 0 ? Math.round((s / t) * 100) : null;
 }
 
+// スコアの説明
+const SCORE_CRITERIA = [
+  { label:"PER < 20倍",       pts:10, hint:"株価収益率" },
+  { label:"PBR < 2倍",        pts:10, hint:"株価純資産倍率" },
+  { label:"PSR < 3倍",        pts:8,  hint:"株価売上高倍率" },
+  { label:"EV/EBITDA < 15倍", pts:10, hint:"企業価値倍率" },
+  { label:"ROE > 10%",        pts:10, hint:"自己資本利益率" },
+  { label:"ROA > 5%",         pts:8,  hint:"総資産利益率" },
+  { label:"粗利率 > 30%",     pts:8,  hint:"売上総利益率" },
+  { label:"営業利益率 > 10%", pts:8,  hint:"営業効率" },
+  { label:"流動比率 > 150%",  pts:8,  hint:"短期安全性" },
+  { label:"自己資本比率 > 30%",pts:8, hint:"財務健全性" },
+];
+
+// periodsベースでスコア計算するヘルパー
+function scoreFromPeriods(h, baseYear) {
+  const periods = h.periods || {};
+  const baseKey = String(baseYear);
+  let fd = periods[baseKey] || {};
+  if (!Object.values(fd).some(v => v !== "" && v != null)) {
+    const prev = [String(baseYear-1), String(baseYear-2)].map(yr => periods[yr]||{}).find(d => Object.values(d).some(v => v !== "" && v != null));
+    fd = prev || {};
+  }
+  const f = h.financials || {};
+  const merged = Object.values(fd).some(v => v !== "" && v != null)
+    ? { ...fd, price: f.price||fd.price, shinyoBairitu: fd.shinyoBairitu||f.shinyoBairitu }
+    : f;
+  return financialScore(calcAll(merged));
+}
+
 const LS_KEY = "kabulens_v2";
+const LS_WATCH = "kabulens_watch_v1";
 const loadData = () => {
   try {
     const d = localStorage.getItem(LS_KEY);
@@ -96,6 +127,8 @@ const loadData = () => {
   } catch { return null; }
 };
 const saveData = p => { try { localStorage.setItem(LS_KEY, JSON.stringify(p)); } catch {} };
+const loadWatch = () => { try { const d = localStorage.getItem(LS_WATCH); return d ? JSON.parse(d) : []; } catch { return []; } };
+const saveWatch = p => { try { localStorage.setItem(LS_WATCH, JSON.stringify(p)); } catch {} };
 
 const EMPTY_F = { price:"", shares:"", sales:"", grossProfit:"", opProfit:"", ordProfit:"", netProfit:"", totalAssets:"", equity:"", curAssets:"", fixAssets:"", curLiab:"", fixLiab:"", ebitda:"", dividend:"", shinyoBairitu:"" };
 const EMPTY_MEMO = { targetPrice:"", buyReason:"", memo:"" };
@@ -193,7 +226,7 @@ function useResponsive() {
 const TS = { background:"#0d1424", border:"1px solid #1e293b", borderRadius:6, color:"#e2e8f0", fontSize:16 };
 
 const Tag = ({ children, color="#4ade80" }) => (
-  <span style={{ background:color+"22", color, border:`1px solid ${color}44`, borderRadius:4, padding:"2px 8px", fontSize:16, fontWeight:600 }}>{children}</span>
+  <span style={{ background:color+"22", color, border:"1px solid "+(color)+"44", borderRadius:4, padding:"2px 8px", fontSize:16, fontWeight:600 }}>{children}</span>
 );
 
 const Delta = ({ val, fmt = v => v.toFixed(2) }) => (
@@ -388,7 +421,7 @@ const getAnnualKeys = base => [String(base-2), String(base-1), String(base), Str
 const getQtrKeys = base => {
   const keys = [];
   for (let y = base-2; y <= base+1; y++) {
-    ["Q1","Q2","Q3","Q4"].forEach(q => keys.push(`${y}-${q}`));
+    ["Q1","Q2","Q3","Q4"].forEach(q => keys.push((y)+"-"+(q)));
   }
   return keys;
 };
@@ -612,7 +645,7 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
           <Sec title="収益性・資本効率">
             <MBox label="ROE" value={cc.roe?pct(cc.roe):"—"} color={cc.roe&&cc.roe>0.15?"#4ade80":"#94a3b8"} hint="15%超で優良" />
             <MBox label="ROA" value={cc.roa?pct(cc.roa):"—"} color={cc.roa&&cc.roa>0.05?"#4ade80":"#94a3b8"} hint="5%超で優良" />
-            <MBox label="ROIC" value={cc.roic?pct(cc.roic):"—"} color={cc.roic&&cc.roic>0.08?"#4ade80":"#94a3b8"} hint={cc.taxRate!=null?`実効税率${(cc.taxRate*100).toFixed(1)}%で計算`:"税率30%で計算（法人税等未入力）"} />
+            <MBox label="ROIC" value={cc.roic?pct(cc.roic):"—"} color={cc.roic&&cc.roic>0.08?"#4ade80":"#94a3b8"} hint={cc.taxRate!=null?"実効税率"+((cc.taxRate*100).toFixed(1))+"%で計算":"税率30%で計算（法人税等未入力）"} />
             <MBox label="粗利率" value={cc.grossMargin?pct(cc.grossMargin):"—"} color={cc.grossMargin&&cc.grossMargin>0.40?"#4ade80":"#94a3b8"} />
             <MBox label="営業利益率" value={cc.opMargin?pct(cc.opMargin):"—"} color={cc.opMargin&&cc.opMargin>0.10?"#4ade80":"#94a3b8"} hint="10%超で優良" />
             <MBox label="経常利益率" value={cc.ordMargin?pct(cc.ordMargin):"—"} color="#94a3b8" />
@@ -669,7 +702,7 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
                       style={S.input} placeholder="1.2" inputMode="decimal"
                     />
                     <a
-                      href={`https://www.buffett-code.com/company/${selected?.ticker}/`}
+                      href={"https://www.buffett-code.com/company/"+(selected?.ticker)+"/"}
                       target="_blank" rel="noreferrer"
                       style={{ color:"#60a5fa", fontSize:R_CURRENT.sm, textDecoration:"none" }}
                     >
@@ -678,7 +711,7 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
                   </div>
                   {/* 借入金利・Rf・RPは配列で */}
                   {[
-                    ["借入金利 Kd（%）手動入力", "kd", cc.kdAuto != null ? `空欄で自動計算値 ${(cc.kdAuto*100).toFixed(2)}% を使用` : "支払利息を入力すると自動計算", ""],
+                    ["借入金利 Kd（%）手動入力", "kd", cc.kdAuto != null ? "空欄で自動計算値 "+((cc.kdAuto*100).toFixed(2))+"% を使用" : "支払利息を入力すると自動計算", ""],
                     ["リスクフリーレート Rf（%）", "rf", "日本国債10年利回り", "1.5"],
                     ["市場リスクプレミアム（%）", "rp", "日本株超過リターン目安", "5.5"],
                   ].map(([label, key, hint, placeholder]) => (
@@ -701,10 +734,10 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
                 {/* WACC計算結果 */}
                 <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(min(150px,45vw),1fr))", gap:10, marginBottom:16 }}>
                   {[
-                    ["株主資本コスト Ke", pct(waccResult.ke), "#60a5fa", `Rf${(parseFloat(waccParams.rf)).toFixed(1)}% + β${waccParams.beta}×RP${waccParams.rp}%`],
+                    ["株主資本コスト Ke", pct(waccResult.ke), "#60a5fa", "Rf"+((parseFloat(waccParams.rf)).toFixed(1))+"% + β"+(waccParams.beta)+"×RP"+(waccParams.rp)+"%"],
                     ["負債コスト Kd(税後)", pct(waccResult.kd*(1-waccResult.t)), "#94a3b8", waccResult.kdSource+"・税後"],
-                    ["WACC", pct(waccResult.wacc), "#a78bfa", `E/V=${(waccResult.E/waccResult.V*100).toFixed(0)}% D/V=${(waccResult.D/waccResult.V*100).toFixed(0)}%`],
-                    ["ROIC", pct(cc.roic||0), cc.roic&&cc.roic>waccResult.wacc?"#4ade80":"#f87171", cc.taxRate?`実効税率${(cc.taxRate*100).toFixed(1)}%`:"税率30%"],
+                    ["WACC", pct(waccResult.wacc), "#a78bfa", "E/V="+((waccResult.E/waccResult.V*100).toFixed(0))+"% D/V="+((waccResult.D/waccResult.V*100).toFixed(0))+"%"],
+                    ["ROIC", pct(cc.roic||0), cc.roic&&cc.roic>waccResult.wacc?"#4ade80":"#f87171", cc.taxRate?"実効税率"+((cc.taxRate*100).toFixed(1))+"%":"税率30%"],
                     ["スプレッド(ROIC-WACC)", pct(waccResult.spread), waccResult.spread>0?"#4ade80":waccResult.spread>-0.01?"#fbbf24":"#f87171", waccResult.spread>0?"価値創造":"価値毀損"],
                   ].map(([label, val, color, sub]) => (
                     <div key={label} style={{ background:"#111827", borderRadius:8, padding:"10px 14px" }}>
@@ -716,7 +749,7 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
                 </div>
 
                 {/* 投資判断 */}
-                <div style={{ background:"#111827", borderRadius:10, padding:16, marginBottom:16, border:`2px solid ${waccResult.verdictColor}44` }}>
+                <div style={{ background:"#111827", borderRadius:10, padding:16, marginBottom:16, border:"2px solid "+(waccResult.verdictColor)+"44" }}>
                   <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
                     <div style={{ color:"#94a3b8", fontSize:R_CURRENT.md, fontWeight:700 }}>総合投資判断</div>
                     <div style={{ color:waccResult.verdictColor, fontWeight:900, fontSize:R_CURRENT.xl }}>{waccResult.verdict}</div>
@@ -729,7 +762,7 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
                   <div style={{ color:"#475569", fontSize:R_CURRENT.sm, marginBottom:10 }}>{waccResult.score}/8項目クリア</div>
                   <div style={{ display:"grid", gridTemplateColumns:R_CURRENT.grid2, gap:6 }}>
                     {waccResult.checks.map(({ label, ok, val, impact }) => (
-                      <div key={label} style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 10px", background:"#0d1424", borderRadius:6, border:`1px solid ${ok?"#4ade8022":"#f8717122"}` }}>
+                      <div key={label} style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 10px", background:"#0d1424", borderRadius:6, border:"1px solid "+(ok?"#4ade8022":"#f8717122")+"" }}>
                         <span style={{ color:ok?"#4ade80":"#f87171", fontSize:R_CURRENT.lg, flexShrink:0 }}>{ok?"✓":"✗"}</span>
                         <div style={{ flex:1 }}>
                           <div style={{ color:"#94a3b8", fontSize:R_CURRENT.sm }}>{label}</div>
@@ -935,7 +968,7 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
                   ["予想PER", fc.per ? fc.per.toFixed(2)+"x" : "—", "#60a5fa"],
                   ["予想PSR", fc.psr ? fc.psr.toFixed(2)+"x" : "—", "#f59e0b"],
                 ].map(([label, val, color]) => (
-                  <div key={label} style={{ background:"#111827", borderRadius:6, padding:"8px 14px", border:`1px solid ${color}44` }}>
+                  <div key={label} style={{ background:"#111827", borderRadius:6, padding:"8px 14px", border:"1px solid "+(color)+"44" }}>
                     <div style={{ color:"#475569", fontSize:R_CURRENT.sm, marginBottom:2 }}>{label} <span style={{ color:"#fbbf24", fontSize:R_CURRENT.sm }}>(予想)</span></div>
                     <div style={{ color, fontWeight:700, fontSize:R_CURRENT.lg }}>{val}</div>
                   </div>
@@ -1242,6 +1275,45 @@ function InputTab({ selected, periods, updatePeriod, baseYear, annualKeys, qtrKe
   );
 }
 
+function WatchDetail({ watchSelected, watchlist, baseYear, annualKeys, qtrKeys, detailTab, setDetailTab, updateWatchPeriod, sc, R, TS, S }) {
+  const wf = watchSelected.financials || {};
+  const wc = calcAll(wf);
+  const wh = watchlist.find(h => h.id === watchSelected.id) || watchSelected;
+  return (
+    <>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12, flexWrap:"wrap", gap:8 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
+          <span style={{ fontSize:20, fontWeight:800, color:"#f1f5f9" }}>{watchSelected.name}</span>
+          <Tag color="#f59e0b">{watchSelected.ticker}</Tag>
+          <Tag color="#a78bfa">{watchSelected.sector}</Tag>
+          <span style={{ background:"#1a1200", color:"#f59e0b", border:"1px solid #f59e0b44", borderRadius:6, padding:"4px 10px", fontSize:R.sm }}>👀 保有候補</span>
+          {sc != null && <span style={{ background:scoreColor(sc)+"22", color:scoreColor(sc), border:"1px solid "+scoreColor(sc)+"44", borderRadius:6, padding:"4px 10px", fontSize:16, fontWeight:700 }}>総合スコア {sc}pt</span>}
+        </div>
+        <div style={{ textAlign:"right" }}>
+          <div style={{ fontSize:24, fontWeight:900, color:"#f1f5f9" }}>¥{watchSelected.currentPrice.toLocaleString()}</div>
+        </div>
+      </div>
+      <div style={{ display:"flex", gap:4, marginBottom:20, borderBottom:"1px solid #1e293b", paddingBottom:8, flexWrap:"wrap" }}>
+        {[["metrics","財務指標"],["memo","投資メモ"],["input","数値入力"],["ir","IRニュース"]].map(([k,v]) => (
+          <button key={k} style={{ ...S.navBtn, ...(detailTab===k?S.navOn:{}) }} onClick={() => setDetailTab(k)}>{v}</button>
+        ))}
+      </div>
+      {detailTab === "metrics" && (
+        <MetricsTab c={wc} f={wf} selected={wh} periods={wh.periods||{}} baseYear={baseYear} annualKeys={annualKeys} qtrKeys={qtrKeys} R={R} TS={TS} />
+      )}
+      {detailTab === "input" && (
+        <InputTab selected={wh} periods={wh.periods||{}} updatePeriod={(periodKey, fieldKey, val) => updateWatchPeriod(watchSelected.id, periodKey, fieldKey, val)} baseYear={baseYear} annualKeys={annualKeys} qtrKeys={qtrKeys} TS={TS} />
+      )}
+      {detailTab === "memo" && (
+        <div style={S.card}><div style={{ color:"#475569" }}>投資メモは保有銘柄のみ対応しています。</div></div>
+      )}
+      {detailTab === "ir" && (
+        <div style={S.card}><div style={{ color:"#475569" }}>IRニュースは保有銘柄のみ対応しています。</div></div>
+      )}
+    </>
+  );
+}
+
 export default function App() {
   const [zoom, setZoom] = useState(100);
 
@@ -1255,6 +1327,9 @@ export default function App() {
   const [compareIds, setCompareIds] = useState([]);
   const [baseYear, setBaseYear]   = useState(() => loadBaseYear());
   const [undoData, setUndoData]   = useState(() => loadUndoData());
+  const [watchlist, setWatchlist] = useState(() => loadWatch());
+  const [watchSelected, setWatchSelected] = useState(null);
+  const [portfolioMode, setPortfolioMode] = useState("portfolio"); // "portfolio" | "watchlist"
   const ANNUAL_KEYS = getAnnualKeys(baseYear);
   const QTR_KEYS = getQtrKeys(baseYear);
   const [simParams, setSimParams] = useState({ years:"5", growthRate:"15", targetMargin:"15", targetPer:"20", targetEvEbitda:"", dividendRate:"2", reinvest:true });
@@ -1309,8 +1384,15 @@ export default function App() {
 
   const addStock = () => {
     const { ticker, name, sector, qty, avgCost, currentPrice } = addForm;
-    if (!ticker||!name||!qty||!avgCost||!currentPrice) return;
-    save(p => [...p, { id:Date.now(), ticker, name, sector:sector||"—", qty:+qty, avgCost:+avgCost, currentPrice:+currentPrice, financials:{ ...EMPTY_F, price:currentPrice }, memo:{ ...EMPTY_MEMO }, irList:[] }]);
+    if (!ticker||!name||!currentPrice) return;
+    const base = { id:Date.now(), ticker, name, sector:sector||"—", currentPrice:+currentPrice, financials:{ ...EMPTY_F, price:currentPrice }, memo:{ ...EMPTY_MEMO }, irList:[], periods:{} };
+    if (portfolioMode === "watchlist") {
+      // 候補リストに追加（qty/avgCostは不要）
+      saveWatch2(p => [...p, { ...base, qty:0, avgCost:0, isWatch:true }]);
+    } else {
+      if (!qty||!avgCost) return;
+      save(p => [...p, { ...base, qty:+qty, avgCost:+avgCost }]);
+    }
     setAddForm({ ticker:"", name:"", sector:"", qty:"", avgCost:"", currentPrice:"" });
     setShowAdd(false);
   };
@@ -1346,6 +1428,60 @@ export default function App() {
     setShinInputs({});
     setShowPriceUpdate(false);
   };
+
+  const saveWatch2 = useCallback(updater => {
+    setWatchlist(prev => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      saveWatch(next);
+      return next;
+    });
+  }, []);
+
+  const addToWatch = (h) => {
+    // ポートフォリオから候補リストへコピー（qty/avgCostは0に）
+    const wh = { ...h, id: Date.now(), qty: 0, avgCost: 0, isWatch: true };
+    saveWatch2(p => [...p, wh]);
+  };
+
+  const [moveForm, setMoveForm] = useState({ qty:"", avgCost:"", id:null });
+
+  const moveToPortfolio = (wh) => {
+    setMoveForm({ qty:"100", avgCost:String(wh.currentPrice), id:wh.id });
+  };
+
+  const applyMove = () => {
+    const wh = watchlist.find(h => h.id === moveForm.id);
+    if (!wh) return;
+    const qty = parseFloat(moveForm.qty);
+    const avgCost = parseFloat(moveForm.avgCost);
+    if (!qty || !avgCost) return;
+    const ph = { ...wh, id:Date.now(), qty, avgCost, isWatch:false };
+    save(p => [...p, ph]);
+    saveWatch2(p => p.filter(w => w.id !== wh.id));
+    setMoveForm({ qty:"", avgCost:"", id:null });
+  };
+
+  const deleteWatch = useCallback(id => {
+    if (!window.confirm("この候補銘柄を削除しますか？")) return;
+    saveWatch2(p => p.filter(h => h.id !== id));
+    if (watchSelected?.id === id) setWatchSelected(watchlist.find(w => w.id !== id) || null);
+  }, [watchSelected, watchlist, saveWatch2]);
+
+  const updateWatchPeriod = useCallback((id, periodKey, fieldKey, val) => {
+    saveWatch2(p => p.map(h => {
+      if (h.id !== id) return h;
+      const periods = { ...(h.periods || {}) };
+      periods[periodKey] = { ...(periods[periodKey] || {}), [fieldKey]: val };
+      return { ...h, periods };
+    }));
+    if (watchSelected?.id === id) {
+      setWatchSelected(s => {
+        const periods = { ...(s.periods || {}) };
+        periods[periodKey] = { ...(periods[periodKey] || {}), [fieldKey]: val };
+        return { ...s, periods };
+      });
+    }
+  }, [watchSelected, saveWatch2]);
 
   const addIR = () => {
     if (!irForm.title||!irForm.date) return;
@@ -1525,7 +1661,7 @@ export default function App() {
   }, [selected]);
 
   return (
-    <div style={{ ...S.root, transformOrigin:"top left", transform:`scale(${zoom/100})`, width:`${10000/zoom}%` }}>
+    <div style={{ ...S.root, transformOrigin:"top left", transform:"scale(" + String(zoom/100) + ")", width:String(Math.round(10000/zoom)) + "%" }}>
       <header style={S.header}>
         <div style={{ display:"flex", alignItems:"center", gap:8 }}>
           <span style={{ fontSize:22 }}>📈</span>
@@ -1576,6 +1712,83 @@ export default function App() {
 
         {tab === "portfolio" && (
           <div>
+            {/* 保有/候補切り替え */}
+            <div style={{ display:"flex", gap:8, marginBottom:16 }}>
+              <button style={{ ...S.navBtn, ...(portfolioMode==="portfolio"?S.navOn:{}) }} onClick={() => setPortfolioMode("portfolio")}>
+                📈 保有銘柄（{portfolio.length}）
+              </button>
+              <button style={{ ...S.navBtn, ...(portfolioMode==="watchlist"?{ ...S.navOn, borderColor:"#f59e0b", color:"#f59e0b", background:"#1a1200" }:{}) }} onClick={() => setPortfolioMode("watchlist")}>
+                👀 保有候補（{watchlist.length}）
+              </button>
+            </div>
+
+            {portfolioMode === "watchlist" && (
+              <div>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16, flexWrap:"wrap", gap:8 }}>
+                  <h2 style={{ ...S.h2, color:"#f59e0b" }}>保有候補リスト</h2>
+                  <button style={{ ...S.addBtn, borderColor:"#f59e0b", color:"#f59e0b", background:"#1a1200" }} onClick={() => setShowAdd(v => !v)}>+ 候補追加</button>
+                </div>
+                <div style={{ color:"#475569", fontSize:R.sm, marginBottom:12 }}>
+                  売却済み・検討中の銘柄を保存。財務指標・数値入力は「銘柄詳細」から確認できます。保有に移行する場合は「保有へ」ボタンを押してください。
+                </div>
+                {/* 保有移行フォーム */}
+                {moveForm.id && (
+                  <div style={{ ...S.card, border:"1px solid #4ade8044", marginBottom:16 }}>
+                    <div style={{ color:"#4ade80", fontWeight:700, marginBottom:12 }}>保有銘柄に追加</div>
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:12 }}>
+                      <div>
+                        <label style={{ color:"#64748b", fontSize:R.sm, display:"block", marginBottom:4 }}>保有数量（株）</label>
+                        <input value={moveForm.qty} onChange={e => setMoveForm(p=>({...p,qty:e.target.value}))} style={S.input} inputMode="decimal" />
+                      </div>
+                      <div>
+                        <label style={{ color:"#64748b", fontSize:R.sm, display:"block", marginBottom:4 }}>平均取得単価（円）</label>
+                        <input value={moveForm.avgCost} onChange={e => setMoveForm(p=>({...p,avgCost:e.target.value}))} style={S.input} inputMode="decimal" />
+                      </div>
+                    </div>
+                    <div style={{ display:"flex", gap:8 }}>
+                      <button style={S.addBtn} onClick={applyMove}>保有に追加する</button>
+                      <button style={S.miniBtn} onClick={() => setMoveForm({qty:"",avgCost:"",id:null})}>キャンセル</button>
+                    </div>
+                  </div>
+                )}
+
+                {watchlist.length === 0 ? (
+                  <div style={{ ...S.card, color:"#475569", textAlign:"center", padding:32 }}>
+                    候補銘柄がありません。「+ 候補追加」から追加してください。
+                  </div>
+                ) : (
+                  <div style={{ ...S.table, overflowX:"auto" }}>
+                    <div style={{ minWidth:700 }}>
+                      <div style={{ display:"grid", gridTemplateColumns:"2fr 0.6fr 1fr 1fr 0.6fr 1.4fr", padding:"12px 20px", background:"#111827", gap:10 }}>
+                        {["銘柄","コード","現在値","スコア","","操作"].map(h => (
+                          <span key={h} style={{ fontSize:R.sm, color:"#475569" }}>{h}</span>
+                        ))}
+                      </div>
+                      {watchlist.map(h => {
+                        const wsc = scoreFromPeriods(h, baseYear);
+                        return (
+                          <div key={h.id} style={{ display:"grid", gridTemplateColumns:"2fr 0.6fr 1fr 1fr 0.6fr 1.4fr", padding:"12px 20px", gap:10, borderTop:"1px solid #1e293b", alignItems:"center", ...(watchSelected?.id===h.id?{ background:"#1a1200" }:{}) }}>
+                            <span style={{ fontWeight:700, color:"#e2e8f0" }}>{h.name}<br/><span style={{ color:"#475569", fontSize:R.sm }}>{h.sector}</span></span>
+                            <span><Tag color="#f59e0b">{h.ticker}</Tag></span>
+                            <span style={{ fontWeight:700, color:"#e2e8f0" }}>¥{h.currentPrice.toLocaleString()}</span>
+                            <span style={{ color:wsc!=null?scoreColor(wsc):"#475569", fontWeight:700 }}>{wsc!=null?wsc+"pt":"—"}</span>
+                            <span></span>
+                            <span style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
+                              <button style={S.miniBtn} onClick={() => { setWatchSelected(h); setTab("detail"); setDetailTab("metrics"); }}>詳細</button>
+                              <button style={{ ...S.miniBtn, color:"#4ade80", borderColor:"#4ade80" }} onClick={() => moveToPortfolio(h)}>保有へ</button>
+                              <button style={{ ...S.miniBtn, color:"#f87171", borderColor:"#f87171" }} onClick={() => deleteWatch(h.id)}>削除</button>
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {portfolioMode === "portfolio" && (
+            <div>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16, flexWrap:"wrap", gap:8 }}>
               <h2 style={S.h2}>保有銘柄一覧</h2>
               <div style={{ display:"flex", gap:8 }}>
@@ -1633,18 +1846,22 @@ export default function App() {
             )}
 
             {showAdd && (
-              <div style={{ ...S.card, marginBottom:16 }}>
-                <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:12 }}>新規銘柄追加</div>
+              <div style={{ ...S.card, marginBottom:16, border:"1px solid "+(portfolioMode==="watchlist"?"#f59e0b44":"#334155")+"" }}>
+                <div style={{ color: portfolioMode==="watchlist"?"#f59e0b":"#94a3b8", fontWeight:700, marginBottom:12 }}>
+                  {portfolioMode==="watchlist" ? "👀 候補銘柄を追加" : "新規銘柄追加"}
+                </div>
                 <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(min(160px,45vw),1fr))", gap:12 }}>
                   <FInput label="証券コード（例: 7203）" value={addForm.ticker} onChange={v => setAddForm(p => ({ ...p, ticker:v }))} inputType="ticker" />
                   <FInput label="銘柄名" value={addForm.name} onChange={v => setAddForm(p => ({ ...p, name:v }))} maxLen={30} />
                   <FInput label="セクター" value={addForm.sector} onChange={v => setAddForm(p => ({ ...p, sector:v }))} maxLen={20} />
-                  <FInput label="保有数量（株）" value={addForm.qty} onChange={v => setAddForm(p => ({ ...p, qty:v }))} numOnly={true} />
-                  <FInput label="平均取得単価（円）" value={addForm.avgCost} onChange={v => setAddForm(p => ({ ...p, avgCost:v }))} numOnly={true} />
+                  {portfolioMode !== "watchlist" && <>
+                    <FInput label="保有数量（株）" value={addForm.qty} onChange={v => setAddForm(p => ({ ...p, qty:v }))} numOnly={true} />
+                    <FInput label="平均取得単価（円）" value={addForm.avgCost} onChange={v => setAddForm(p => ({ ...p, avgCost:v }))} numOnly={true} />
+                  </>}
                   <FInput label="現在株価（円）" value={addForm.currentPrice} onChange={v => setAddForm(p => ({ ...p, currentPrice:v }))} numOnly={true} />
                 </div>
                 <div style={{ marginTop:12, display:"flex", gap:8 }}>
-                  <button style={S.addBtn} onClick={addStock}>追加する</button>
+                  <button style={{ ...S.addBtn, ...(portfolioMode==="watchlist"?{ borderColor:"#f59e0b", color:"#f59e0b", background:"#1a1200" }:{}) }} onClick={addStock}>追加する</button>
                   <button style={S.miniBtn} onClick={() => setShowAdd(false)}>キャンセル</button>
                 </div>
               </div>
@@ -1659,7 +1876,7 @@ export default function App() {
               </div>
               {portfolio.map(h => {
                 const pnlPct = ((h.currentPrice-h.avgCost)/h.avgCost)*100;
-                const hsc = financialScore(calcAll(h.financials));
+                const hsc = scoreFromPeriods(h, baseYear);
                 const tp = n(h.memo?.targetPrice);
                 const tpPct = tp ? ((h.currentPrice-tp)/tp*100) : null;
                 return (
@@ -1679,7 +1896,10 @@ export default function App() {
                     </span>
                     <span style={{ color:"#e2e8f0" }}>¥{(h.qty*h.currentPrice).toLocaleString()}</span>
                     <span><Delta val={pnlPct} fmt={v => v.toFixed(2)+"%"} /></span>
-                    <span style={{ color:hsc!=null?scoreColor(hsc):"#475569", fontWeight:700 }}>{hsc!=null?hsc+"pt":"—"}</span>
+                    <span style={{ color:hsc!=null?scoreColor(hsc):"#475569", fontWeight:700, cursor:"help", position:"relative" }}
+                      title={SCORE_CRITERIA.map(c2 => (c2.label)+"("+(c2.pts)+"pt): "+(c2.hint)).join('\n')}>
+                      {hsc!=null?hsc+"pt":"—"}
+                    </span>
                     <span style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
                       <button style={S.miniBtn} onClick={() => { setSelected(h); setTab("detail"); setDetailTab("memo"); }}>メモ</button>
                       <button style={S.miniBtn} onClick={() => { setSelected(h); setTab("detail"); setDetailTab("metrics"); }}>詳細</button>
@@ -1746,16 +1966,42 @@ export default function App() {
             )}
           </div>
         )}
+          </div>
+        )}
 
         {tab === "detail" && (
           <div>
             <h2 style={S.h2}>銘柄詳細</h2>
+            {/* 保有銘柄チップ */}
             <div style={S.chips}>
               {portfolio.map(h => (
-                <button key={h.id} style={{ ...S.chip, ...(selected?.id===h.id?S.chipOn:{}) }} onClick={() => setSelected(h)}>{h.ticker} {h.name}</button>
+                <button key={h.id} style={{ ...S.chip, ...(selected?.id===h.id&&!watchSelected?S.chipOn:{}) }}
+                  onClick={() => { setSelected(h); setWatchSelected(null); }}>{h.ticker} {h.name}</button>
+              ))}
+              {watchlist.length > 0 && <span style={{ color:"#475569", fontSize:R.sm, alignSelf:"center" }}>｜候補:</span>}
+              {watchlist.map(h => (
+                <button key={h.id} style={{ ...S.chip, ...(watchSelected?.id===h.id?{ ...S.chipOn, borderColor:"#f59e0b", color:"#f59e0b", background:"#1a1200" }:{}), borderStyle:"dashed" }}
+                  onClick={() => { setWatchSelected(h); setSelected(null); }}>{h.ticker} {h.name}</button>
               ))}
             </div>
-            {!selected && <div style={S.card}><span style={{ color:"#64748b" }}>銘柄を選択してください。</span></div>}
+
+            {/* 候補銘柄の詳細 */}
+            {watchSelected && !selected && (
+              <WatchDetail
+                watchSelected={watchSelected}
+                watchlist={watchlist}
+                baseYear={baseYear}
+                annualKeys={ANNUAL_KEYS}
+                qtrKeys={QTR_KEYS}
+                detailTab={detailTab}
+                setDetailTab={setDetailTab}
+                updateWatchPeriod={updateWatchPeriod}
+                sc={scoreFromPeriods(watchSelected, baseYear)}
+                R={R} TS={TS} S={S}
+              />
+            )}
+
+            {!selected && !watchSelected && <div style={S.card}><span style={{ color:"#64748b" }}>銘柄を選択してください。</span></div>}
             {selected && (
               <>
                 <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12, flexWrap:"wrap", gap:8 }}>
@@ -1763,7 +2009,7 @@ export default function App() {
                     <span style={{ fontSize:20, fontWeight:800, color:"#f1f5f9" }}>{selected.name}</span>
                     <Tag color="#60a5fa">{selected.ticker}</Tag>
                     <Tag color="#a78bfa">{selected.sector}</Tag>
-                    {sc != null && <span style={{ background:scoreColor(sc)+"22", color:scoreColor(sc), border:`1px solid ${scoreColor(sc)}44`, borderRadius:6, padding:"4px 10px", fontSize:16, fontWeight:700 }}>総合スコア {sc}pt</span>}
+                    {sc != null && <span style={{ background:scoreColor(sc)+"22", color:scoreColor(sc), border:"1px solid "+(scoreColor(sc))+"44", borderRadius:6, padding:"4px 10px", fontSize:16, fontWeight:700 }}>総合スコア {sc}pt</span>}
                   </div>
                   <div style={{ textAlign:"right" }}>
                     <div style={{ fontSize:24, fontWeight:900, color:"#f1f5f9" }}>¥{selected.currentPrice.toLocaleString()}</div>
@@ -1803,7 +2049,7 @@ export default function App() {
                               </span>
                             </div>
                             <div style={{ height:6, background:"#1e293b", borderRadius:3, overflow:"hidden" }}>
-                              <div style={{ height:"100%", width:`${Math.min(100,Math.max(0,(selected.currentPrice/n(selected.memo.targetPrice))*100))}%`, background:"#a78bfa", borderRadius:3 }} />
+                              <div style={{ height:"100%", width:(Math.min(100,Math.max(0,(selected.currentPrice/n(selected.memo.targetPrice))*100)))+"%", background:"#a78bfa", borderRadius:3 }} />
                             </div>
                           </div>
                         )}
@@ -1970,7 +2216,7 @@ export default function App() {
                       const px = Math.min(Math.max((cm.equityRatio||0)*100,0),80)/80*85+7;
                       const py = 100-Math.min(Math.max((cm.opMargin||0)*100,0),30)/30*85-7;
                       return (
-                        <div key={h.id} style={{ position:"absolute", left:`${px}%`, top:`${py}%`, transform:"translate(-50%,-50%)", background:CMP_COLORS[i], borderRadius:"50%", width:36, height:36, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, fontWeight:700, color:"#0a0f1a", boxShadow:`0 0 12px ${CMP_COLORS[i]}66` }}>
+                        <div key={h.id} style={{ position:"absolute", left:(px)+"%", top:(py)+"%", transform:"translate(-50%,-50%)", background:CMP_COLORS[i], borderRadius:"50%", width:36, height:36, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, fontWeight:700, color:"#0a0f1a", boxShadow:"0 0 12px "+(CMP_COLORS[i])+"66" }}>
                           {h.ticker}
                         </div>
                       );
@@ -2092,7 +2338,7 @@ export default function App() {
                         const breakY = rows.findIndex(r => r[key] && r[key] > selected.avgCost);
                         const cagr = last && selected.currentPrice > 0 ? ((Math.pow(last/selected.currentPrice, 1/(+simParams.years||1))-1)*100).toFixed(1) : null;
                         return (
-                          <div key={key} style={{ background:"#111827", border:`1px solid ${color}33`, borderRadius:8, padding:"12px 16px" }}>
+                          <div key={key} style={{ background:"#111827", border:"1px solid "+(color)+"33", borderRadius:8, padding:"12px 16px" }}>
                             <div style={{ color, fontWeight:700, marginBottom:8 }}>{label}シナリオ</div>
                             <div style={{ color:"#475569", fontSize:16, marginBottom:4 }}>最終推定株価</div>
                             <div style={{ color, fontWeight:700, fontSize:18, marginBottom:8 }}>{"¥"+(last?.toLocaleString()||"—")}</div>
@@ -2182,7 +2428,7 @@ export default function App() {
                             <div style={{ color:"#475569", fontSize:16, marginBottom:6 }}>現在株価</div>
                             <div style={{ color:"#f1f5f9", fontWeight:900, fontSize:28 }}>¥{safetyMargin.price.toLocaleString()}</div>
                           </div>
-                          <div style={{ background:safetyMargin.margin>0?"#0f2a1a":"#2a0f0f", border:`1px solid ${safetyMargin.margin>0?"#4ade80":"#f87171"}44`, borderRadius:8, padding:16, textAlign:"center" }}>
+                          <div style={{ background:safetyMargin.margin>0?"#0f2a1a":"#2a0f0f", border:"1px solid "+(safetyMargin.margin>0?"#4ade80":"#f87171")+"44", borderRadius:8, padding:16, textAlign:"center" }}>
                             <div style={{ color:"#475569", fontSize:16, marginBottom:6 }}>安全余裕率</div>
                             <div style={{ color:safetyMargin.margin>0?"#4ade80":"#f87171", fontWeight:900, fontSize:28 }}>{safetyMargin.margin>0?"+":""}{safetyMargin.margin.toFixed(1)}%</div>
                             <div style={{ color:"#475569", fontSize:16, marginTop:4 }}>{safetyMargin.margin>0?"割安（買い余地あり）":"割高（適正価格超え）"}</div>
@@ -2194,7 +2440,7 @@ export default function App() {
                             <div style={{ position:"absolute", inset:0, background:"linear-gradient(to right, #f87171, #fbbf24, #4ade80)", opacity:0.15 }} />
                             <div style={{ position:"absolute", top:0, bottom:0, left:"50%", width:2, background:"#4ade80", opacity:0.6 }} />
                             <div style={{ position:"absolute", top:4, left:"50%", transform:"translateX(-50%)", color:"#4ade80", fontSize:16, whiteSpace:"nowrap" }}>適正 ¥{safetyMargin.fair.toLocaleString()}</div>
-                            <div style={{ position:"absolute", top:0, bottom:0, left:`${50-Math.min(Math.max(safetyMargin.margin,-50),50)}%`, width:3, background:"#f59e0b", borderRadius:2 }}>
+                            <div style={{ position:"absolute", top:0, bottom:0, left:(50-Math.min(Math.max(safetyMargin.margin,-50),50))+"%", width:3, background:"#f59e0b", borderRadius:2 }}>
                               <div style={{ position:"absolute", bottom:4, left:"50%", transform:"translateX(-50%)", color:"#f59e0b", fontSize:16, whiteSpace:"nowrap" }}>現在 ¥{safetyMargin.price.toLocaleString()}</div>
                             </div>
                           </div>
@@ -2252,7 +2498,7 @@ export default function App() {
                               <span style={{ color:monteData.probUp>50?"#4ade80":"#f87171", fontWeight:700, fontSize:20 }}>{monteData.probUp.toFixed(1)}%</span>
                             </div>
                             <div style={{ height:8, background:"#1e293b", borderRadius:4, overflow:"hidden" }}>
-                              <div style={{ height:"100%", width:`${monteData.probUp}%`, background:monteData.probUp>50?"#4ade80":"#f87171", borderRadius:4 }} />
+                              <div style={{ height:"100%", width:""+(monteData.probUp)+"%", background:monteData.probUp>50?"#4ade80":"#f87171", borderRadius:4 }} />
                             </div>
                             <div style={{ display:"flex", justifyContent:"space-between", marginTop:4, fontSize:16, color:"#334155" }}>
                               <span>現在 ¥{monteData.price.toLocaleString()}</span>
