@@ -28,24 +28,36 @@ function calcAll(f) {
   const ca = n(f.curAssets), fa = n(f.fixAssets);
   const cl = n(f.curLiab), fl = n(f.fixLiab);
   const div = n(f.dividend);
-  const depTangible = n(f.depTangible);    // 減価償却費（有形）
-  const depIntangible = n(f.depIntangible); // 償却費（無形・のれん）
-  // EBITDA: 手入力があれば優先、なければ自動計算
+  const depTangible = n(f.depTangible);
+  const depIntangible = n(f.depIntangible);
+  const taxExp = n(f.taxExp); // 法人税等
+
+  // EBITDA自動計算
   const ebitdaManual = n(f.ebitda);
   const ebitdaCalc = op != null ? op + (depTangible||0) + (depIntangible||0) : null;
   const ebitda = ebitdaManual != null ? ebitdaManual : ebitdaCalc;
+
+  // 実効税率: 法人税等 ÷ 税引前純利益(=経常利益で近似)
+  // 入力がなければデフォルト30%
+  const taxRate = (taxExp != null && ord != null && ord > 0)
+    ? Math.min(Math.max(taxExp / ord, 0), 0.5)
+    : 0.30;
+  // NOPAT = 営業利益 × (1 - 実効税率)
+  const nopat = op != null ? op * (1 - taxRate) : null;
+  const ic = ta != null && cl != null ? ta - cl : null;
 
   const marketCap = price != null && shares != null ? price * shares * 1000 : null;
   const netDebt = ta != null && eq != null && ca != null ? (ta - eq) - ca : null;
   const ev = marketCap != null && netDebt != null ? marketCap + netDebt : null;
   const eps = net != null && shares > 0 ? net / (shares * 1000) : null;
   const bps = eq != null && shares > 0 ? eq / (shares * 1000) : null;
-  const ic = ta != null && cl != null ? ta - cl : null;
   return {
     marketCap, ev, eps, bps, ebitda, ebitdaCalc, depTangible, depIntangible,
+    taxRate, nopat,
     grossMargin: safe(gp, sales), opMargin: safe(op, sales), ordMargin: safe(ord, sales),
     netMargin: safe(net, sales),
-    roe: safe(net, eq), roa: safe(ord, ta), roic: safe(op, ic),
+    roe: safe(net, eq), roa: safe(ord, ta),
+    roic: safe(nopat, ic), // NOPATベースに変更
     currentRatio: safe(ca, cl), fixedRatio: safe(fa, eq),
     fixedLTRatio: fa != null && eq != null && fl != null && (eq + fl) !== 0 ? fa / (eq + fl) : null,
     equityRatio: safe(eq, ta), debtRatio: ta != null && eq != null && eq !== 0 ? (ta - eq) / eq : null,
@@ -104,7 +116,7 @@ const DESC = {
   "EV/EBITDA":{ title:"EV/EBITDA倍率", formula:"EV / EBITDA", what:"企業買収コストを何年で回収できるか。国際比較に適した指標。", judge:"10倍未満:割安 / 20倍超:割高目安", note:"EV=時価総額+純有利子負債。" },
   "ROE":{ title:"ROE（自己資本利益率）", formula:"純利益 / 自己資本", what:"株主出資額でどれだけ利益を生んだか。", judge:"15%超:優良 / 5%未満:要注意", note:"ROE8%超がJPX指針の要求水準。" },
   "ROA":{ title:"ROA（総資産利益率）", formula:"経常利益 / 総資産", what:"全資産でどれだけ利益を生んだか。経営効率の総合指標。", judge:"5%超:優良 / 1%未満:要注意", note:"業種により水準が大きく異なる。" },
-  "ROIC":{ title:"ROIC（投下資本利益率）", formula:"営業利益 / 投下資本", what:"事業に投下した資本でどれだけ利益を生んだか。", judge:"8%超:優良 / 5%未満:要注意", note:"WACC（加重平均資本コスト）を上回るかが鍵。" },
+  "ROIC":{ title:"ROIC（投下資本利益率）", formula:"【正確】NOPAT / (純資産 + 有利子負債)\n【概算・当アプリ】営業利益×(1-実効税率) / (純資産+固定負債)\n実効税率 = 法人税等 / 経常利益（未入力時は30%）", what:"事業に投下した資本でどれだけ利益を生んだか。", judge:"8%超:優良 / 5%未満:要注意", note:"法人税等を入力するとより正確な値になります。固定負債≒有利子負債の近似。" },
   "粗利率":{ title:"粗利率", formula:"売上総利益 / 売上高", what:"製品・サービスそのものの収益性。原価を除いた利益率。", judge:"40%超:高付加価値 / 20%未満:薄利多売", note:"IT・ソフト系は60〜80%、製造業は20〜40%が目安。" },
   "営業利益率":{ title:"営業利益率", formula:"営業利益 / 売上高", what:"本業で稼いだ利益率。販管費差引後の収益力。", judge:"10%超:優良 / 3%未満:要注意", note:"継続的な改善トレンドも重要。" },
   "経常利益率":{ title:"経常利益率", formula:"経常利益 / 売上高", what:"財務活動も含めた通常の経営活動の利益率。", judge:"営業利益率との乖離が大きい場合は財務構造を確認", note:"経常>営業なら財務健全。逆なら借入コスト大。" },
@@ -262,6 +274,7 @@ const INPUT_FIELDS = [
   { label:"固定負債（円）", key:"fixLiab" },
   { label:"減価償却費（円）", key:"depTangible", hint:"有形固定資産の減価償却費" },
   { label:"償却費（円）", key:"depIntangible", hint:"無形固定資産・のれん等" },
+  { label:"法人税等（円）", key:"taxExp", hint:"P/Lの法人税・住民税・事業税の合計 ※ROIC計算に使用" },
   { label:"1株配当（円）", key:"dividend" },
   { label:"信用倍率（倍）", key:"shinyoBairitu" },
 ]; 
@@ -351,6 +364,7 @@ const PERIOD_FIELDS = [
   { label:"固定負債（円）",          key:"fixLiab" },
   { label:"減価償却費（円）",        key:"depTangible",   hint:"有形固定資産の減価償却費" },
   { label:"償却費（円）",            key:"depIntangible", hint:"無形固定資産・のれん等" },
+  { label:"法人税等（円）",           key:"taxExp",        hint:"P/Lの法人税・住民税・事業税 ※ROIC計算に使用" },
   { label:"1株配当（円）",           key:"dividend" },
   { label:"信用倍率（倍）",          key:"shinyoBairitu" },
 ];
@@ -544,7 +558,7 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
           <Sec title="収益性・資本効率">
             <MBox label="ROE" value={cc.roe?pct(cc.roe):"—"} color={cc.roe&&cc.roe>0.15?"#4ade80":"#94a3b8"} hint="15%超で優良" />
             <MBox label="ROA" value={cc.roa?pct(cc.roa):"—"} color={cc.roa&&cc.roa>0.05?"#4ade80":"#94a3b8"} hint="5%超で優良" />
-            <MBox label="ROIC" value={cc.roic?pct(cc.roic):"—"} color={cc.roic&&cc.roic>0.08?"#4ade80":"#94a3b8"} hint="8%超で優良" />
+            <MBox label="ROIC" value={cc.roic?pct(cc.roic):"—"} color={cc.roic&&cc.roic>0.08?"#4ade80":"#94a3b8"} hint={cc.taxRate!=null?`実効税率${(cc.taxRate*100).toFixed(1)}%で計算`:"税率30%で計算（法人税等未入力）"} />
             <MBox label="粗利率" value={cc.grossMargin?pct(cc.grossMargin):"—"} color={cc.grossMargin&&cc.grossMargin>0.40?"#4ade80":"#94a3b8"} />
             <MBox label="営業利益率" value={cc.opMargin?pct(cc.opMargin):"—"} color={cc.opMargin&&cc.opMargin>0.10?"#4ade80":"#94a3b8"} hint="10%超で優良" />
             <MBox label="経常利益率" value={cc.ordMargin?pct(cc.ordMargin):"—"} color="#94a3b8" />
