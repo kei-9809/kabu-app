@@ -94,6 +94,8 @@ const CRITERIA_PRESETS = {
     evEbitda:    { dir:"lt", good:15,   great:8,    goodPts:2,  greatPts:5  },
     equityRatio: { dir:"gt", good:0.35, great:0.55, goodPts:2,  greatPts:4  },
     currentRatio:{ dir:"gt", good:1.5,  great:2.5,  goodPts:2,  greatPts:3  },
+    salesGrowth: { dir:"gt", good:5,    great:10,   goodPts:3,  greatPts:8  },
+    opGrowth:    { dir:"gt", good:5,    great:15,   goodPts:2,  greatPts:6  },
   },
   // グロース株基準（成長性・粗利率・Rule of 40を重視）
   growth: {
@@ -112,6 +114,10 @@ const CRITERIA_PRESETS = {
     evEbitda:    { dir:"lt", good:30,   great:15,   goodPts:2,  greatPts:5  },
     equityRatio: { dir:"gt", good:0.25, great:0.40, goodPts:2,  greatPts:4  },
     currentRatio:{ dir:"gt", good:1.0,  great:1.5,  goodPts:2,  greatPts:3  },
+    salesGrowth: { dir:"gt", good:15,   great:25,   goodPts:3,  greatPts:8  },
+    opGrowth:    { dir:"gt", good:10,   great:20,   goodPts:2,  greatPts:6  },
+    salesGrowth: { dir:"gt", good:15,   great:25,   goodPts:3,  greatPts:8  },
+    opGrowth:    { dir:"gt", good:10,   great:20,   goodPts:2,  greatPts:6  },
   },
 };
 
@@ -132,6 +138,12 @@ const DEFAULT_CRITERIA = {
   evEbitda:    { dir:"lt", good:20,   great:10,   goodPts:2,  greatPts:5  },
   equityRatio: { dir:"gt", good:0.30, great:0.50, goodPts:2,  greatPts:4  },
   currentRatio:{ dir:"gt", good:1.2,  great:2.0,  goodPts:2,  greatPts:3  },
+  salesGrowth: { dir:"gt", good:8,    great:15,   goodPts:3,  greatPts:8  },
+  opGrowth:    { dir:"gt", good:5,    great:15,   goodPts:2,  greatPts:6  },
+  salesGrowth: { dir:"gt", good:8,    great:15,   goodPts:3,  greatPts:8  },
+  opGrowth:    { dir:"gt", good:5,    great:15,   goodPts:2,  greatPts:6  },
+  salesGrowth: { dir:"gt", good:8,    great:15,   goodPts:3,  greatPts:8  },
+  opGrowth:    { dir:"gt", good:5,    great:15,   goodPts:2,  greatPts:6  },
 };
 
 // criteriaはDEFAULT_CRITERIAまたは銘柄ごとのカスタム基準値
@@ -162,6 +174,8 @@ function financialScore(c, criteria) {
   add2(c.evEbitda,    "evEbitda");
   add2(c.equityRatio, "equityRatio");
   add2(c.currentRatio,"currentRatio");
+  if (c.salesGrowth != null) add2(c.salesGrowth, "salesGrowth");
+  if (c.opGrowth != null)    add2(c.opGrowth,    "opGrowth");
 
   return t > 0 ? Math.round((s / t) * 100) : null;
 }
@@ -180,6 +194,8 @@ const CRITERIA_META = [
   { key:"evEbitda",    label:"EV/EBITDA",   unit:"倍",  dir:"lt", cat:"資本効率", desc:"企業価値倍率" },
   { key:"equityRatio", label:"自己資本比率", unit:"%",   dir:"gt", cat:"健全性",  desc:"財務健全性", scale:100 },
   { key:"currentRatio",label:"流動比率",    unit:"%",   dir:"gt", cat:"健全性",  desc:"短期安全性", scale:100 },
+  { key:"salesGrowth", label:"売上成長率(YoY)", unit:"%", dir:"gt", cat:"成長性", desc:"前年比売上高成長率" },
+  { key:"opGrowth",    label:"営業利益成長率(YoY)", unit:"%", dir:"gt", cat:"成長性", desc:"前年比営業利益成長率" },
 ];
 
 const SCORE_CRITERIA = CRITERIA_META.map(m => {
@@ -210,18 +226,22 @@ function scoreFromPeriods(h, globalBaseYear) {
     ? { ...fd, price: f.price||fd.price, shinyoBairitu: fd.shinyoBairitu||f.shinyoBairitu }
     : f;
   const c = calcAll(merged);
-  // Rule of 40計算（前年売上と比較）
+  // 前年比成長率計算
   const prevKey = String(stockBase - 1);
   const prevFd = periods[prevKey] || {};
+  const prevC = calcAll(prevFd);
   const curSales = n(merged.sales);
   const prevSales = n(prevFd.sales);
   const salesGrowth = curSales && prevSales && prevSales > 0 ? (curSales - prevSales) / prevSales * 100 : null;
+  const curOp = n(merged.opProfit);
+  const prevOp = n(prevFd.opProfit);
+  const opGrowth = curOp != null && prevOp != null && prevOp > 0 ? (curOp - prevOp) / prevOp * 100 : null;
   const opMarginPct = c.opMargin != null ? c.opMargin * 100 : null;
   const rule40 = salesGrowth != null && opMarginPct != null ? salesGrowth + opMarginPct : null;
   const spread = h.waccSpread != null ? parseFloat(h.waccSpread) : null;
   const mode = loadScoreMode(h.id);
   const criteria = getCriteriaByMode(mode, h.id);
-  return financialScore({ ...c, rule40, spread }, criteria);
+  return financialScore({ ...c, rule40, spread, salesGrowth, opGrowth }, criteria);
 }
 
 const LS_KEY = "kabulens_v2";
@@ -606,10 +626,14 @@ function ScoreBadge({ sc, stockId, large }) {
   const modeColor = mode === "value" ? "#60a5fa" : mode === "growth" ? "#4ade80" : mode === "custom" ? "#fbbf24" : "#94a3b8";
   if (sc == null) return null;
   return (
-    <span style={{ background:scoreColor(sc)+"22", color:scoreColor(sc), border:"1px solid "+scoreColor(sc)+"44", borderRadius:6, padding:"4px 10px", fontSize:large?18:14, fontWeight:700, display:"inline-flex", alignItems:"center", gap:4 }}>
-      総合スコア {sc}pt
-      <span style={{ fontSize:11, background:modeColor+"22", color:modeColor, border:"1px solid "+modeColor+"44", borderRadius:4, padding:"1px 5px" }}>{modeLabel}</span>
-    </span>
+    <div style={{ display:"inline-flex", flexDirection:"column", alignItems:"center", gap:2 }}>
+      <span style={{ background:scoreColor(sc)+"22", color:scoreColor(sc), border:"1px solid "+scoreColor(sc)+"44", borderRadius:6, padding:"3px 8px", fontSize:large?16:13, fontWeight:700, whiteSpace:"nowrap" }}>
+        {sc}pt
+      </span>
+      <span style={{ fontSize:10, background:modeColor+"22", color:modeColor, border:"1px solid "+modeColor+"44", borderRadius:4, padding:"1px 5px", whiteSpace:"nowrap" }}>
+        {modeLabel}
+      </span>
+    </div>
   );
 }
 
@@ -971,6 +995,12 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
                 hint={"前年(" + r40.prevYrKey + "年)比"}
               />
               <MBox
+                label="営業利益成長率(YoY)"
+                value={r40.opGrowth != null ? (r40.opGrowth >= 0 ? "+" : "") + r40.opGrowth.toFixed(1) + "%" : "—"}
+                color={r40.opGrowth == null ? "#94a3b8" : r40.opGrowth >= 20 ? "#4ade80" : r40.opGrowth >= 10 ? "#fbbf24" : "#94a3b8"}
+                hint={"前年(" + r40.prevYrKey + "年)比"}
+              />
+              <MBox
                 label="Rule of 40"
                 value={r40.rule40 != null ? r40.rule40.toFixed(1) : "—"}
                 color={r40.rule40Color}
@@ -1000,10 +1030,14 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
             const curSales = n(ff.sales);
             const salesGrowth = (curSales != null && prevSales != null && prevSales > 0)
               ? (curSales - prevSales) / prevSales * 100 : null;
+            const prevOp = n(prevFd.opProfit);
+            const curOp = n(ff.opProfit);
+            const opGrowth = (curOp != null && prevOp != null && prevOp > 0)
+              ? (curOp - prevOp) / prevOp * 100 : null;
             const opMarginPct = cc.opMargin != null ? cc.opMargin * 100 : null;
             const rule40 = salesGrowth != null && opMarginPct != null ? salesGrowth + opMarginPct : null;
             const rule40Color = rule40 == null ? "#94a3b8" : rule40 >= 20 ? "#4ade80" : rule40 >= 15 ? "#34d399" : rule40 >= 10 ? "#fbbf24" : "#f87171";
-            return { salesGrowth, rule40, rule40Color, prevYrKey };
+            return { salesGrowth, opGrowth, rule40, rule40Color, prevYrKey };
           })(String(baseYear - 1)))}
           <Sec title="安全性">
             <MBox label="自己資本比率" value={cc.equityRatio?pct(cc.equityRatio):"—"} color={cc.equityRatio&&cc.equityRatio>0.40?"#4ade80":"#94a3b8"} hint="40%超が安全" />
