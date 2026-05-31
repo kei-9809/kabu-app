@@ -2440,8 +2440,8 @@ export default function App() {
 
             <div style={{ ...S.table, overflowX:"auto" }}>
               <div style={{ minWidth:800 }}>
-              <div style={{ display:"grid", gridTemplateColumns:"2fr 0.6fr 0.7fr 0.9fr 0.9fr 0.9fr 1.1fr 1fr 0.8fr 1.5fr", padding:"12px 20px", background:"#111827", gap:10 }}>
-                {["銘柄","コード","保有数","取得単価","現在値","目標株価","評価額","損益率","スコア","操作"].map(h => (
+              <div style={{ display:"grid", gridTemplateColumns:"2fr 0.6fr 0.7fr 0.9fr 0.9fr 0.9fr 1.1fr 1fr 2fr", padding:"12px 20px", background:"#111827", gap:10 }}>
+                {["銘柄","コード","保有数","取得単価","現在値","目標株価","評価額","損益率","スコア・操作"].map(h => (
                   <span key={h} style={{ fontSize:R.sm, color:"#475569", textTransform:"uppercase" }}>{h}</span>
                 ))}
               </div>
@@ -2451,7 +2451,7 @@ export default function App() {
                 const tp = n(h.memo?.targetPrice);
                 const tpPct = tp ? ((h.currentPrice-tp)/tp*100) : null;
                 return (
-                  <div key={h.id} style={{ display:"grid", gridTemplateColumns:"2fr 0.6fr 0.7fr 0.9fr 0.9fr 0.9fr 1.1fr 1fr 0.8fr 1.5fr", padding:"14px 20px", gap:10, borderTop:"1px solid #1e293b", alignItems:"start", ...(selected?.id===h.id?{ background:"#0f2a1a" }:{}) }}>
+                  <div key={h.id} style={{ display:"grid", gridTemplateColumns:"2fr 0.6fr 0.7fr 0.9fr 0.9fr 0.9fr 1.1fr 1fr 2fr", padding:"14px 20px", gap:10, borderTop:"1px solid #1e293b", alignItems:"start", ...(selected?.id===h.id?{ background:"#0f2a1a" }:{}) }}>
                     <span style={{ fontWeight:700, color:"#e2e8f0" }}>{h.name}<br/><span style={{ color:"#475569", fontSize:R.sm }}>{h.sector}</span></span>
                     <span><Tag color="#60a5fa">{h.ticker}</Tag></span>
                     <span style={{ color:"#94a3b8" }}>{h.qty.toLocaleString()}</span>
@@ -2467,19 +2467,21 @@ export default function App() {
                     </span>
                     <span style={{ color:"#e2e8f0" }}>¥{(h.qty*h.currentPrice).toLocaleString()}</span>
                     <span><Delta val={pnlPct} fmt={v => v.toFixed(2)+"%"} /></span>
-                    <ScoreBadge sc={hsc} stockId={h.id} />
-                    <span style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
-                      <button style={S.miniBtn} onClick={() => { setSelected(h); setTab("detail"); setDetailTab("memo"); }}>メモ</button>
-                      <button style={S.miniBtn} onClick={() => { setSelected(h); setTab("detail"); setDetailTab("metrics"); }}>詳細</button>
-                      <button style={{ ...S.miniBtn, ...(compareIds.includes(h.id)?{ color:"#4ade80", borderColor:"#4ade80" }:{}) }} onClick={() => toggleCompare(h.id)}>{compareIds.includes(h.id)?"比較中":"比較"}</button>
-                      <button style={{ ...S.miniBtn, color:"#f59e0b", borderColor:"#f59e0b" }} onClick={() => {
-                        if (!window.confirm(h.name+" を保有候補リストに移動します。データはそのまま保持されます。")) return;
-                        saveWatch2(p => [...p, { ...h, isWatch:true }]);
-                        save(p => p.filter(x => x.id !== h.id));
-                        if (selected?.id === h.id) setSelected(portfolio.find(x => x.id !== h.id) || null);
-                      }}>候補へ</button>
-                      <button style={{ ...S.miniBtn, color:"#f87171", borderColor:"#f87171" }} onClick={() => deleteStock(h.id)}>削除</button>
-                    </span>
+                    <div>
+                      {hsc != null && <div style={{ marginBottom:6 }}><ScoreBadge sc={hsc} stockId={h.id} /></div>}
+                      <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
+                        <button style={S.miniBtn} onClick={() => { setSelected(h); setTab("detail"); setDetailTab("memo"); }}>メモ</button>
+                        <button style={S.miniBtn} onClick={() => { setSelected(h); setTab("detail"); setDetailTab("metrics"); }}>詳細</button>
+                        <button style={{ ...S.miniBtn, ...(compareIds.includes(h.id)?{ color:"#4ade80", borderColor:"#4ade80" }:{}) }} onClick={() => toggleCompare(h.id)}>{compareIds.includes(h.id)?"比較中":"比較"}</button>
+                        <button style={{ ...S.miniBtn, color:"#f59e0b", borderColor:"#f59e0b" }} onClick={() => {
+                          if (!window.confirm(h.name+" を保有候補リストに移動します。データはそのまま保持されます。")) return;
+                          saveWatch2(p => [...p, { ...h, isWatch:true }]);
+                          save(p => p.filter(x => x.id !== h.id));
+                          if (selected?.id === h.id) setSelected(portfolio.find(x => x.id !== h.id) || null);
+                        }}>候補へ</button>
+                        <button style={{ ...S.miniBtn, color:"#f87171", borderColor:"#f87171" }} onClick={() => deleteStock(h.id)}>削除</button>
+                      </div>
+                    </div>
                   </div>
                 );
               })}
