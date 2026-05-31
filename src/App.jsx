@@ -718,7 +718,7 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
             </div>
             <ToggleLineChart
               data={[
-                ...trendData,
+                ...trendData.filter(d => d.PER != null || d.PBR != null || d.PSR != null),
                 ...(fc ? [{ name:"今期予想", PER: fc.per ? parseFloat(fc.per.toFixed(2)) : null, PBR: null, PSR: fc.psr ? parseFloat(fc.psr.toFixed(2)) : null }] : []),
               ]}
               lines={[
@@ -737,8 +737,6 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
                 {[
                   ["予想PER", fc.per ? fc.per.toFixed(2)+"x" : "—", "#60a5fa"],
                   ["予想PSR", fc.psr ? fc.psr.toFixed(2)+"x" : "—", "#f59e0b"],
-                  ["予想配当利回り", fc.dividendYield ? (fc.dividendYield*100).toFixed(2)+"%" : "—", "#4ade80"],
-                  ["予想営業利益率", fc.opMargin ? (fc.opMargin*100).toFixed(2)+"%" : "—", "#a78bfa"],
                 ].map(([label, val, color]) => (
                   <div key={label} style={{ background:"#111827", borderRadius:6, padding:"8px 14px", border:`1px solid ${color}44` }}>
                     <div style={{ color:"#475569", fontSize:R_CURRENT.sm, marginBottom:2 }}>{label} <span style={{ color:"#fbbf24", fontSize:R_CURRENT.sm }}>(予想)</span></div>
