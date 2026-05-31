@@ -99,12 +99,13 @@ const SCORE_CRITERIA = [
 ];
 
 // periodsベースでスコア計算するヘルパー
-function scoreFromPeriods(h, baseYear) {
+function scoreFromPeriods(h, globalBaseYear) {
+  const stockBase = getStockBaseYear(h, globalBaseYear);
   const periods = h.periods || {};
-  const baseKey = String(baseYear);
+  const baseKey = String(stockBase);
   let fd = periods[baseKey] || {};
   if (!Object.values(fd).some(v => v !== "" && v != null)) {
-    const prev = [String(baseYear-1), String(baseYear-2)].map(yr => periods[yr]||{}).find(d => Object.values(d).some(v => v !== "" && v != null));
+    const prev = [String(stockBase-1), String(stockBase-2)].map(yr => periods[yr]||{}).find(d => Object.values(d).some(v => v !== "" && v != null));
     fd = prev || {};
   }
   const f = h.financials || {};
@@ -425,6 +426,9 @@ const getQtrKeys = base => {
   }
   return keys;
 };
+
+// 銘柄ごとのlatestFiscalYearを取得（未設定なら全体のbaseYearを使用）
+const getStockBaseYear = (h, globalBaseYear) => h.latestFiscalYear ? parseInt(h.latestFiscalYear) : globalBaseYear;
 
 const LS_UNDO = "kabulens_undo_v2";
 const loadUndoData = () => {
@@ -1150,6 +1154,40 @@ function InputTab({ selected, periods, updatePeriod, baseYear, annualKeys, qtrKe
         {" / "}<a href="https://www.buffett-code.com" target="_blank" rel="noreferrer" style={{ color:"#60a5fa" }}>バフェットコード</a>
       </div>
 
+      {/* 銘柄設定 */}
+      <div style={{ ...S.card, border:"1px solid #334155", marginBottom:16 }}>
+        <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:12 }}>銘柄設定</div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(min(200px,45vw),1fr))", gap:14 }}>
+          <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+            <label style={{ color:"#64748b", fontSize:R_CURRENT.sm }}>決算月</label>
+            <select
+              value={selected.fiscalMonth || "3"}
+              onChange={e => updatePeriod(selected.id, "__meta__", "fiscalMonth", e.target.value)}
+              style={S.sel}
+            >
+              {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => (
+                <option key={m} value={String(m)}>{m}月期</option>
+              ))}
+            </select>
+            <span style={{ color:"#334155", fontSize:R_CURRENT.sm }}>例: 3月期→3、11月期→11</span>
+          </div>
+          <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+            <label style={{ color:"#64748b", fontSize:R_CURRENT.sm }}>最新本決算年（直近期）</label>
+            <input
+              value={selected.latestFiscalYear || ""}
+              onChange={e => updatePeriod(selected.id, "__meta__", "latestFiscalYear", e.target.value)}
+              style={S.input}
+              placeholder={"例: "+baseYear}
+              inputMode="numeric"
+            />
+            <span style={{ color:"#334155", fontSize:R_CURRENT.sm }}>この年を基準に±2年が表示されます</span>
+          </div>
+        </div>
+        <div style={{ marginTop:10, fontSize:R_CURRENT.sm, color:"#475569" }}>
+          現在の表示範囲: {annualKeys[0]}年 〜 {annualKeys[annualKeys.length-1]}年（財務指標は{annualKeys[annualKeys.length-2]}年を使用）
+        </div>
+      </div>
+
       <div style={{ display:"flex", gap:4, marginBottom:16 }}>
         <button style={{ ...S.navBtn, ...(inputView==="annual"?S.navOn:{}) }} onClick={() => setInputView("annual")}>本決算（年次）</button>
         <button style={{ ...S.navBtn, ...(inputView==="qtr"?S.navOn:{}) }} onClick={() => setInputView("qtr")}>四半期決算</button>
@@ -1369,12 +1407,15 @@ export default function App() {
   const updatePeriod = useCallback((id, periodKey, fieldKey, val) => {
     save(p => p.map(h => {
       if (h.id !== id) return h;
+      // __meta__ は銘柄のルートプロパティを更新
+      if (periodKey === "__meta__") return { ...h, [fieldKey]: val };
       const periods = { ...(h.periods || {}) };
       periods[periodKey] = { ...(periods[periodKey] || {}), [fieldKey]: val };
       return { ...h, periods };
     }));
     if (selected?.id === id) {
       setSelected(s => {
+        if (periodKey === "__meta__") return { ...s, [fieldKey]: val };
         const periods = { ...(s.periods || {}) };
         periods[periodKey] = { ...(periods[periodKey] || {}), [fieldKey]: val };
         return { ...s, periods };
@@ -1498,25 +1539,29 @@ export default function App() {
 
   const handleAdvanceYear = useCallback(() => {
     const nextBase = baseYear + 1;
-    const oldestYr = String(baseYear - 2);
-    const msg = "決算年度を1年進めます。\n\n現在: " + (baseYear-2) + "~" + (baseYear+1) + "年\n更新後: " + (nextBase-2) + "~" + (nextBase+1) + "年\n\n・" + oldestYr + "年のデータは削除されます\n・表示範囲が1年ずれます（既存データはそのまま）\n\nよろしいですか？";
+    const msg = "決算年度を1年進めます。\n\n全銘柄のデフォルト基準年: "+baseYear+"→"+nextBase+"年\n\n・各銘柄に「最新本決算年」が設定されている場合はその銘柄固有の値が更新されます\n・"+String(baseYear-2)+"年のデータは削除されます\n\nよろしいですか？";
     if (!window.confirm(msg)) return;
 
-    // undo用に現在の状態を保存（baseYearとportfolioを記録）
     const undo = { baseYear, portfolio: JSON.parse(JSON.stringify(portfolio)) };
     setUndoData(undo);
     saveUndoData(undo);
 
-    // 最古年（baseYear-2）のperiodsデータのみ削除
     save(p => p.map(h => {
       const oldPeriods = h.periods || {};
       const newPeriods = {};
+      const stockBase = getStockBaseYear(h, baseYear);
+      const oldestYr = String(stockBase - 2);
+
       Object.keys(oldPeriods).forEach(key => {
-        if (key === oldestYr) return; // 最古年を削除
-        if (key.includes("-Q") && key.startsWith(oldestYr)) return; // 最古年の四半期も削除
+        if (key === oldestYr) return;
+        if (key.includes("-Q") && key.startsWith(oldestYr)) return;
         newPeriods[key] = oldPeriods[key];
       });
-      return { ...h, periods: newPeriods };
+      if (oldPeriods[FORECAST_KEY]) newPeriods[FORECAST_KEY] = oldPeriods[FORECAST_KEY];
+
+      // latestFiscalYearを1年進める
+      const newLatest = stockBase + 1;
+      return { ...h, periods: newPeriods, latestFiscalYear: String(newLatest) };
     }));
 
     setBaseYear(nextBase);
@@ -1572,18 +1617,9 @@ export default function App() {
   // 総合スコアは最新本決算データで計算
   const sc = useMemo(() => {
     if (!selected) return null;
-    const periods = (portfolio.find(h=>h.id===selected.id)||selected).periods || {};
-    const baseKey = String(baseYear);
-    let fd = periods[baseKey] || {};
-    if (!Object.values(fd).some(v => v !== "" && v != null)) {
-      const prev = [String(baseYear-1), String(baseYear-2)].map(yr => periods[yr]||{}).find(d => Object.values(d).some(v => v !== "" && v != null));
-      fd = prev || {};
-    }
-    const merged = Object.values(fd).some(v => v !== "" && v != null)
-      ? { ...fd, price: f.price||fd.price, shinyoBairitu: fd.shinyoBairitu||f.shinyoBairitu }
-      : f;
-    return financialScore(calcAll(merged));
-  }, [selected, portfolio, baseYear, f]);
+    const h = portfolio.find(h=>h.id===selected.id)||selected;
+    return scoreFromPeriods(h, baseYear);
+  }, [selected, portfolio, baseYear]);
   const cmpStocks = portfolio.filter(h => compareIds.includes(h.id));
   const radarData = useMemo(() => {
     const norm = (v, lo, hi, inv=false) => {
@@ -2022,8 +2058,16 @@ export default function App() {
                   ))}
                 </div>
 
-                {detailTab === "metrics" && (
-                  <MetricsTab c={c} f={f} selected={portfolio.find(h=>h.id===selected.id)||selected} periods={(portfolio.find(h=>h.id===selected.id)||selected).periods||{}} baseYear={baseYear} annualKeys={ANNUAL_KEYS} qtrKeys={QTR_KEYS} R={R} TS={TS} />
+                {detailTab === "metrics" && selected && (
+                  <MetricsTab
+                    c={c} f={f}
+                    selected={portfolio.find(h=>h.id===selected.id)||selected}
+                    periods={(portfolio.find(h=>h.id===selected.id)||selected).periods||{}}
+                    baseYear={getStockBaseYear(portfolio.find(h=>h.id===selected.id)||selected, baseYear)}
+                    annualKeys={getAnnualKeys(getStockBaseYear(portfolio.find(h=>h.id===selected.id)||selected, baseYear))}
+                    qtrKeys={getQtrKeys(getStockBaseYear(portfolio.find(h=>h.id===selected.id)||selected, baseYear))}
+                    R={R} TS={TS}
+                  />
                 )}
 
                 {detailTab === "memo" && (
@@ -2086,8 +2130,16 @@ export default function App() {
                   </div>
                 )}
 
-                {detailTab === "input" && (
-                  <InputTab selected={portfolio.find(h=>h.id===selected.id)||selected} periods={(portfolio.find(h=>h.id===selected.id)||selected).periods||{}} updatePeriod={updatePeriod} baseYear={baseYear} annualKeys={ANNUAL_KEYS} qtrKeys={QTR_KEYS} TS={TS} />
+                {detailTab === "input" && selected && (
+                  <InputTab
+                    selected={portfolio.find(h=>h.id===selected.id)||selected}
+                    periods={(portfolio.find(h=>h.id===selected.id)||selected).periods||{}}
+                    updatePeriod={updatePeriod}
+                    baseYear={getStockBaseYear(portfolio.find(h=>h.id===selected.id)||selected, baseYear)}
+                    annualKeys={getAnnualKeys(getStockBaseYear(portfolio.find(h=>h.id===selected.id)||selected, baseYear))}
+                    qtrKeys={getQtrKeys(getStockBaseYear(portfolio.find(h=>h.id===selected.id)||selected, baseYear))}
+                    TS={TS}
+                  />
                 )}
 
                 {detailTab === "ir" && (
