@@ -625,11 +625,32 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
 
           {/* WACC・投資判断セクション */}
           <div style={{ ...S.card, border:"1px solid #334155" }}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
               <div style={{ color:"#a78bfa", fontWeight:700, fontSize:R_CURRENT.lg }}>WACC・投資判断分析</div>
               <button style={{ ...S.miniBtn, color:"#a78bfa", borderColor:"#a78bfa" }} onClick={() => setShowWacc(v => !v)}>
                 {showWacc ? "▲ 閉じる" : "▼ パラメータ入力"}
               </button>
+            </div>
+            <div style={{ background:"#111827", borderRadius:6, padding:"10px 14px", marginBottom:14, fontSize:R_CURRENT.sm, color:"#64748b", lineHeight:1.8 }}>
+              <div style={{ color:"#a78bfa", fontWeight:700, marginBottom:4 }}>WACCとは（加重平均資本コスト）</div>
+              <div><strong style={{ color:"#94a3b8" }}>WACC = Ke × E/V + Kd×(1-t) × D/V</strong></div>
+              <div style={{ marginTop:6, display:"grid", gridTemplateColumns:R_CURRENT.grid2, gap:4 }}>
+                {[
+                  ["Ke（株主資本コスト）", "= Rf + β × 市場リスクプレミアム（CAPM）"],
+                  ["Kd（負債コスト）",     "= 借入金利（支払利息÷固定負債）"],
+                  ["E/V",                "= 時価総額 ÷（時価総額＋固定負債）"],
+                  ["D/V",                "= 固定負債 ÷（時価総額＋固定負債）"],
+                  ["t（実効税率）",        "= 法人税等 ÷ 経常利益（未入力は30%）"],
+                  ["β（ベータ）",         "= 市場全体に対する株価の感応度"],
+                ].map(([k,v]) => (
+                  <div key={k} style={{ fontSize:R_CURRENT.sm }}>
+                    <span style={{ color:"#60a5fa" }}>{k}</span>: {v}
+                  </div>
+                ))}
+              </div>
+              <div style={{ marginTop:8, color:"#475569" }}>
+                ROICがWACCを上回る（スプレッド&gt;0）= 企業が資本コスト以上のリターンを生んでいる = 価値創造
+              </div>
             </div>
 
             {showWacc && (
@@ -1411,7 +1432,19 @@ export default function App() {
 
   const f  = selected?.financials || {};
   const c  = selected ? calcAll(f) : {};
-  const sc = financialScore(c);
+  // 総合スコアはMetricsTab内のccと同じ最新本決算データを使用
+  const _latestPeriod = useMemo(() => {
+    if (!selected) return null;
+    const periods = (portfolio.find(h=>h.id===selected.id)||selected).periods || {};
+    const baseKey = String(baseYear);
+    const fd = periods[baseKey] || {};
+    if (!Object.values(fd).some(v => v !== "" && v != null)) {
+      const filled = [String(baseYear-1), String(baseYear-2)].map(yr => periods[yr]||{}).find(d => Object.values(d).some(v => v !== "" && v != null));
+      return filled ? calcAll({ ...filled, price: f.price||filled.price, shinyoBairitu: filled.shinyoBairitu||f.shinyoBairitu }) : null;
+    }
+    return calcAll({ ...fd, price: f.price||fd.price, shinyoBairitu: fd.shinyoBairitu||f.shinyoBairitu });
+  }, [selected, portfolio, baseYear, f]);
+  const sc = financialScore(_latestPeriod || c);
   const cmpStocks = portfolio.filter(h => compareIds.includes(h.id));
   const radarData = useMemo(() => {
     const norm = (v, lo, hi, inv=false) => {
