@@ -424,6 +424,52 @@ function calcChg(cur, prev) {
 // 財務指標タブ（多期間対応）
 function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R, TS }) {
   const [metricsView, setMetricsView] = useState("current");
+  const [waccParams, setWaccParams] = useState({
+    beta: "", kd: "", rf: "1.5", rp: "5.5"
+  });
+  const [showWacc, setShowWacc] = useState(false);
+
+  // WACC計算
+  const waccResult = useMemo(() => {
+    const beta = parseFloat(waccParams.beta);
+    const kd   = parseFloat(waccParams.kd) / 100;
+    const rf   = parseFloat(waccParams.rf) / 100;
+    const rp   = parseFloat(waccParams.rp) / 100;
+    if (isNaN(beta) || isNaN(kd) || isNaN(rf) || isNaN(rp)) return null;
+    if (!cc || !cc.marketCap) return null;
+
+    const ke = rf + beta * rp; // CAPM
+    const E = cc.marketCap;
+    const fl2 = n(ff.fixLiab);
+    const D = fl2 != null ? fl2 : 0;
+    const V = E + D;
+    if (V === 0) return null;
+    const t = cc.taxRate || 0.30;
+    const wacc = ke * (E / V) + kd * (1 - t) * (D / V);
+    const roic = cc.roic || 0;
+    const spread = roic - wacc;
+
+    // 投資判断スコア
+    const checks = [
+      { label:"ROIC > WACC（価値創造）",    ok: spread > 0,   val: `${pct(roic)} > ${pct(wacc)}`, impact:"high" },
+      { label:"スプレッド > 2%（余裕あり）", ok: spread > 0.02, val: `${(spread*100).toFixed(2)}%`,  impact:"high" },
+      { label:"PER < 20倍",                ok: cc.per != null && cc.per < 20, val: cc.per ? xfmt(cc.per) : "—", impact:"mid" },
+      { label:"ROE > 10%",                 ok: cc.roe != null && cc.roe > 0.10, val: cc.roe ? pct(cc.roe) : "—", impact:"mid" },
+      { label:"自己資本比率 > 30%",         ok: cc.equityRatio != null && cc.equityRatio > 0.30, val: cc.equityRatio ? pct(cc.equityRatio) : "—", impact:"mid" },
+      { label:"営業利益率 > 10%",           ok: cc.opMargin != null && cc.opMargin > 0.10, val: cc.opMargin ? pct(cc.opMargin) : "—", impact:"mid" },
+      { label:"流動比率 > 150%",            ok: cc.currentRatio != null && cc.currentRatio > 1.5, val: cc.currentRatio ? pct(cc.currentRatio) : "—", impact:"low" },
+      { label:"PBR < 3倍",                 ok: cc.pbr != null && cc.pbr < 3, val: cc.pbr ? xfmt(cc.pbr) : "—", impact:"low" },
+    ];
+    const score = checks.filter(c2 => c2.ok).length;
+    const verdict = spread > 0.02 && score >= 6 ? "強い買い候補" :
+                    spread > 0    && score >= 5 ? "買い候補" :
+                    spread > -0.01&& score >= 4 ? "中立・様子見" :
+                    spread < 0    && score <= 3 ? "要注意" : "中立";
+    const verdictColor = verdict === "強い買い候補" ? "#4ade80" :
+                         verdict === "買い候補"     ? "#34d399" :
+                         verdict === "中立・様子見" ? "#fbbf24" : "#f87171";
+    return { ke, kd, wacc, E, D, V, t, spread, checks, score, verdict, verdictColor };
+  }, [waccParams, cc, ff]);
 
   const annualData = useMemo(() => {
     return annualKeys.map(yr => {
@@ -569,6 +615,98 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
             <MBox label="固定比率" value={cc.fixedRatio?pct(cc.fixedRatio):"—"} color={cc.fixedRatio&&cc.fixedRatio<1?"#4ade80":"#94a3b8"} hint="100%以下が望ましい" />
             <MBox label="固定長期適合率" value={cc.fixedLTRatio?pct(cc.fixedLTRatio):"—"} color={cc.fixedLTRatio&&cc.fixedLTRatio<1?"#4ade80":"#f87171"} hint="100%以下が望ましい" />
           </Sec>
+
+          {/* WACC・投資判断セクション */}
+          <div style={{ ...S.card, border:"1px solid #334155" }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+              <div style={{ color:"#a78bfa", fontWeight:700, fontSize:R_CURRENT.lg }}>WACC・投資判断分析</div>
+              <button style={{ ...S.miniBtn, color:"#a78bfa", borderColor:"#a78bfa" }} onClick={() => setShowWacc(v => !v)}>
+                {showWacc ? "▲ 閉じる" : "▼ パラメータ入力"}
+              </button>
+            </div>
+
+            {showWacc && (
+              <div style={{ marginBottom:16 }}>
+                <div style={{ color:"#475569", fontSize:R_CURRENT.sm, marginBottom:12 }}>
+                  β・借入金利を入力してください。Rf・市場リスクプレミアムはデフォルト値を変更可能です。
+                </div>
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(min(160px,45vw),1fr))", gap:12 }}>
+                  {[
+                    ["β（ベータ）", "beta", "Yahoo Finance等で確認", "1.2"],
+                    ["借入金利 Kd（%）", "kd", "例: 1.5", ""],
+                    ["リスクフリーレート Rf（%）", "rf", "日本国債10年利回り", "1.5"],
+                    ["市場リスクプレミアム（%）", "rp", "日本株超過リターン目安", "5.5"],
+                  ].map(([label, key, hint, placeholder]) => (
+                    <div key={key} style={{ display:"flex", flexDirection:"column", gap:3 }}>
+                      <label style={{ color:"#64748b", fontSize:R_CURRENT.sm }}>{label}</label>
+                      <input
+                        value={waccParams[key]}
+                        onChange={e => { const v=e.target.value; if(v===""||/^-?\d*\.?\d*$/.test(v)) setWaccParams(p=>({...p,[key]:v})); }}
+                        style={S.input} placeholder={placeholder} inputMode="decimal"
+                      />
+                      <span style={{ color:"#334155", fontSize:R_CURRENT.sm }}>{hint}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {waccResult ? (
+              <div>
+                {/* WACC計算結果 */}
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(min(150px,45vw),1fr))", gap:10, marginBottom:16 }}>
+                  {[
+                    ["株主資本コスト Ke", pct(waccResult.ke), "#60a5fa", `Rf${(parseFloat(waccParams.rf)).toFixed(1)}% + β${waccParams.beta}×RP${waccParams.rp}%`],
+                    ["負債コスト Kd(税後)", pct(waccResult.kd*(1-waccResult.t)), "#94a3b8", `${waccParams.kd}%×(1-${(waccResult.t*100).toFixed(0)}%)`],
+                    ["WACC", pct(waccResult.wacc), "#a78bfa", `E/V=${(waccResult.E/waccResult.V*100).toFixed(0)}% D/V=${(waccResult.D/waccResult.V*100).toFixed(0)}%`],
+                    ["ROIC", pct(cc.roic||0), cc.roic&&cc.roic>waccResult.wacc?"#4ade80":"#f87171", cc.taxRate?`実効税率${(cc.taxRate*100).toFixed(1)}%`:"税率30%"],
+                    ["スプレッド(ROIC-WACC)", pct(waccResult.spread), waccResult.spread>0?"#4ade80":waccResult.spread>-0.01?"#fbbf24":"#f87171", waccResult.spread>0?"価値創造":"価値毀損"],
+                  ].map(([label, val, color, sub]) => (
+                    <div key={label} style={{ background:"#111827", borderRadius:8, padding:"10px 14px" }}>
+                      <div style={{ color:"#475569", fontSize:R_CURRENT.sm, marginBottom:2 }}>{label}</div>
+                      <div style={{ color, fontWeight:700, fontSize:R_CURRENT.lg }}>{val}</div>
+                      <div style={{ color:"#334155", fontSize:R_CURRENT.sm, marginTop:2 }}>{sub}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* 投資判断 */}
+                <div style={{ background:"#111827", borderRadius:10, padding:16, marginBottom:16, border:`2px solid ${waccResult.verdictColor}44` }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+                    <div style={{ color:"#94a3b8", fontSize:R_CURRENT.md, fontWeight:700 }}>総合投資判断</div>
+                    <div style={{ color:waccResult.verdictColor, fontWeight:900, fontSize:R_CURRENT.xl }}>{waccResult.verdict}</div>
+                  </div>
+                  <div style={{ display:"flex", gap:6, marginBottom:12 }}>
+                    {[...Array(8)].map((_, i) => (
+                      <div key={i} style={{ flex:1, height:6, borderRadius:3, background: i < waccResult.score ? waccResult.verdictColor : "#1e293b" }} />
+                    ))}
+                  </div>
+                  <div style={{ color:"#475569", fontSize:R_CURRENT.sm, marginBottom:10 }}>{waccResult.score}/8項目クリア</div>
+                  <div style={{ display:"grid", gridTemplateColumns:R_CURRENT.grid2, gap:6 }}>
+                    {waccResult.checks.map(({ label, ok, val, impact }) => (
+                      <div key={label} style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 10px", background:"#0d1424", borderRadius:6, border:`1px solid ${ok?"#4ade8022":"#f8717122"}` }}>
+                        <span style={{ color:ok?"#4ade80":"#f87171", fontSize:R_CURRENT.lg, flexShrink:0 }}>{ok?"✓":"✗"}</span>
+                        <div style={{ flex:1 }}>
+                          <div style={{ color:"#94a3b8", fontSize:R_CURRENT.sm }}>{label}</div>
+                          <div style={{ color:ok?"#4ade80":"#f87171", fontSize:R_CURRENT.sm, fontWeight:700 }}>{val}</div>
+                        </div>
+                        <span style={{ fontSize:R_CURRENT.sm, color: impact==="high"?"#f87171":impact==="mid"?"#fbbf24":"#475569" }}>
+                          {impact==="high"?"重要":impact==="mid"?"中":"参考"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ marginTop:12, padding:"10px 12px", background:"#0a0f1a", borderRadius:6, fontSize:R_CURRENT.sm, color:"#475569", lineHeight:1.8 }}>
+                    ⚠️ この分析は財務データのみに基づく機械的な判断です。事業内容・成長性・経営者の質・マクロ環境等は考慮されていません。最終的な投資判断はご自身でお願いします。
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div style={{ color:"#475569", fontSize:R_CURRENT.sm, padding:"12px 0" }}>
+                β（ベータ）と借入金利（Kd）を入力するとWACC・投資判断分析が表示されます。
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -1082,6 +1220,7 @@ export default function App() {
   const [showAdd, setShowAdd]     = useState(false);
   const [showPriceUpdate, setShowPriceUpdate] = useState(false);
   const [priceInputs, setPriceInputs] = useState({});
+  const [shinInputs, setShinInputs] = useState({});
 
   const save = useCallback(updater => {
     setPortfolio(prev => {
@@ -1144,14 +1283,22 @@ export default function App() {
   const applyPrices = () => {
     save(p => p.map(h => {
       const np = priceInputs[h.id];
-      if (!np || isNaN(+np)) return h;
-      return { ...h, currentPrice:+np, financials:{ ...h.financials, price:np } };
+      const ns = shinInputs[h.id];
+      let updated = { ...h };
+      if (np && !isNaN(+np)) updated = { ...updated, currentPrice:+np, financials:{ ...updated.financials, price:np } };
+      if (ns !== undefined && ns !== "") updated = { ...updated, financials:{ ...updated.financials, shinyoBairitu:ns } };
+      return updated;
     }));
     if (selected) {
       const np = priceInputs[selected.id];
-      if (np && !isNaN(+np)) setSelected(s => ({ ...s, currentPrice:+np, financials:{ ...s.financials, price:np } }));
+      const ns = shinInputs[selected.id];
+      let upd = { ...selected };
+      if (np && !isNaN(+np)) upd = { ...upd, currentPrice:+np, financials:{ ...upd.financials, price:np } };
+      if (ns !== undefined && ns !== "") upd = { ...upd, financials:{ ...upd.financials, shinyoBairitu:ns } };
+      setSelected(upd);
     }
     setPriceInputs({});
+    setShinInputs({});
     setShowPriceUpdate(false);
   };
 
@@ -1375,8 +1522,13 @@ export default function App() {
               <div style={{ display:"flex", gap:8 }}>
                 <button style={{ ...S.miniBtn, color:"#fbbf24", borderColor:"#fbbf24" }} onClick={() => {
                   const inp = {};
-                  portfolio.forEach(h => { inp[h.id] = String(h.currentPrice); });
+                  const shin = {};
+                  portfolio.forEach(h => {
+                    inp[h.id] = String(h.currentPrice);
+                    shin[h.id] = h.financials?.shinyoBairitu || "";
+                  });
                   setPriceInputs(inp);
+                  setShinInputs(shin);
                   setShowPriceUpdate(v => !v);
                 }}>📊 株価を更新</button>
                 <button style={S.addBtn} onClick={() => setShowAdd(v => !v)}>+ 銘柄追加</button>
@@ -1385,21 +1537,32 @@ export default function App() {
 
             {showPriceUpdate && (
               <div style={{ ...S.card, marginBottom:16, border:"1px solid #fbbf2444" }}>
-                <div style={{ color:"#fbbf24", fontWeight:700, marginBottom:8 }}>📊 現在株価の一括更新</div>
-                <div style={{ color:"#64748b", fontSize:16, marginBottom:12 }}>Yahoo Finance / 株探などで確認した最新株価を入力してください。</div>
-                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(min(200px,45vw),1fr))", gap:10, marginBottom:12 }}>
+                <div style={{ color:"#fbbf24", fontWeight:700, marginBottom:8 }}>📊 株価・信用倍率の一括更新</div>
+                <div style={{ color:"#64748b", fontSize:R.sm, marginBottom:12 }}>Yahoo Finance / 株探などで確認した最新値を入力してください。</div>
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(min(240px,90vw),1fr))", gap:12, marginBottom:12 }}>
                   {portfolio.map(h => (
-                    <div key={h.id} style={{ display:"flex", flexDirection:"column", gap:3 }}>
-                      <label style={{ color:"#64748b", fontSize:16 }}>{h.name}（{h.ticker}）</label>
-                      <div style={{ display:"flex", gap:6, alignItems:"center" }}>
-                        <input
-                          value={priceInputs[h.id] ?? String(h.currentPrice)}
-                          onChange={e => { const v = e.target.value; if (v===""||/^\d*\.?\d*$/.test(v)) setPriceInputs(p => ({ ...p, [h.id]:v })); }}
-                          style={{ ...S.input, flex:1 }} inputMode="decimal"
-                        />
-                        <span style={{ color:"#475569", fontSize:16 }}>円</span>
+                    <div key={h.id} style={{ background:"#111827", borderRadius:8, padding:"12px 14px" }}>
+                      <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:8, fontSize:R.md }}>{h.name}（{h.ticker}）</div>
+                      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                        <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
+                          <label style={{ color:"#64748b", fontSize:R.sm }}>現在株価（円）</label>
+                          <input
+                            value={priceInputs[h.id] ?? String(h.currentPrice)}
+                            onChange={e => { const v=e.target.value; if(v===""||/^\d*\.?\d*$/.test(v)) setPriceInputs(p=>({...p,[h.id]:v})); }}
+                            style={S.input} inputMode="decimal"
+                          />
+                          <span style={{ fontSize:R.sm, color:"#334155" }}>前回: ¥{h.currentPrice.toLocaleString()}</span>
+                        </div>
+                        <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
+                          <label style={{ color:"#64748b", fontSize:R.sm }}>信用倍率（倍）</label>
+                          <input
+                            value={shinInputs[h.id] ?? (h.financials?.shinyoBairitu || "")}
+                            onChange={e => { const v=e.target.value; if(v===""||/^\d*\.?\d*$/.test(v)) setShinInputs(p=>({...p,[h.id]:v})); }}
+                            style={S.input} inputMode="decimal" placeholder="例: 2.5"
+                          />
+                          <span style={{ fontSize:R.sm, color:"#334155" }}>前回: {h.financials?.shinyoBairitu || "—"}倍</span>
+                        </div>
                       </div>
-                      <span style={{ fontSize:16, color:"#334155" }}>前回: ¥{h.currentPrice.toLocaleString()}</span>
                     </div>
                   ))}
                 </div>
