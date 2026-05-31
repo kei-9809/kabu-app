@@ -679,13 +679,14 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
       {metricsView === "qtr" && (
         <div>
           <div style={{ ...S.card, overflowX:"auto", marginBottom:16 }}>
-            <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:12 }}>四半期財務指標（前年同期比付き）</div>
-            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:16 }}>
+            <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:4 }}>四半期単体（前年同期比付き）</div>
+            <div style={{ color:"#475569", fontSize:R_CURRENT.sm, marginBottom:12 }}>累計値から四半期単体値を算出。Q1=Q1累計、Q2=Q2累計−Q1累計、Q3=Q3累計−Q2累計、Q4=通期−Q3累計。</div>
+            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:R_CURRENT.sm }}>
               <thead>
                 <tr style={{ borderBottom:"1px solid #1e293b" }}>
-                  <th style={{ textAlign:"left", padding:"6px 8px", color:"#475569", fontSize:16 }}>指標</th>
+                  <th style={{ textAlign:"left", padding:"6px 8px", color:"#475569" }}>指標</th>
                   {qtrData.map(({ label, key }) => (
-                    <th key={key} style={{ textAlign:"right", padding:"6px 8px", color:"#60a5fa", fontSize:16, minWidth:80 }}>{label}</th>
+                    <th key={key} style={{ textAlign:"right", padding:"6px 8px", color:"#60a5fa", minWidth:80 }}>{label}</th>
                   ))}
                 </tr>
               </thead>
@@ -694,18 +695,26 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
                   ["売上高",   d => n(d.f.sales),    v => fmtM(v)],
                   ["営業利益", d => n(d.f.opProfit),  v => fmtM(v)],
                   ["純利益",   d => n(d.f.netProfit), v => fmtM(v)],
-                  ["EPS",     d => d.c.eps,           v => v?"¥"+v.toFixed(1):"—"],
                 ].map(([label, getter, formatter]) => (
                   <tr key={label} style={{ borderBottom:"1px solid #1e293b" }}>
                     <td style={{ padding:"6px 8px", color:"#64748b" }}>{label}</td>
                     {qtrData.map(({ key }, i) => {
-                      const cur = getter(qtrData[i]);
-                      const prevYr = i >= 4 ? getter(qtrData[i-4]) : null;
-                      const chg = calcChg(cur, prevYr);
+                      const cumVal = getter(qtrData[i]);
+                      // 同年の前Qの累計値を取得（Q1は前Qなし）
+                      const qIdx = ["Q1","Q2","Q3","Q4"].indexOf(key.split("-")[1]);
+                      const prevQIdx = i - 1;
+                      const prevQSameYear = qIdx > 0 ? getter(qtrData[prevQIdx]) : null;
+                      // 四半期単体値 = 累計 - 前Q累計
+                      const singleVal = prevQSameYear != null && cumVal != null ? cumVal - prevQSameYear : cumVal;
+                      // 前年同期の単体値
+                      const prevYrCum = i >= 4 ? getter(qtrData[i-4]) : null;
+                      const prevYrPrevQCum = i >= 4 && qIdx > 0 ? getter(qtrData[i-5]) : null;
+                      const prevYrSingle = prevYrCum != null ? (prevYrPrevQCum != null ? prevYrCum - prevYrPrevQCum : prevYrCum) : null;
+                      const chg = calcChg(singleVal, prevYrSingle);
                       return (
                         <td key={key} style={{ textAlign:"right", padding:"6px 8px" }}>
-                          <div style={{ color:"#e2e8f0" }}>{formatter(cur)}</div>
-                          {prevYr != null && <div style={{ color:chgColor(chg), fontSize:16 }}>{chgStr(chg)}</div>}
+                          <div style={{ color:"#e2e8f0" }}>{singleVal != null ? formatter(singleVal) : "—"}</div>
+                          {prevYrSingle != null && <div style={{ color:chgColor(chg), fontSize:R_CURRENT.sm }}>{chgStr(chg)}</div>}
                         </td>
                       );
                     })}
