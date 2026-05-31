@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect, useRef } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import React from "react";
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line,
@@ -74,57 +74,86 @@ function calcAll(f) {
   };
 }
 
-function financialScore(c) {
+// ── スコア基準値定義 ────────────────────────────────────────────────────────
+// 更新日: 2025-05-31
+// 各指標の [良好基準, 優良基準] (数値は実際の値、方向はDEFAULT_CRITERIAのdirで管理)
+// dir: "lt"=小さいほど良い, "gt"=大きいほど良い
+const DEFAULT_CRITERIA = {
+  updatedAt: "2025-05-31",
+  per:        { dir:"lt", good:25,   great:15,   goodPts:4,  greatPts:10 },
+  pbr:        { dir:"lt", good:3,    great:1.5,  goodPts:3,  greatPts:8  },
+  psr:        { dir:"lt", good:5,    great:2,    goodPts:3,  greatPts:7  },
+  roe:        { dir:"gt", good:0.08, great:0.15, goodPts:5,  greatPts:12 },
+  opMargin:   { dir:"gt", good:0.05, great:0.15, goodPts:3,  greatPts:8  },
+  roa:        { dir:"gt", good:0.03, great:0.07, goodPts:2,  greatPts:5  },
+  rule40:     { dir:"gt", good:15,   great:20,   goodPts:7,  greatPts:15 },
+  grossMargin:{ dir:"gt", good:0.25, great:0.40, goodPts:4,  greatPts:10 },
+  spread:     { dir:"gt", good:0,    great:0.02, goodPts:5,  greatPts:10 },
+  evEbitda:   { dir:"lt", good:20,   great:10,   goodPts:2,  greatPts:5  },
+  equityRatio:{ dir:"gt", good:0.30, great:0.50, goodPts:2,  greatPts:4  },
+  currentRatio:{ dir:"gt",good:1.2,  great:2.0,  goodPts:2,  greatPts:3  },
+};
+
+// criteriaはDEFAULT_CRITERIAまたは銘柄ごとのカスタム基準値
+function financialScore(c, criteria) {
+  const cr = criteria || DEFAULT_CRITERIA;
   let s = 0, t = 0;
-  const add2 = (val, goodCond, greatCond, goodPts, greatPts) => {
+
+  const add2 = (val, key) => {
     if (val == null) return;
-    const pts = greatCond ? greatPts : goodCond ? goodPts : 0;
+    const def = cr[key];
+    if (!def) return;
+    const isGood  = def.dir === "lt" ? val < def.good  : val > def.good;
+    const isGreat = def.dir === "lt" ? val < def.great : val > def.great;
+    const pts = isGreat ? def.greatPts : isGood ? def.goodPts : 0;
     s += pts;
-    t += greatPts; // 最大点を分母に
+    t += def.greatPts;
   };
 
-  // 割安性 25pt
-  add2(c.per,        c.per < 25,          c.per < 15,          4,  10);
-  add2(c.pbr,        c.pbr < 3,           c.pbr < 1.5,         3,  8);
-  add2(c.psr,        c.psr < 5,           c.psr < 2,           3,  7);
-
-  // 収益性 25pt
-  add2(c.roe,        c.roe > 0.08,        c.roe > 0.15,        5,  12);
-  add2(c.opMargin,   c.opMargin > 0.05,   c.opMargin > 0.15,   3,  8);
-  add2(c.roa,        c.roa > 0.03,        c.roa > 0.07,        2,  5);
-
-  // 成長性 25pt
-  add2(c.rule40,     c.rule40 >= 15,      c.rule40 >= 20,      7,  15);
-  add2(c.grossMargin,c.grossMargin > 0.25,c.grossMargin > 0.40,4,  10);
-
-  // 資本効率 15pt（WACC未入力時はスキップ）
-  if (c.spread != null) {
-    add2(c.spread,   c.spread > 0,        c.spread > 0.02,     5,  10);
-  }
-  add2(c.evEbitda,   c.evEbitda < 20,     c.evEbitda < 10,     2,  5);
-
-  // 健全性 10pt
-  add2(c.equityRatio,c.equityRatio > 0.30,c.equityRatio > 0.50,2,  4);
-  add2(c.currentRatio,c.currentRatio > 1.2,c.currentRatio > 2.0,2, 3);
+  add2(c.per,         "per");
+  add2(c.pbr,         "pbr");
+  add2(c.psr,         "psr");
+  add2(c.roe,         "roe");
+  add2(c.opMargin,    "opMargin");
+  add2(c.roa,         "roa");
+  add2(c.rule40,      "rule40");
+  add2(c.grossMargin, "grossMargin");
+  if (c.spread != null) add2(c.spread, "spread");
+  add2(c.evEbitda,    "evEbitda");
+  add2(c.equityRatio, "equityRatio");
+  add2(c.currentRatio,"currentRatio");
 
   return t > 0 ? Math.round((s / t) * 100) : null;
 }
 
-// スコアの説明
-const SCORE_CRITERIA = [
-  { label:"PER",        good:"<25倍: 4pt",  great:"<15倍: 10pt",  cat:"割安性" },
-  { label:"PBR",        good:"<3倍: 3pt",   great:"<1.5倍: 8pt",  cat:"割安性" },
-  { label:"PSR",        good:"<5倍: 3pt",   great:"<2倍: 7pt",    cat:"割安性" },
-  { label:"ROE",        good:">8%: 5pt",    great:">15%: 12pt",   cat:"収益性" },
-  { label:"営業利益率",  good:">5%: 3pt",    great:">15%: 8pt",    cat:"収益性" },
-  { label:"ROA",        good:">3%: 2pt",    great:">7%: 5pt",     cat:"収益性" },
-  { label:"Rule of 40", good:"≥15: 7pt",    great:"≥20: 15pt",    cat:"成長性" },
-  { label:"粗利率",      good:">25%: 4pt",   great:">40%: 10pt",   cat:"成長性" },
-  { label:"ROIC-WACC",  good:">0%: 5pt",    great:">2%: 10pt",    cat:"資本効率" },
-  { label:"EV/EBITDA",  good:"<20倍: 2pt",  great:"<10倍: 5pt",   cat:"資本効率" },
-  { label:"自己資本比率",good:">30%: 2pt",   great:">50%: 4pt",    cat:"健全性" },
-  { label:"流動比率",    good:">120%: 2pt",  great:">200%: 3pt",   cat:"健全性" },
+// スコア項目のメタ情報（UI表示用）
+const CRITERIA_META = [
+  { key:"per",         label:"PER",         unit:"倍",  dir:"lt", cat:"割安性",  desc:"株価収益率" },
+  { key:"pbr",         label:"PBR",         unit:"倍",  dir:"lt", cat:"割安性",  desc:"株価純資産倍率" },
+  { key:"psr",         label:"PSR",         unit:"倍",  dir:"lt", cat:"割安性",  desc:"株価売上高倍率" },
+  { key:"roe",         label:"ROE",         unit:"%",   dir:"gt", cat:"収益性",  desc:"自己資本利益率", scale:100 },
+  { key:"opMargin",    label:"営業利益率",   unit:"%",   dir:"gt", cat:"収益性",  desc:"営業効率", scale:100 },
+  { key:"roa",         label:"ROA",         unit:"%",   dir:"gt", cat:"収益性",  desc:"総資産利益率", scale:100 },
+  { key:"rule40",      label:"Rule of 40",  unit:"",    dir:"gt", cat:"成長性",  desc:"売上成長率%+営業利益率%" },
+  { key:"grossMargin", label:"粗利率",       unit:"%",   dir:"gt", cat:"成長性",  desc:"売上総利益率", scale:100 },
+  { key:"spread",      label:"ROIC-WACC",   unit:"%",   dir:"gt", cat:"資本効率", desc:"価値創造スプレッド", scale:100 },
+  { key:"evEbitda",    label:"EV/EBITDA",   unit:"倍",  dir:"lt", cat:"資本効率", desc:"企業価値倍率" },
+  { key:"equityRatio", label:"自己資本比率", unit:"%",   dir:"gt", cat:"健全性",  desc:"財務健全性", scale:100 },
+  { key:"currentRatio",label:"流動比率",    unit:"%",   dir:"gt", cat:"健全性",  desc:"短期安全性", scale:100 },
 ];
+
+const SCORE_CRITERIA = CRITERIA_META.map(m => {
+  const d = DEFAULT_CRITERIA[m.key];
+  if (!d) return { label:m.label, good:"—", great:"—", cat:m.cat };
+  const s = m.scale || 1;
+  const fmt = (v) => m.unit === "%" ? (v*s).toFixed(0)+"%" : v+m.unit;
+  return {
+    label: m.label,
+    good:  (d.dir==="lt" ? "<" : ">")+fmt(d.good)+": "+d.goodPts+"pt",
+    great: (d.dir==="lt" ? "<" : ">")+fmt(d.great)+": "+d.greatPts+"pt",
+    cat:   m.cat,
+  };
+});
 
 // periodsベースでスコア計算するヘルパー
 function scoreFromPeriods(h, globalBaseYear) {
@@ -149,13 +178,26 @@ function scoreFromPeriods(h, globalBaseYear) {
   const salesGrowth = curSales && prevSales && prevSales > 0 ? (curSales - prevSales) / prevSales * 100 : null;
   const opMarginPct = c.opMargin != null ? c.opMargin * 100 : null;
   const rule40 = salesGrowth != null && opMarginPct != null ? salesGrowth + opMarginPct : null;
-  // WACCスプレッド（保存済みの値を使用）
   const spread = h.waccSpread != null ? parseFloat(h.waccSpread) : null;
-  return financialScore({ ...c, rule40, spread });
+  // カスタム基準値があればそちらを使用
+  const customCriteria = loadCustomCriteria(h.id);
+  const criteria = customCriteria || DEFAULT_CRITERIA;
+  return financialScore({ ...c, rule40, spread }, criteria);
 }
 
 const LS_KEY = "kabulens_v2";
 const LS_WATCH = "kabulens_watch_v1";
+const LS_CUSTOM_CRITERIA = "kabulens_custom_criteria";
+
+const loadCustomCriteria = (stockId) => {
+  try {
+    const d = localStorage.getItem(LS_CUSTOM_CRITERIA+"_"+stockId);
+    return d ? JSON.parse(d) : null;
+  } catch { return null; }
+};
+const saveCustomCriteria = (stockId, criteria) => {
+  try { localStorage.setItem(LS_CUSTOM_CRITERIA+"_"+stockId, JSON.stringify(criteria)); } catch {}
+};
 const loadData = () => {
   try {
     const d = localStorage.getItem(LS_KEY);
@@ -503,6 +545,124 @@ function calcChg(cur, prev) {
 }
 
 // 財務指標タブ（多期間対応）
+// スコア評価基準カスタマイズコンポーネント
+function ScoreCriteriaEditor({ selected, R, S }) {
+  const [show, setShow] = useState(false);
+  const [criteria, setCriteria] = useState(() => loadCustomCriteria(selected?.id) || DEFAULT_CRITERIA);
+  const [updatedAt, setUpdatedAt] = useState(() => {
+    const c = loadCustomCriteria(selected?.id);
+    return c?.updatedAt || DEFAULT_CRITERIA.updatedAt;
+  });
+
+  useEffect(() => {
+    const c = loadCustomCriteria(selected?.id) || DEFAULT_CRITERIA;
+    setCriteria(c);
+    setUpdatedAt(c.updatedAt || DEFAULT_CRITERIA.updatedAt);
+  }, [selected?.id]);
+
+  const handleChange = (key, field, val) => {
+    const num = parseFloat(val);
+    if (isNaN(num) && val !== "") return;
+    setCriteria(prev => ({
+      ...prev,
+      [key]: { ...prev[key], [field]: val === "" ? "" : num }
+    }));
+  };
+
+  const handleSave = () => {
+    const today = new Date().toISOString().slice(0,10);
+    const saved = { ...criteria, updatedAt: today };
+    saveCustomCriteria(selected.id, saved);
+    setUpdatedAt(today);
+    setShow(false);
+    alert("評価基準を保存しました（"+today+"）");
+  };
+
+  const handleReset = () => {
+    if (!window.confirm("デフォルト基準値に戻しますか？")) return;
+    try { localStorage.removeItem(LS_CUSTOM_CRITERIA+"_"+selected.id); } catch {}
+    setCriteria(DEFAULT_CRITERIA);
+    setUpdatedAt(DEFAULT_CRITERIA.updatedAt);
+  };
+
+  const isCustom = loadCustomCriteria(selected?.id) != null;
+
+  return (
+    <div style={{ ...S.card, border:"1px solid #334155", marginBottom:16 }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:8 }}>
+        <div>
+          <span style={{ color:"#94a3b8", fontWeight:700, fontSize:R.md }}>スコア評価基準</span>
+          {isCustom && <span style={{ marginLeft:8, color:"#fbbf24", fontSize:R.sm }}>カスタム設定中</span>}
+          <span style={{ marginLeft:8, color:"#334155", fontSize:R.sm }}>基準更新日: {updatedAt}</span>
+        </div>
+        <div style={{ display:"flex", gap:8 }}>
+          {isCustom && <button style={{ ...S.miniBtn, color:"#f87171", borderColor:"#f87171" }} onClick={handleReset}>リセット</button>}
+          <button style={{ ...S.miniBtn, color:"#60a5fa", borderColor:"#60a5fa" }} onClick={() => setShow(v => !v)}>
+            {show ? "▲ 閉じる" : "▼ 基準値を編集"}
+          </button>
+        </div>
+      </div>
+
+      {show && (
+        <div style={{ marginTop:16 }}>
+          <div style={{ color:"#475569", fontSize:R.sm, marginBottom:12 }}>
+            業界平均を参考に良好・優良の基準値を変更できます。半年ごとの見直しを推奨。
+          </div>
+          {["割安性","収益性","成長性","資本効率","健全性"].map(cat => (
+            <div key={cat} style={{ marginBottom:16 }}>
+              <div style={{ color:"#60a5fa", fontWeight:700, fontSize:R.sm, marginBottom:8 }}>{cat}</div>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(min(320px,100%),1fr))", gap:8 }}>
+                {CRITERIA_META.filter(m => m.cat === cat).map(m => {
+                  const cr = criteria[m.key] || DEFAULT_CRITERIA[m.key];
+                  const def = DEFAULT_CRITERIA[m.key];
+                  const s = m.scale || 1;
+                  const fmt = v => m.unit === "%" ? parseFloat((v*s).toFixed(1)) : v;
+                  return (
+                    <div key={m.key} style={{ background:"#111827", borderRadius:8, padding:"10px 12px" }}>
+                      <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
+                        <span style={{ color:"#94a3b8", fontSize:R.sm, fontWeight:700 }}>{m.label}</span>
+                        <span style={{ color:"#334155", fontSize:R.sm }}>デフォルト: 良好{m.dir==="lt"?"<":">"}{fmt(def.good)}{m.unit} / 優良{m.dir==="lt"?"<":">"}{fmt(def.great)}{m.unit}</span>
+                      </div>
+                      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                        <div>
+                          <label style={{ color:"#64748b", fontSize:R.sm, display:"block", marginBottom:3 }}>
+                            良好基準 ({m.dir==="lt"?"<":">"} □{m.unit}) → {cr.goodPts}pt
+                          </label>
+                          <input
+                            value={fmt(cr.good)}
+                            onChange={e => handleChange(m.key, "good", m.scale ? String(parseFloat(e.target.value)/s) : e.target.value)}
+                            style={{ ...S.input, fontSize:R.sm }}
+                            inputMode="decimal"
+                          />
+                        </div>
+                        <div>
+                          <label style={{ color:"#64748b", fontSize:R.sm, display:"block", marginBottom:3 }}>
+                            優良基準 ({m.dir==="lt"?"<":">"} □{m.unit}) → {cr.greatPts}pt
+                          </label>
+                          <input
+                            value={fmt(cr.great)}
+                            onChange={e => handleChange(m.key, "great", m.scale ? String(parseFloat(e.target.value)/s) : e.target.value)}
+                            style={{ ...S.input, fontSize:R.sm }}
+                            inputMode="decimal"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+          <div style={{ display:"flex", gap:8, marginTop:8 }}>
+            <button style={S.addBtn} onClick={handleSave}>保存する</button>
+            <button style={S.miniBtn} onClick={() => setShow(false)}>キャンセル</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R, TS }) {
   const [metricsView, setMetricsView] = useState("current");
   const [waccParams, setWaccParams] = useState(() => {
@@ -625,14 +785,12 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
   }, [waccParams, cc, ff, fc]);
 
   // waccSpreadをperiodsに保存（スコア計算に使用）
-  const prevSpreadRef = useRef(null);
+  // waccResultのspreadが変わったときだけ保存
+  const waccSpreadValue = waccResult ? waccResult.spread : null;
   useEffect(() => {
-    if (!waccResult || !selected) return;
-    const spread = waccResult.spread;
-    if (prevSpreadRef.current === spread) return;
-    prevSpreadRef.current = spread;
-    updatePeriod(selected.id, "__meta__", "waccSpread", String(spread));
-  });
+    if (waccSpreadValue == null || !selected) return;
+    updatePeriod(selected.id, "__meta__", "waccSpread", String(waccSpreadValue));
+  }, [waccSpreadValue, selected?.id]); // eslint-disable-line
 
   // waccParamsをlocalStorageに保存
   useEffect(() => {
@@ -781,6 +939,9 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
             <MBox label="固定比率" value={cc.fixedRatio?pct(cc.fixedRatio):"—"} color={cc.fixedRatio&&cc.fixedRatio<1?"#4ade80":"#94a3b8"} hint="100%以下が望ましい" />
             <MBox label="固定長期適合率" value={cc.fixedLTRatio?pct(cc.fixedLTRatio):"—"} color={cc.fixedLTRatio&&cc.fixedLTRatio<1?"#4ade80":"#f87171"} hint="100%以下が望ましい" />
           </Sec>
+
+          {/* スコア評価基準カスタマイズ */}
+          <ScoreCriteriaEditor selected={selected} R={R_CURRENT} S={S} />
 
           {/* WACC・投資判断セクション */}
           <div style={{ ...S.card, border:"1px solid #334155" }}>
