@@ -483,6 +483,9 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
       粗利率: ca.grossMargin ? parseFloat((ca.grossMargin*100).toFixed(1)) : null,
       自己資本比率: ca.equityRatio ? parseFloat((ca.equityRatio*100).toFixed(1)) : null,
       EV_EBITDA: ca.evEbitda ? parseFloat(ca.evEbitda.toFixed(2)) : null,
+      PER: ca.per ? parseFloat(ca.per.toFixed(2)) : null,
+      PBR: ca.pbr ? parseFloat(ca.pbr.toFixed(2)) : null,
+      PSR: ca.psr ? parseFloat(ca.psr.toFixed(2)) : null,
     }));
   }, [annualData]);
 
@@ -703,6 +706,47 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
                 TS={TS}
               />
             </div>
+          </div>
+
+          {/* PER・PBR・PSRグラフ（実績＋予想） */}
+          <div style={S.card}>
+            <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:4 }}>PER・PBR・PSRトレンド</div>
+            <div style={{ color:"#475569", fontSize:R_CURRENT.sm, marginBottom:12 }}>
+              凡例をクリックで表示/非表示。
+              <span style={{ color:"#60a5fa" }}>●実績</span>：各年の本決算データ使用。
+              {fc && <span style={{ color:"#fbbf24" }}> ●今期予想：今期予想入力値使用。</span>}
+            </div>
+            <ToggleLineChart
+              data={[
+                ...trendData,
+                ...(fc ? [{ name:"今期予想", PER: fc.per ? parseFloat(fc.per.toFixed(2)) : null, PBR: null, PSR: fc.psr ? parseFloat(fc.psr.toFixed(2)) : null }] : []),
+              ]}
+              lines={[
+                { key:"PER", color:"#60a5fa" },
+                { key:"PBR", color:"#4ade80" },
+                { key:"PSR", color:"#f59e0b" },
+              ]}
+              yFormatter={v => v+"x"}
+              tooltipFormatter={v => v+"倍"}
+              height={R_CURRENT.chartMd}
+              refLines={[{ y:15, label:"15x", color:"#60a5fa44" }, { y:1, label:"1x", color:"#4ade8044" }]}
+              TS={TS}
+            />
+            {fc && (
+              <div style={{ marginTop:12, display:"flex", gap:16, flexWrap:"wrap" }}>
+                {[
+                  ["予想PER", fc.per ? fc.per.toFixed(2)+"x" : "—", "#60a5fa"],
+                  ["予想PSR", fc.psr ? fc.psr.toFixed(2)+"x" : "—", "#f59e0b"],
+                  ["予想配当利回り", fc.dividendYield ? (fc.dividendYield*100).toFixed(2)+"%" : "—", "#4ade80"],
+                  ["予想営業利益率", fc.opMargin ? (fc.opMargin*100).toFixed(2)+"%" : "—", "#a78bfa"],
+                ].map(([label, val, color]) => (
+                  <div key={label} style={{ background:"#111827", borderRadius:6, padding:"8px 14px", border:`1px solid ${color}44` }}>
+                    <div style={{ color:"#475569", fontSize:R_CURRENT.sm, marginBottom:2 }}>{label} <span style={{ color:"#fbbf24", fontSize:R_CURRENT.sm }}>(予想)</span></div>
+                    <div style={{ color, fontWeight:700, fontSize:R_CURRENT.lg }}>{val}</div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
