@@ -731,17 +731,26 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
             </div>
           </div>
 
-          {/* 四半期推移（累計値）グラフ */}
+          {/* 四半期単体値グラフ */}
           <div style={S.card}>
-            <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:4 }}>四半期推移（累計値）</div>
-            <div style={{ color:"#475569", fontSize:R_CURRENT.sm, marginBottom:12 }}>凡例をクリックで表示/非表示</div>
+            <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:4 }}>四半期単体推移</div>
+            <div style={{ color:"#475569", fontSize:R_CURRENT.sm, marginBottom:12 }}>累計値から四半期単体値を算出。凡例をクリックで表示/非表示</div>
             <ToggleLineChart
-              data={qtrData.map(({ label, f: fd }) => ({
-                name: label,
-                売上高: n(fd.sales) ? Math.round(n(fd.sales)/1e8)/10 : null,
-                営業利益: n(fd.opProfit) ? Math.round(n(fd.opProfit)/1e8)/10 : null,
-                純利益: n(fd.netProfit) ? Math.round(n(fd.netProfit)/1e8)/10 : null,
-              }))}
+              data={qtrData.map(({ label, f: fd }, i) => {
+                const qIdx = ["Q1","Q2","Q3","Q4"].indexOf(qtrData[i].key.split("-")[1]);
+                const prevQCum = qIdx > 0 ? n(qtrData[i-1].f.sales) : null;
+                const prevQOp  = qIdx > 0 ? n(qtrData[i-1].f.opProfit) : null;
+                const prevQNet = qIdx > 0 ? n(qtrData[i-1].f.netProfit) : null;
+                const s = n(fd.sales);
+                const o = n(fd.opProfit);
+                const nt = n(fd.netProfit);
+                return {
+                  name: label,
+                  売上高: s != null ? Math.round((qIdx > 0 && prevQCum != null ? s - prevQCum : s)/1e8)/10 : null,
+                  営業利益: o != null ? Math.round((qIdx > 0 && prevQOp != null ? o - prevQOp : o)/1e8)/10 : null,
+                  純利益: nt != null ? Math.round((qIdx > 0 && prevQNet != null ? nt - prevQNet : nt)/1e8)/10 : null,
+                };
+              })}
               lines={[
                 { key:"売上高",   color:"#60a5fa" },
                 { key:"営業利益", color:"#4ade80" },
@@ -754,22 +763,59 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
             />
           </div>
 
-          {/* 前年同期比グラフ */}
+          {/* 累計値棒グラフ */}
+          <div style={S.card}>
+            <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:4 }}>四半期累計値推移</div>
+            <div style={{ color:"#475569", fontSize:R_CURRENT.sm, marginBottom:12 }}>入力した累計値そのまま</div>
+            <ResponsiveContainer width="100%" height={R_CURRENT.chartMd}>
+              <BarChart data={qtrData.map(({ label, f: fd }) => ({
+                name: label,
+                売上高: n(fd.sales) ? Math.round(n(fd.sales)/1e8)/10 : null,
+                営業利益: n(fd.opProfit) ? Math.round(n(fd.opProfit)/1e8)/10 : null,
+                純利益: n(fd.netProfit) ? Math.round(n(fd.netProfit)/1e8)/10 : null,
+              }))} margin={{ bottom:50 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                <XAxis dataKey="name" tick={{ fill:"#94a3b8", fontSize:R_CURRENT.sm }} interval={0} angle={-45} textAnchor="end" height={60} />
+                <YAxis tick={{ fill:"#64748b", fontSize:R_CURRENT.sm }} tickFormatter={v => v+"億"} />
+                <Tooltip formatter={v => v+"億円"} contentStyle={TS} itemStyle={{ color:"#e2e8f0" }} />
+                <Legend wrapperStyle={{ color:"#94a3b8", fontSize:R_CURRENT.sm }} />
+                <Bar dataKey="売上高" fill="#60a5fa" radius={[2,2,0,0]} />
+                <Bar dataKey="営業利益" fill="#4ade80" radius={[2,2,0,0]} />
+                <Bar dataKey="純利益" fill="#a78bfa" radius={[2,2,0,0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* 前年同期比グラフ（単体値ベース） */}
           <div style={S.card}>
             <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:4 }}>売上高・営業利益 前年同期比</div>
-            <div style={{ color:"#475569", fontSize:R_CURRENT.sm, marginBottom:12 }}>各四半期の前年同期比（%）</div>
-            <ResponsiveContainer width="100%" height={R_CURRENT.chartMd}>
+            <div style={{ color:"#475569", fontSize:R_CURRENT.sm, marginBottom:12 }}>四半期単体値ベースの前年同期比（%）</div>
+            <ResponsiveContainer width="100%" height={R_CURRENT.chartLg}>
               <BarChart data={qtrData.map(({ label, f: fd }, i) => {
-                const prevSales  = i >= 4 ? n(qtrData[i-4].f.sales) : null;
-                const prevOp     = i >= 4 ? n(qtrData[i-4].f.opProfit) : null;
+                const qIdx = ["Q1","Q2","Q3","Q4"].indexOf(qtrData[i].key.split("-")[1]);
+                const curS  = n(fd.sales);
+                const curO  = n(fd.opProfit);
+                const prevQCumS = qIdx > 0 ? n(qtrData[i-1].f.sales) : null;
+                const prevQCumO = qIdx > 0 ? n(qtrData[i-1].f.opProfit) : null;
+                const singleS = curS != null ? (qIdx > 0 && prevQCumS != null ? curS - prevQCumS : curS) : null;
+                const singleO = curO != null ? (qIdx > 0 && prevQCumO != null ? curO - prevQCumO : curO) : null;
+                // 前年同期単体
+                const prevI = i - 4;
+                const prevQIdx2 = prevI >= 0 ? ["Q1","Q2","Q3","Q4"].indexOf(qtrData[prevI]?.key.split("-")[1]) : -1;
+                const prevCumS  = prevI >= 0 ? n(qtrData[prevI].f.sales) : null;
+                const prevCumO  = prevI >= 0 ? n(qtrData[prevI].f.opProfit) : null;
+                const prevPrevCumS = prevI > 0 && prevQIdx2 > 0 ? n(qtrData[prevI-1].f.sales) : null;
+                const prevPrevCumO = prevI > 0 && prevQIdx2 > 0 ? n(qtrData[prevI-1].f.opProfit) : null;
+                const prevSingleS = prevCumS != null ? (prevQIdx2 > 0 && prevPrevCumS != null ? prevCumS - prevPrevCumS : prevCumS) : null;
+                const prevSingleO = prevCumO != null ? (prevQIdx2 > 0 && prevPrevCumO != null ? prevCumO - prevPrevCumO : prevCumO) : null;
                 return {
                   name: label,
-                  売上高前年比: prevSales  && n(fd.sales)    ? parseFloat(((n(fd.sales)-prevSales)/Math.abs(prevSales)*100).toFixed(1)) : null,
-                  営業利益前年比: prevOp   && n(fd.opProfit) ? parseFloat(((n(fd.opProfit)-prevOp)/Math.abs(prevOp)*100).toFixed(1)) : null,
+                  売上高前年比: singleS != null && prevSingleS != null && prevSingleS !== 0 ? parseFloat(((singleS-prevSingleS)/Math.abs(prevSingleS)*100).toFixed(1)) : null,
+                  営業利益前年比: singleO != null && prevSingleO != null && prevSingleO !== 0 ? parseFloat(((singleO-prevSingleO)/Math.abs(prevSingleO)*100).toFixed(1)) : null,
                 };
-              })}>
+              })} margin={{ bottom:50 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                <XAxis dataKey="name" tick={{ fill:"#94a3b8", fontSize:R_CURRENT.sm }} interval={0} angle={-30} textAnchor="end" height={40} />
+                <XAxis dataKey="name" tick={{ fill:"#94a3b8", fontSize:R_CURRENT.sm }} interval={0} angle={-45} textAnchor="end" height={60} />
                 <YAxis tick={{ fill:"#64748b", fontSize:R_CURRENT.sm }} tickFormatter={v => v+"%"} />
                 <Tooltip formatter={v => v+"%"} contentStyle={TS} itemStyle={{ color:"#e2e8f0" }} />
                 <ReferenceLine y={0} stroke="#475569" />
