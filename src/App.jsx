@@ -684,7 +684,7 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
                 value={r40.rule40 != null ? r40.rule40.toFixed(1) : "—"}
                 color={r40.rule40Color}
                 hint="売上成長率% + 営業利益率%"
-                badge={r40.rule40 != null && r40.rule40 >= 40 ? "優良" : ""}
+                badge={r40.rule40 != null && r40.rule40 >= 30 ? (r40.rule40 >= 40 ? "優良" : "良好") : ""}
               />
               <div style={{ gridColumn:"1/-1", background:"#111827", borderRadius:8, padding:"10px 14px", fontSize:R_CURRENT.sm, color:"#64748b", lineHeight:1.8 }}>
                 <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:4 }}>Rule of 40 とは</div>
@@ -705,7 +705,7 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
               ? (curSales - prevSales) / prevSales * 100 : null;
             const opMarginPct = cc.opMargin != null ? cc.opMargin * 100 : null;
             const rule40 = salesGrowth != null && opMarginPct != null ? salesGrowth + opMarginPct : null;
-            const rule40Color = rule40 == null ? "#94a3b8" : rule40 >= 40 ? "#4ade80" : rule40 >= 20 ? "#fbbf24" : "#f87171";
+            const rule40Color = rule40 == null ? "#94a3b8" : rule40 >= 30 ? "#4ade80" : rule40 >= 20 ? "#34d399" : rule40 >= 10 ? "#fbbf24" : "#f87171";
             return { salesGrowth, rule40, rule40Color, prevYrKey };
           })(String(baseYear - 1)))}
           <Sec title="安全性">
@@ -1051,7 +1051,7 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
               yFormatter={v => v+"%"}
               tooltipFormatter={v => v+"%"}
               height={R_CURRENT.chartMd}
-              refLines={[{ y:40, label:"40", color:"#4ade80" }, { y:0, label:"0", color:"#475569" }]}
+              refLines={[{ y:30, label:"30(日本基準優良)", color:"#4ade80" }, { y:40, label:"40(米国基準)", color:"#34d399" }]}
               TS={TS}
             />
           </div>
