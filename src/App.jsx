@@ -127,7 +127,7 @@ const makeS = R => ({
   sbLabel: { fontSize:R.sm, color:"#475569", marginBottom:4, textTransform:"uppercase", letterSpacing:1 },
   sbVal:   { fontSize:R.xxl, fontWeight:800 },
   h2:      { fontSize:R.xl, fontWeight:800, color:"#f1f5f9", margin:"0 0 16px 0", letterSpacing:1 },
-  card:    { background:"#0d1424", border:"1px solid #1e293b", borderRadius:10, padding:R.scale==="sm"?14:20, marginBottom:16 },
+  card:    { background:"#0d1424", border:"1px solid #1e293b", borderRadius:10, padding:R.scale==="sm"?16:28, marginBottom:20 },
   table:   { background:"#0d1424", border:"1px solid #1e293b", borderRadius:10, overflow:"hidden", marginBottom:16 },
   chips:   { display:"flex", flexWrap:"wrap", gap:8, marginBottom:16 },
   chip:    { background:"#111827", border:"1px solid #1e293b", color:"#94a3b8", padding:R.scale==="sm"?"5px 10px":"7px 16px", borderRadius:20, cursor:"pointer", fontSize:R.sm, fontFamily:"inherit" },
@@ -191,7 +191,7 @@ const MBox = ({ label, value, color="#94a3b8", hint="", badge="" }) => {
   const [open, setOpen] = useState(false);
   const desc = DESC[label];
   return (
-    <div style={{ background:"#111827", borderRadius:8, padding:"10px 14px", position:"relative" }}>
+    <div style={{ background:"#111827", borderRadius:8, padding:"14px 18px", position:"relative" }}>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
         <span style={{ color:"#475569", fontSize:16, cursor:desc?"pointer":"default", display:"flex", alignItems:"center", gap:4 }}
           onClick={() => desc && setOpen(v => !v)}>
@@ -221,7 +221,7 @@ const MBox = ({ label, value, color="#94a3b8", hint="", badge="" }) => {
 const Sec = ({ title, children }) => (
   <div style={{ marginBottom:20 }}>
     <div style={{ fontSize:16, fontWeight:700, color:"#60a5fa", marginBottom:10, paddingBottom:6, borderBottom:"1px solid #1e293b" }}>{title}</div>
-    <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(min(145px,45vw),1fr))", gap:10 }}>{children}</div>
+    <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(min(160px,45vw),1fr))", gap:14 }}>{children}</div>
   </div>
 );
 
@@ -1179,7 +1179,7 @@ export default function App() {
         </div>
       </div>
 
-      <main style={{ padding:24, maxWidth:1200, margin:"0 auto" }}>
+      <main style={{ padding:R.scale==="sm"?16:40, maxWidth:1400, margin:"0 auto" }}>
 
         {tab === "portfolio" && (
           <div>
@@ -1243,7 +1243,7 @@ export default function App() {
 
             <div style={{ ...S.table, overflowX:"auto" }}>
               <div style={{ minWidth:800 }}>
-              <div style={{ display:"grid", gridTemplateColumns:"2fr 0.6fr 0.7fr 0.9fr 0.9fr 0.9fr 1.1fr 1fr 0.6fr 1.3fr", padding:"10px 16px", background:"#111827", gap:8 }}>
+              <div style={{ display:"grid", gridTemplateColumns:"2fr 0.6fr 0.7fr 0.9fr 0.9fr 0.9fr 1.1fr 1fr 0.6fr 1.3fr", padding:"12px 20px", background:"#111827", gap:10 }}>
                 {["銘柄","コード","保有数","取得単価","現在値","目標株価","評価額","損益率","スコア","操作"].map(h => (
                   <span key={h} style={{ fontSize:R.sm, color:"#475569", textTransform:"uppercase" }}>{h}</span>
                 ))}
@@ -1254,7 +1254,7 @@ export default function App() {
                 const tp = n(h.memo?.targetPrice);
                 const tpPct = tp ? ((h.currentPrice-tp)/tp*100) : null;
                 return (
-                  <div key={h.id} style={{ display:"grid", gridTemplateColumns:"2fr 0.6fr 0.7fr 0.9fr 0.9fr 0.9fr 1.1fr 1fr 0.6fr 1.3fr", padding:"12px 16px", gap:8, borderTop:"1px solid #1e293b", alignItems:"center", ...(selected?.id===h.id?{ background:"#0f2a1a" }:{}) }}>
+                  <div key={h.id} style={{ display:"grid", gridTemplateColumns:"2fr 0.6fr 0.7fr 0.9fr 0.9fr 0.9fr 1.1fr 1fr 0.6fr 1.3fr", padding:"14px 20px", gap:10, borderTop:"1px solid #1e293b", alignItems:"center", ...(selected?.id===h.id?{ background:"#0f2a1a" }:{}) }}>
                     <span style={{ fontWeight:700, color:"#e2e8f0" }}>{h.name}<br/><span style={{ color:"#475569", fontSize:R.sm }}>{h.sector}</span></span>
                     <span><Tag color="#60a5fa">{h.ticker}</Tag></span>
                     <span style={{ color:"#94a3b8" }}>{h.qty.toLocaleString()}</span>
