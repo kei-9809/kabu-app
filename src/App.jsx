@@ -715,22 +715,58 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
             </table>
           </div>
 
-          {/* 四半期売上推移グラフ */}
+          {/* 四半期推移グラフ */}
+          <div style={{ ...S.card, background:"#0a1628", border:"1px solid #1e3a5f", marginBottom:16 }}>
+            <div style={{ color:"#60a5fa", fontSize:R_CURRENT.sm }}>
+              📌 入力値は<strong>累計値</strong>です。Q1=第1四半期累計、Q2=上半期累計、Q3=第3四半期累計、Q4=通期。
+            </div>
+          </div>
+
+          {/* 四半期推移（累計値）グラフ */}
           <div style={S.card}>
-            <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:12 }}>四半期売上高・営業利益推移</div>
-            <ResponsiveContainer width="100%" height={R_CURRENT.chartMd}>
-              <BarChart data={qtrData.map(({ label, f: fd }) => ({
+            <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:4 }}>四半期推移（累計値）</div>
+            <div style={{ color:"#475569", fontSize:R_CURRENT.sm, marginBottom:12 }}>凡例をクリックで表示/非表示</div>
+            <ToggleLineChart
+              data={qtrData.map(({ label, f: fd }) => ({
                 name: label,
                 売上高: n(fd.sales) ? Math.round(n(fd.sales)/1e8)/10 : null,
                 営業利益: n(fd.opProfit) ? Math.round(n(fd.opProfit)/1e8)/10 : null,
-              }))}>
+                純利益: n(fd.netProfit) ? Math.round(n(fd.netProfit)/1e8)/10 : null,
+              }))}
+              lines={[
+                { key:"売上高",   color:"#60a5fa" },
+                { key:"営業利益", color:"#4ade80" },
+                { key:"純利益",   color:"#a78bfa" },
+              ]}
+              yFormatter={v => v+"億"}
+              tooltipFormatter={v => v+"億円"}
+              height={R_CURRENT.chartMd}
+              TS={TS}
+            />
+          </div>
+
+          {/* 前年同期比グラフ */}
+          <div style={S.card}>
+            <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:4 }}>売上高・営業利益 前年同期比</div>
+            <div style={{ color:"#475569", fontSize:R_CURRENT.sm, marginBottom:12 }}>各四半期の前年同期比（%）</div>
+            <ResponsiveContainer width="100%" height={R_CURRENT.chartMd}>
+              <BarChart data={qtrData.map(({ label, f: fd }, i) => {
+                const prevSales  = i >= 4 ? n(qtrData[i-4].f.sales) : null;
+                const prevOp     = i >= 4 ? n(qtrData[i-4].f.opProfit) : null;
+                return {
+                  name: label,
+                  売上高前年比: prevSales  && n(fd.sales)    ? parseFloat(((n(fd.sales)-prevSales)/Math.abs(prevSales)*100).toFixed(1)) : null,
+                  営業利益前年比: prevOp   && n(fd.opProfit) ? parseFloat(((n(fd.opProfit)-prevOp)/Math.abs(prevOp)*100).toFixed(1)) : null,
+                };
+              })}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                 <XAxis dataKey="name" tick={{ fill:"#94a3b8", fontSize:R_CURRENT.sm }} interval={0} angle={-30} textAnchor="end" height={40} />
-                <YAxis tick={{ fill:"#64748b", fontSize:R_CURRENT.sm }} tickFormatter={v => v+"億"} />
-                <Tooltip formatter={v => v+"億円"} contentStyle={TS} itemStyle={{ color:"#e2e8f0" }} />
+                <YAxis tick={{ fill:"#64748b", fontSize:R_CURRENT.sm }} tickFormatter={v => v+"%"} />
+                <Tooltip formatter={v => v+"%"} contentStyle={TS} itemStyle={{ color:"#e2e8f0" }} />
+                <ReferenceLine y={0} stroke="#475569" />
                 <Legend wrapperStyle={{ color:"#94a3b8", fontSize:R_CURRENT.sm }} />
-                <Bar dataKey="売上高" fill="#60a5fa" radius={[2,2,0,0]} />
-                <Bar dataKey="営業利益" fill="#4ade80" radius={[2,2,0,0]} />
+                <Bar dataKey="売上高前年比" fill="#60a5fa" radius={[2,2,0,0]} />
+                <Bar dataKey="営業利益前年比" fill="#4ade80" radius={[2,2,0,0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -845,6 +881,11 @@ function InputTab({ selected, periods, updatePeriod, baseYear, annualKeys, qtrKe
 
       {inputView === "qtr" && (
         <div>
+          <div style={{ ...S.card, marginBottom:12, background:"#0a1628", border:"1px solid #1e3a5f" }}>
+            <div style={{ color:"#60a5fa", fontSize:R_CURRENT.sm, lineHeight:1.8 }}>
+              📌 <strong>累計値で入力してください。</strong>例: Q1は第1四半期累計、Q2は第2四半期累計（上半期）、Q3は第3四半期累計、Q4は通期（本決算と同じ）。
+            </div>
+          </div>
           <div style={{ display:"flex", gap:8, marginBottom:16 }}>
             {annualKeys.map(yr => (
               <button key={yr} style={{ ...S.navBtn, ...(activeQtrYear===yr?S.navOn:{}) }} onClick={() => setActiveQtrYear(yr)}>{yr}年</button>
@@ -853,17 +894,19 @@ function InputTab({ selected, periods, updatePeriod, baseYear, annualKeys, qtrKe
           <div style={{ display:"grid", gridTemplateColumns:R_CURRENT.grid2, gap:16 }}>
             {["Q1","Q2","Q3","Q4"].map(q => {
               const key = activeQtrYear+"-"+q;
+              const qLabel = { Q1:"第1四半期累計", Q2:"第2四半期累計（上半期）", Q3:"第3四半期累計", Q4:"通期（本決算同）" }[q];
               return (
                 <div key={key} style={{ ...S.card, border:"1px solid #334155" }}>
-                  <div style={{ color:"#fbbf24", fontWeight:700, marginBottom:12 }}>{activeQtrYear}年 {q}</div>
-                  <div style={{ display:"grid", gridTemplateColumns:R_CURRENT.grid2, gap:10 }}>
-                    {PERIOD_FIELDS.filter(f2 => ["price","shares","sales","opProfit","netProfit","totalAssets","equity"].includes(f2.key)).map(({ label, key: fk, hint }) => (
-                      <div key={fk} style={{ display:"flex", flexDirection:"column", gap:3 }}>
-                        <label style={{ color:"#64748b", fontSize:16 }}>{label}</label>
+                  <div style={{ color:"#fbbf24", fontWeight:700, marginBottom:4 }}>{activeQtrYear}年 {q}</div>
+                  <div style={{ color:"#475569", fontSize:R_CURRENT.sm, marginBottom:12 }}>{qLabel}</div>
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr", gap:10 }}>
+                    {PERIOD_FIELDS.filter(f2 => ["price","shares","sales","opProfit","netProfit","totalAssets","equity"].includes(f2.key)).map(({ label, key: fk }) => (
+                      <div key={fk} style={{ display:"flex", alignItems:"center", gap:8 }}>
+                        <label style={{ color:"#64748b", fontSize:R_CURRENT.sm, minWidth:120, flexShrink:0 }}>{label}</label>
                         <input
                           value={periods[key]?.[fk] || ""}
                           onChange={e => handleChange(key, fk, e.target.value)}
-                          style={{ ...S.input, fontSize:16 }}
+                          style={{ ...S.input, fontSize:R_CURRENT.md }}
                           placeholder="数値"
                           inputMode="decimal"
                         />
