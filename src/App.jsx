@@ -379,7 +379,10 @@ let R_CURRENT = R_DEFAULT;
 
 const PIE_COLORS = ["#60a5fa","#4ade80","#f59e0b","#a78bfa","#f87171","#34d399","#fb7185","#38bdf8"];
 const CMP_COLORS = ["#4ade80","#60a5fa","#f59e0b","#a78bfa"];
-const scoreColor = v => v >= 80 ? "#4ade80" : v >= 50 ? "#fbbf24" : "#f87171";
+const scoreColor = v => v >= 75 ? "#4ade80" : v >= 55 ? "#34d399" : v >= 35 ? "#fbbf24" : "#f87171";
+const scoreLabel = v => v >= 75 ? "優良" : v >= 55 ? "良好" : v >= 35 ? "普通" : "要注意";
+// スコア目安（バッジのtitleに表示）
+const SCORE_GUIDE = "【スコア目安】75pt以上: 優良 / 55〜74pt: 良好 / 35〜54pt: 普通 / 34pt以下: 要注意\n（WACCスプレッド入力時は最大100pt、未入力時は85pt換算で正規化）";
 const typeColor = t => ({ "決算":"#4ade80","配当":"#fbbf24","人事":"#a78bfa" }[t] || "#64748b");
 
 // レスポンシブ対応：画面幅でフォントスケールを決定
@@ -652,13 +655,13 @@ function ScoreBadge({ sc, stockId, large }) {
   const modeLabel = mode === "value" ? "バリュー" : mode === "growth" ? "グロース" : mode === "custom" ? "カスタム" : null;
   const modeColor = mode === "value" ? "#60a5fa" : mode === "growth" ? "#4ade80" : mode === "custom" ? "#fbbf24" : "#94a3b8";
   if (sc == null) return null;
-  const tipText = SCORE_CRITERIA.map(c2 =>
+  const tipText = SCORE_GUIDE + "\n\n" + SCORE_CRITERIA.map(c2 =>
     c2.label+"["+c2.cat+"] 良好:"+c2.good+" 優良:"+c2.great+(c2.penalty ? " | "+c2.penalty : "")
   ).join("\n");
   return (
-    <div style={{ display:"inline-flex", flexDirection:"column", alignItems:"flex-start", gap:3 }} title={tipText}>
+    <div style={{ display:"inline-flex", flexDirection:"column", alignItems:"flex-start", gap:2 }} title={tipText}>
       <span style={{ background:scoreColor(sc)+"22", color:scoreColor(sc), border:"1px solid "+scoreColor(sc)+"44", borderRadius:5, padding:"2px 7px", fontSize:large?15:12, fontWeight:700, whiteSpace:"nowrap", cursor:"help" }}>
-        {sc}pt
+        {sc}pt <span style={{ fontSize:large?11:10, opacity:0.85 }}>{scoreLabel(sc)}</span>
       </span>
       {modeLabel && (
         <span style={{ fontSize:10, background:modeColor+"22", color:modeColor, border:"1px solid "+modeColor+"44", borderRadius:3, padding:"1px 5px", whiteSpace:"nowrap" }}>
@@ -2437,7 +2440,7 @@ export default function App() {
 
             <div style={{ ...S.table, overflowX:"auto" }}>
               <div style={{ minWidth:800 }}>
-              <div style={{ display:"grid", gridTemplateColumns:"2fr 0.6fr 0.7fr 0.9fr 0.9fr 0.9fr 1.1fr 1fr 0.6fr 1.3fr", padding:"12px 20px", background:"#111827", gap:10 }}>
+              <div style={{ display:"grid", gridTemplateColumns:"2fr 0.6fr 0.7fr 0.9fr 0.9fr 0.9fr 1.1fr 1fr 0.8fr 1.5fr", padding:"12px 20px", background:"#111827", gap:10 }}>
                 {["銘柄","コード","保有数","取得単価","現在値","目標株価","評価額","損益率","スコア","操作"].map(h => (
                   <span key={h} style={{ fontSize:R.sm, color:"#475569", textTransform:"uppercase" }}>{h}</span>
                 ))}
@@ -2448,7 +2451,7 @@ export default function App() {
                 const tp = n(h.memo?.targetPrice);
                 const tpPct = tp ? ((h.currentPrice-tp)/tp*100) : null;
                 return (
-                  <div key={h.id} style={{ display:"grid", gridTemplateColumns:"2fr 0.6fr 0.7fr 0.9fr 0.9fr 0.9fr 1.1fr 1fr 0.6fr 1.3fr", padding:"14px 20px", gap:10, borderTop:"1px solid #1e293b", alignItems:"center", ...(selected?.id===h.id?{ background:"#0f2a1a" }:{}) }}>
+                  <div key={h.id} style={{ display:"grid", gridTemplateColumns:"2fr 0.6fr 0.7fr 0.9fr 0.9fr 0.9fr 1.1fr 1fr 0.8fr 1.5fr", padding:"14px 20px", gap:10, borderTop:"1px solid #1e293b", alignItems:"start", ...(selected?.id===h.id?{ background:"#0f2a1a" }:{}) }}>
                     <span style={{ fontWeight:700, color:"#e2e8f0" }}>{h.name}<br/><span style={{ color:"#475569", fontSize:R.sm }}>{h.sector}</span></span>
                     <span><Tag color="#60a5fa">{h.ticker}</Tag></span>
                     <span style={{ color:"#94a3b8" }}>{h.qty.toLocaleString()}</span>
@@ -2745,7 +2748,7 @@ export default function App() {
                     </thead>
                     <tbody>
                       {[
-                        ["総合スコア", h => financialScore(calcAll(h.financials)), v => v!=null?v+"pt":"—", v => v!=null?scoreColor(v):"#475569"],
+                        ["総合スコア", h => scoreFromPeriods(h, baseYear), v => v!=null?v+"pt ("+scoreLabel(v)+")":"—", v => v!=null?scoreColor(v):"#475569"],
                         ["PER",        h => calcAll(h.financials).per,             v => v?xfmt(v):"—",      v => v&&v<15?"#4ade80":v&&v<25?"#fbbf24":"#f87171"],
                         ["PBR",        h => calcAll(h.financials).pbr,             v => v?xfmt(v):"—",      v => v&&v<1.5?"#4ade80":"#94a3b8"],
                         ["PSR",        h => calcAll(h.financials).psr,             v => v?xfmt(v):"—",      () => "#94a3b8"],
