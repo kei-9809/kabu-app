@@ -144,6 +144,7 @@ const makeS = R => ({
 // グローバルデフォルト（外部コンポーネント用・PCサイズ）
 const R_DEFAULT = { scale:"lg", base:16, sm:16, md:16, lg:18, xl:22, xxl:26, chartSm:200, chartMd:250, chartLg:300, chartXl:320, grid2:"1fr 1fr", grid3:"1fr 1fr 1fr", isMobile:false };
 let S = makeS(R_DEFAULT);
+let R_CURRENT = R_DEFAULT;
 
 const PIE_COLORS = ["#60a5fa","#4ade80","#f59e0b","#a78bfa","#f87171","#34d399","#fb7185","#38bdf8"];
 const CMP_COLORS = ["#4ade80","#60a5fa","#f59e0b","#a78bfa"];
@@ -284,8 +285,8 @@ function ToggleLineChart({ data, lines, yFormatter, tooltipFormatter, height=200
       <ResponsiveContainer width="100%" height={height}>
         <LineChart data={data}>
           <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-          <XAxis dataKey="name" tick={{ fill:"#94a3b8", fontSize:R.sm }} />
-          <YAxis tick={{ fill:"#64748b", fontSize:R.sm }} tickFormatter={yFormatter} />
+          <XAxis dataKey="name" tick={{ fill:"#94a3b8", fontSize:R_CURRENT.sm }} />
+          <YAxis tick={{ fill:"#64748b", fontSize:R_CURRENT.sm }} tickFormatter={yFormatter} />
           <Tooltip formatter={tooltipFormatter} contentStyle={TS} itemStyle={{ color:"#e2e8f0" }} />
           {refLines.map(r => (
             <ReferenceLine key={r.label} y={r.y} stroke={r.color} strokeDasharray="4 4"
@@ -615,7 +616,7 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
               ]}
               yFormatter={v => v+"億"}
               tooltipFormatter={v => v+"億円"}
-              height={R.chartMd}
+              height={R_CURRENT.chartMd}
               TS={TS}
             />
           </div>
@@ -634,13 +635,13 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
               ]}
               yFormatter={v => v+"%"}
               tooltipFormatter={v => v+"%"}
-              height={R.chartMd}
+              height={R_CURRENT.chartMd}
               TS={TS}
             />
           </div>
 
           {/* ROE・ROAトレンド / EV/EBITDA */}
-          <div style={{ display:"grid", gridTemplateColumns:R.grid2, gap:16 }}>
+          <div style={{ display:"grid", gridTemplateColumns:R_CURRENT.grid2, gap:16 }}>
             <div style={S.card}>
               <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:4 }}>ROE・ROAトレンド</div>
               <div style={{ color:"#475569", fontSize:16, marginBottom:8 }}>凡例をクリックで表示/非表示</div>
@@ -652,7 +653,7 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
                 ]}
                 yFormatter={v => v+"%"}
                 tooltipFormatter={v => v+"%"}
-                height={R.chartMd}
+                height={R_CURRENT.chartMd}
                 TS={TS}
               />
             </div>
@@ -666,7 +667,7 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
                 ]}
                 yFormatter={v => v+"x"}
                 tooltipFormatter={v => v+"倍"}
-                height={R.chartMd}
+                height={R_CURRENT.chartMd}
                 refLines={[{ y:10, label:"10x", color:"#4ade80" }]}
                 TS={TS}
               />
@@ -717,17 +718,17 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
           {/* 四半期売上推移グラフ */}
           <div style={S.card}>
             <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:12 }}>四半期売上高・営業利益推移</div>
-            <ResponsiveContainer width="100%" height={R.chartMd}>
+            <ResponsiveContainer width="100%" height={R_CURRENT.chartMd}>
               <BarChart data={qtrData.map(({ label, f: fd }) => ({
                 name: label,
                 売上高: n(fd.sales) ? Math.round(n(fd.sales)/1e8)/10 : null,
                 営業利益: n(fd.opProfit) ? Math.round(n(fd.opProfit)/1e8)/10 : null,
               }))}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                <XAxis dataKey="name" tick={{ fill:"#94a3b8", fontSize:R.sm }} interval={0} angle={-30} textAnchor="end" height={40} />
-                <YAxis tick={{ fill:"#64748b", fontSize:R.sm }} tickFormatter={v => v+"億"} />
+                <XAxis dataKey="name" tick={{ fill:"#94a3b8", fontSize:R_CURRENT.sm }} interval={0} angle={-30} textAnchor="end" height={40} />
+                <YAxis tick={{ fill:"#64748b", fontSize:R_CURRENT.sm }} tickFormatter={v => v+"億"} />
                 <Tooltip formatter={v => v+"億円"} contentStyle={TS} itemStyle={{ color:"#e2e8f0" }} />
-                <Legend wrapperStyle={{ color:"#94a3b8", fontSize:R.sm }} />
+                <Legend wrapperStyle={{ color:"#94a3b8", fontSize:R_CURRENT.sm }} />
                 <Bar dataKey="売上高" fill="#60a5fa" radius={[2,2,0,0]} />
                 <Bar dataKey="営業利益" fill="#4ade80" radius={[2,2,0,0]} />
               </BarChart>
@@ -849,13 +850,13 @@ function InputTab({ selected, periods, updatePeriod, baseYear, annualKeys, qtrKe
               <button key={yr} style={{ ...S.navBtn, ...(activeQtrYear===yr?S.navOn:{}) }} onClick={() => setActiveQtrYear(yr)}>{yr}年</button>
             ))}
           </div>
-          <div style={{ display:"grid", gridTemplateColumns:R.grid2, gap:16 }}>
+          <div style={{ display:"grid", gridTemplateColumns:R_CURRENT.grid2, gap:16 }}>
             {["Q1","Q2","Q3","Q4"].map(q => {
               const key = activeQtrYear+"-"+q;
               return (
                 <div key={key} style={{ ...S.card, border:"1px solid #334155" }}>
                   <div style={{ color:"#fbbf24", fontWeight:700, marginBottom:12 }}>{activeQtrYear}年 {q}</div>
-                  <div style={{ display:"grid", gridTemplateColumns:R.grid2, gap:10 }}>
+                  <div style={{ display:"grid", gridTemplateColumns:R_CURRENT.grid2, gap:10 }}>
                     {PERIOD_FIELDS.filter(f2 => ["price","shares","sales","opProfit","netProfit","totalAssets","equity"].includes(f2.key)).map(({ label, key: fk, hint }) => (
                       <div key={fk} style={{ display:"flex", flexDirection:"column", gap:3 }}>
                         <label style={{ color:"#64748b", fontSize:16 }}>{label}</label>
@@ -882,6 +883,7 @@ function InputTab({ selected, periods, updatePeriod, baseYear, annualKeys, qtrKe
 export default function App() {
   const R = useResponsive();
   S = makeS(R);
+  R_CURRENT = R;
   const [tab, setTab]             = useState("portfolio");
   const [portfolio, setPortfolio] = useState(() => loadData() || INIT);
   const [selected, setSelected]   = useState(() => (loadData() || INIT)[0]);
