@@ -76,22 +76,62 @@ function calcAll(f) {
 
 // ── スコア基準値定義 ────────────────────────────────────────────────────────
 // 更新日: 2025-05-31
-// 各指標の [良好基準, 優良基準] (数値は実際の値、方向はDEFAULT_CRITERIAのdirで管理)
-// dir: "lt"=小さいほど良い, "gt"=大きいほど良い
+const CRITERIA_PRESETS = {
+  // バリュー株基準（割安性・収益性・健全性を重視）
+  value: {
+    label: "バリュー基準",
+    color: "#60a5fa",
+    updatedAt: "2025-05-31",
+    per:         { dir:"lt", good:20,   great:12,   goodPts:4,  greatPts:10 },
+    pbr:         { dir:"lt", good:2,    great:1.0,  goodPts:3,  greatPts:8  },
+    psr:         { dir:"lt", good:3,    great:1.5,  goodPts:3,  greatPts:7  },
+    roe:         { dir:"gt", good:0.08, great:0.15, goodPts:5,  greatPts:12 },
+    opMargin:    { dir:"gt", good:0.08, great:0.20, goodPts:3,  greatPts:8  },
+    roa:         { dir:"gt", good:0.04, great:0.08, goodPts:2,  greatPts:5  },
+    rule40:      { dir:"gt", good:10,   great:15,   goodPts:4,  greatPts:8  },
+    grossMargin: { dir:"gt", good:0.25, great:0.40, goodPts:4,  greatPts:10 },
+    spread:      { dir:"gt", good:0,    great:0.02, goodPts:5,  greatPts:10 },
+    evEbitda:    { dir:"lt", good:15,   great:8,    goodPts:2,  greatPts:5  },
+    equityRatio: { dir:"gt", good:0.35, great:0.55, goodPts:2,  greatPts:4  },
+    currentRatio:{ dir:"gt", good:1.5,  great:2.5,  goodPts:2,  greatPts:3  },
+  },
+  // グロース株基準（成長性・粗利率・Rule of 40を重視）
+  growth: {
+    label: "グロース基準",
+    color: "#4ade80",
+    updatedAt: "2025-05-31",
+    per:         { dir:"lt", good:40,   great:25,   goodPts:4,  greatPts:10 },
+    pbr:         { dir:"lt", good:5,    great:3,    goodPts:3,  greatPts:8  },
+    psr:         { dir:"lt", good:8,    great:4,    goodPts:3,  greatPts:7  },
+    roe:         { dir:"gt", good:0.05, great:0.12, goodPts:5,  greatPts:12 },
+    opMargin:    { dir:"gt", good:0.0,  great:0.10, goodPts:3,  greatPts:8  },
+    roa:         { dir:"gt", good:0.02, great:0.05, goodPts:2,  greatPts:5  },
+    rule40:      { dir:"gt", good:15,   great:25,   goodPts:7,  greatPts:15 },
+    grossMargin: { dir:"gt", good:0.40, great:0.60, goodPts:4,  greatPts:10 },
+    spread:      { dir:"gt", good:0,    great:0.02, goodPts:5,  greatPts:10 },
+    evEbitda:    { dir:"lt", good:30,   great:15,   goodPts:2,  greatPts:5  },
+    equityRatio: { dir:"gt", good:0.25, great:0.40, goodPts:2,  greatPts:4  },
+    currentRatio:{ dir:"gt", good:1.0,  great:1.5,  goodPts:2,  greatPts:3  },
+  },
+};
+
+// デフォルトはバリューとグロースの中間（全業種対応）
 const DEFAULT_CRITERIA = {
+  label: "標準基準",
+  color: "#94a3b8",
   updatedAt: "2025-05-31",
-  per:        { dir:"lt", good:25,   great:15,   goodPts:4,  greatPts:10 },
-  pbr:        { dir:"lt", good:3,    great:1.5,  goodPts:3,  greatPts:8  },
-  psr:        { dir:"lt", good:5,    great:2,    goodPts:3,  greatPts:7  },
-  roe:        { dir:"gt", good:0.08, great:0.15, goodPts:5,  greatPts:12 },
-  opMargin:   { dir:"gt", good:0.05, great:0.15, goodPts:3,  greatPts:8  },
-  roa:        { dir:"gt", good:0.03, great:0.07, goodPts:2,  greatPts:5  },
-  rule40:     { dir:"gt", good:15,   great:20,   goodPts:7,  greatPts:15 },
-  grossMargin:{ dir:"gt", good:0.25, great:0.40, goodPts:4,  greatPts:10 },
-  spread:     { dir:"gt", good:0,    great:0.02, goodPts:5,  greatPts:10 },
-  evEbitda:   { dir:"lt", good:20,   great:10,   goodPts:2,  greatPts:5  },
-  equityRatio:{ dir:"gt", good:0.30, great:0.50, goodPts:2,  greatPts:4  },
-  currentRatio:{ dir:"gt",good:1.2,  great:2.0,  goodPts:2,  greatPts:3  },
+  per:         { dir:"lt", good:25,   great:15,   goodPts:4,  greatPts:10 },
+  pbr:         { dir:"lt", good:3,    great:1.5,  goodPts:3,  greatPts:8  },
+  psr:         { dir:"lt", good:5,    great:2,    goodPts:3,  greatPts:7  },
+  roe:         { dir:"gt", good:0.08, great:0.15, goodPts:5,  greatPts:12 },
+  opMargin:    { dir:"gt", good:0.05, great:0.15, goodPts:3,  greatPts:8  },
+  roa:         { dir:"gt", good:0.03, great:0.07, goodPts:2,  greatPts:5  },
+  rule40:      { dir:"gt", good:15,   great:20,   goodPts:7,  greatPts:15 },
+  grossMargin: { dir:"gt", good:0.25, great:0.40, goodPts:4,  greatPts:10 },
+  spread:      { dir:"gt", good:0,    great:0.02, goodPts:5,  greatPts:10 },
+  evEbitda:    { dir:"lt", good:20,   great:10,   goodPts:2,  greatPts:5  },
+  equityRatio: { dir:"gt", good:0.30, great:0.50, goodPts:2,  greatPts:4  },
+  currentRatio:{ dir:"gt", good:1.2,  great:2.0,  goodPts:2,  greatPts:3  },
 };
 
 // criteriaはDEFAULT_CRITERIAまたは銘柄ごとのカスタム基準値
@@ -179,16 +219,22 @@ function scoreFromPeriods(h, globalBaseYear) {
   const opMarginPct = c.opMargin != null ? c.opMargin * 100 : null;
   const rule40 = salesGrowth != null && opMarginPct != null ? salesGrowth + opMarginPct : null;
   const spread = h.waccSpread != null ? parseFloat(h.waccSpread) : null;
-  // カスタム基準値があればそちらを使用
-  const customCriteria = loadCustomCriteria(h.id);
-  const criteria = customCriteria || DEFAULT_CRITERIA;
+  const mode = loadScoreMode(h.id);
+  const criteria = getCriteriaByMode(mode, h.id);
   return financialScore({ ...c, rule40, spread }, criteria);
 }
 
 const LS_KEY = "kabulens_v2";
 const LS_WATCH = "kabulens_watch_v1";
 const LS_CUSTOM_CRITERIA = "kabulens_custom_criteria";
+const LS_SCORE_MODE = "kabulens_score_mode";
 
+const loadScoreMode = (stockId) => {
+  try { return localStorage.getItem(LS_SCORE_MODE+"_"+stockId) || "standard"; } catch { return "standard"; }
+};
+const saveScoreMode = (stockId, mode) => {
+  try { localStorage.setItem(LS_SCORE_MODE+"_"+stockId, mode); } catch {}
+};
 const loadCustomCriteria = (stockId) => {
   try {
     const d = localStorage.getItem(LS_CUSTOM_CRITERIA+"_"+stockId);
@@ -197,6 +243,14 @@ const loadCustomCriteria = (stockId) => {
 };
 const saveCustomCriteria = (stockId, criteria) => {
   try { localStorage.setItem(LS_CUSTOM_CRITERIA+"_"+stockId, JSON.stringify(criteria)); } catch {}
+};
+
+// モードからcriteria取得
+const getCriteriaByMode = (mode, stockId) => {
+  if (mode === "value")  return CRITERIA_PRESETS.value;
+  if (mode === "growth") return CRITERIA_PRESETS.growth;
+  if (mode === "custom") return loadCustomCriteria(stockId) || DEFAULT_CRITERIA;
+  return DEFAULT_CRITERIA; // standard
 };
 const loadData = () => {
   try {
@@ -545,106 +599,126 @@ function calcChg(cur, prev) {
 }
 
 // 財務指標タブ（多期間対応）
+// スコアバッジ（モード表示付き）
+function ScoreBadge({ sc, stockId, large }) {
+  const mode = loadScoreMode(stockId);
+  const modeLabel = mode === "value" ? "バリュー" : mode === "growth" ? "グロース" : mode === "custom" ? "カスタム" : "標準";
+  const modeColor = mode === "value" ? "#60a5fa" : mode === "growth" ? "#4ade80" : mode === "custom" ? "#fbbf24" : "#94a3b8";
+  if (sc == null) return null;
+  return (
+    <span style={{ background:scoreColor(sc)+"22", color:scoreColor(sc), border:"1px solid "+scoreColor(sc)+"44", borderRadius:6, padding:"4px 10px", fontSize:large?18:14, fontWeight:700, display:"inline-flex", alignItems:"center", gap:4 }}>
+      総合スコア {sc}pt
+      <span style={{ fontSize:11, background:modeColor+"22", color:modeColor, border:"1px solid "+modeColor+"44", borderRadius:4, padding:"1px 5px" }}>{modeLabel}</span>
+    </span>
+  );
+}
+
 // スコア評価基準カスタマイズコンポーネント
-function ScoreCriteriaEditor({ selected, R, S }) {
+function ScoreCriteriaEditor({ selected, R, S, onModeChange }) {
   const [show, setShow] = useState(false);
-  const [criteria, setCriteria] = useState(() => loadCustomCriteria(selected?.id) || DEFAULT_CRITERIA);
+  const [mode, setMode] = useState(() => loadScoreMode(selected?.id));
+  const [customCriteria, setCustomCriteria] = useState(() => loadCustomCriteria(selected?.id) || DEFAULT_CRITERIA);
   const [updatedAt, setUpdatedAt] = useState(() => {
     const c = loadCustomCriteria(selected?.id);
     return c?.updatedAt || DEFAULT_CRITERIA.updatedAt;
   });
 
   useEffect(() => {
+    const m = loadScoreMode(selected?.id);
     const c = loadCustomCriteria(selected?.id) || DEFAULT_CRITERIA;
-    setCriteria(c);
+    setMode(m);
+    setCustomCriteria(c);
     setUpdatedAt(c.updatedAt || DEFAULT_CRITERIA.updatedAt);
   }, [selected?.id]);
+
+  const handleModeChange = (newMode) => {
+    setMode(newMode);
+    saveScoreMode(selected.id, newMode);
+    if (onModeChange) onModeChange();
+  };
 
   const handleChange = (key, field, val) => {
     const num = parseFloat(val);
     if (isNaN(num) && val !== "") return;
-    setCriteria(prev => ({
-      ...prev,
-      [key]: { ...prev[key], [field]: val === "" ? "" : num }
-    }));
+    setCustomCriteria(prev => ({ ...prev, [key]: { ...prev[key], [field]: val === "" ? "" : num } }));
   };
 
   const handleSave = () => {
     const today = new Date().toISOString().slice(0,10);
-    const saved = { ...criteria, updatedAt: today };
+    const saved = { ...customCriteria, updatedAt: today };
     saveCustomCriteria(selected.id, saved);
+    saveScoreMode(selected.id, "custom");
+    setMode("custom");
     setUpdatedAt(today);
     setShow(false);
-    alert("評価基準を保存しました（"+today+"）");
+    if (onModeChange) onModeChange();
+    alert("カスタム基準値を保存しました（"+today+"）");
   };
 
-  const handleReset = () => {
-    if (!window.confirm("デフォルト基準値に戻しますか？")) return;
-    try { localStorage.removeItem(LS_CUSTOM_CRITERIA+"_"+selected.id); } catch {}
-    setCriteria(DEFAULT_CRITERIA);
-    setUpdatedAt(DEFAULT_CRITERIA.updatedAt);
+  const handlePreset = (presetMode) => {
+    const preset = CRITERIA_PRESETS[presetMode];
+    setCustomCriteria({ ...preset });
+    setUpdatedAt(preset.updatedAt);
   };
 
-  const isCustom = loadCustomCriteria(selected?.id) != null;
+  const currentCriteria = getCriteriaByMode(mode, selected?.id);
+  const modeInfo = mode === "value" ? CRITERIA_PRESETS.value :
+                   mode === "growth" ? CRITERIA_PRESETS.growth :
+                   mode === "custom" ? { label:"カスタム基準", color:"#fbbf24" } :
+                   { label:"標準基準", color:"#94a3b8" };
 
   return (
     <div style={{ ...S.card, border:"1px solid #334155", marginBottom:16 }}>
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:8 }}>
-        <div>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:8, marginBottom:12 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
           <span style={{ color:"#94a3b8", fontWeight:700, fontSize:R.md }}>スコア評価基準</span>
-          {isCustom && <span style={{ marginLeft:8, color:"#fbbf24", fontSize:R.sm }}>カスタム設定中</span>}
-          <span style={{ marginLeft:8, color:"#334155", fontSize:R.sm }}>基準更新日: {updatedAt}</span>
+          <span style={{ background:modeInfo.color+"22", color:modeInfo.color, border:"1px solid "+modeInfo.color+"44", borderRadius:6, padding:"2px 8px", fontSize:R.sm, fontWeight:700 }}>
+            {modeInfo.label}
+          </span>
+          <span style={{ color:"#334155", fontSize:R.sm }}>更新日: {currentCriteria.updatedAt || updatedAt}</span>
         </div>
-        <div style={{ display:"flex", gap:8 }}>
-          {isCustom && <button style={{ ...S.miniBtn, color:"#f87171", borderColor:"#f87171" }} onClick={handleReset}>リセット</button>}
-          <button style={{ ...S.miniBtn, color:"#60a5fa", borderColor:"#60a5fa" }} onClick={() => setShow(v => !v)}>
-            {show ? "▲ 閉じる" : "▼ 基準値を編集"}
-          </button>
-        </div>
+        <button style={{ ...S.miniBtn, color:"#60a5fa", borderColor:"#60a5fa" }} onClick={() => setShow(v => !v)}>
+          {show ? "▲ 閉じる" : "▼ 基準を変更"}
+        </button>
       </div>
-
+      <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+        {[["standard","標準","#94a3b8"],["value","バリュー","#60a5fa"],["growth","グロース","#4ade80"],["custom","カスタム","#fbbf24"]].map(([m, label, color]) => (
+          <button key={m} style={{ ...S.miniBtn, ...(mode===m ? { color, borderColor:color, background:color+"22" } : {}) }} onClick={() => handleModeChange(m)}>
+            {label}
+          </button>
+        ))}
+      </div>
       {show && (
         <div style={{ marginTop:16 }}>
-          <div style={{ color:"#475569", fontSize:R.sm, marginBottom:12 }}>
-            業界平均を参考に良好・優良の基準値を変更できます。半年ごとの見直しを推奨。
+          <div style={{ color:"#475569", fontSize:R.sm, marginBottom:12 }}>カスタム基準値を編集します。プリセットを読み込んでから調整することもできます。</div>
+          <div style={{ display:"flex", gap:8, marginBottom:16, flexWrap:"wrap" }}>
+            <button style={S.miniBtn} onClick={() => handlePreset("value")}>バリュー基準を読み込む</button>
+            <button style={S.miniBtn} onClick={() => handlePreset("growth")}>グロース基準を読み込む</button>
+            <button style={S.miniBtn} onClick={() => { setCustomCriteria(DEFAULT_CRITERIA); setUpdatedAt(DEFAULT_CRITERIA.updatedAt); }}>標準基準を読み込む</button>
           </div>
           {["割安性","収益性","成長性","資本効率","健全性"].map(cat => (
             <div key={cat} style={{ marginBottom:16 }}>
               <div style={{ color:"#60a5fa", fontWeight:700, fontSize:R.sm, marginBottom:8 }}>{cat}</div>
               <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(min(320px,100%),1fr))", gap:8 }}>
-                {CRITERIA_META.filter(m => m.cat === cat).map(m => {
-                  const cr = criteria[m.key] || DEFAULT_CRITERIA[m.key];
-                  const def = DEFAULT_CRITERIA[m.key];
-                  const s = m.scale || 1;
-                  const fmt = v => m.unit === "%" ? parseFloat((v*s).toFixed(1)) : v;
+                {CRITERIA_META.filter(m2 => m2.cat === cat).map(m2 => {
+                  const cr = customCriteria[m2.key] || DEFAULT_CRITERIA[m2.key];
+                  const def = DEFAULT_CRITERIA[m2.key];
+                  const sc = m2.scale || 1;
+                  const fmt = v => m2.unit === "%" ? parseFloat((v*sc).toFixed(1)) : v;
                   return (
-                    <div key={m.key} style={{ background:"#111827", borderRadius:8, padding:"10px 12px" }}>
+                    <div key={m2.key} style={{ background:"#111827", borderRadius:8, padding:"10px 12px" }}>
                       <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
-                        <span style={{ color:"#94a3b8", fontSize:R.sm, fontWeight:700 }}>{m.label}</span>
-                        <span style={{ color:"#334155", fontSize:R.sm }}>デフォルト: 良好{m.dir==="lt"?"<":">"}{fmt(def.good)}{m.unit} / 優良{m.dir==="lt"?"<":">"}{fmt(def.great)}{m.unit}</span>
+                        <span style={{ color:"#94a3b8", fontSize:R.sm, fontWeight:700 }}>{m2.label}</span>
+                        <span style={{ color:"#334155", fontSize:R.sm }}>標準: {m2.dir==="lt"?"<":">"}{fmt(def.good)}{m2.unit}/{fmt(def.great)}{m2.unit}</span>
                       </div>
                       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
                         <div>
-                          <label style={{ color:"#64748b", fontSize:R.sm, display:"block", marginBottom:3 }}>
-                            良好基準 ({m.dir==="lt"?"<":">"} □{m.unit}) → {cr.goodPts}pt
-                          </label>
-                          <input
-                            value={fmt(cr.good)}
-                            onChange={e => handleChange(m.key, "good", m.scale ? String(parseFloat(e.target.value)/s) : e.target.value)}
-                            style={{ ...S.input, fontSize:R.sm }}
-                            inputMode="decimal"
-                          />
+                          <label style={{ color:"#64748b", fontSize:R.sm, display:"block", marginBottom:3 }}>良好({m2.dir==="lt"?"<":">"} □{m2.unit}) {cr.goodPts}pt</label>
+                          <input value={fmt(cr.good)} onChange={e => handleChange(m2.key, "good", m2.scale ? String(parseFloat(e.target.value)/sc) : e.target.value)} style={{ ...S.input, fontSize:R.sm }} inputMode="decimal" />
                         </div>
                         <div>
-                          <label style={{ color:"#64748b", fontSize:R.sm, display:"block", marginBottom:3 }}>
-                            優良基準 ({m.dir==="lt"?"<":">"} □{m.unit}) → {cr.greatPts}pt
-                          </label>
-                          <input
-                            value={fmt(cr.great)}
-                            onChange={e => handleChange(m.key, "great", m.scale ? String(parseFloat(e.target.value)/s) : e.target.value)}
-                            style={{ ...S.input, fontSize:R.sm }}
-                            inputMode="decimal"
-                          />
+                          <label style={{ color:"#64748b", fontSize:R.sm, display:"block", marginBottom:3 }}>優良({m2.dir==="lt"?"<":">"} □{m2.unit}) {cr.greatPts}pt</label>
+                          <input value={fmt(cr.great)} onChange={e => handleChange(m2.key, "great", m2.scale ? String(parseFloat(e.target.value)/sc) : e.target.value)} style={{ ...S.input, fontSize:R.sm }} inputMode="decimal" />
                         </div>
                       </div>
                     </div>
@@ -654,8 +728,8 @@ function ScoreCriteriaEditor({ selected, R, S }) {
             </div>
           ))}
           <div style={{ display:"flex", gap:8, marginTop:8 }}>
-            <button style={S.addBtn} onClick={handleSave}>保存する</button>
-            <button style={S.miniBtn} onClick={() => setShow(false)}>キャンセル</button>
+            <button style={S.addBtn} onClick={handleSave}>カスタム基準として保存</button>
+            <button style={S.miniBtn} onClick={() => setShow(false)}>閉じる</button>
           </div>
         </div>
       )}
@@ -784,14 +858,6 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
     return { ke, kd, kdSource, wacc, E, D, V, t, spread, checks, score, verdict, verdictColor };
   }, [waccParams, cc, ff, fc]);
 
-  // waccSpreadをperiodsに保存（スコア計算に使用）
-  // waccResultのspreadが変わったときだけ保存
-  const waccSpreadValue = waccResult ? waccResult.spread : null;
-  useEffect(() => {
-    if (waccSpreadValue == null || !selected) return;
-    updatePeriod(selected.id, "__meta__", "waccSpread", String(waccSpreadValue));
-  }, [waccSpreadValue, selected?.id]); // eslint-disable-line
-
   // waccParamsをlocalStorageに保存
   useEffect(() => {
     if (!selected) return;
@@ -915,10 +981,16 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
                 <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:4 }}>Rule of 40 とは</div>
                 <div>SaaS・グロース株の健全性指標。<span style={{ color:"#60a5fa" }}>売上成長率(%) + 営業利益率(%)</span> が40以上なら優良。</div>
                 <div style={{ marginTop:4 }}>赤字成長企業でも売上成長率が高ければ評価できる。例: 成長率50% + 利益率-5% = 45点 → 優良</div>
-                <div style={{ marginTop:4, display:"flex", gap:12 }}>
-                  <span style={{ color:"#4ade80" }}>● 40以上: 優良</span>
-                  <span style={{ color:"#fbbf24" }}>● 20〜40: 要成長</span>
-                  <span style={{ color:"#f87171" }}>● 20未満: 要注意</span>
+                <div style={{ marginTop:6, padding:"6px 10px", background:"#0d1424", borderRadius:6, borderLeft:"3px solid #fbbf24" }}>
+                  <span style={{ color:"#fbbf24", fontWeight:700 }}>📌 当アプリの独自基準：</span>
+                  <span style={{ color:"#64748b" }}> 米国基準(40以上)ではなく日本株市場の実態に合わせた独自基準を採用。良好(≥15): 7pt / 優良(≥20): 15pt。スコア評価基準のモードで変更可能。</span>
+                </div>
+                <div style={{ marginTop:6, display:"flex", gap:12, flexWrap:"wrap" }}>
+                  <span style={{ color:"#4ade80" }}>● 20以上: 優良(15pt)</span>
+                  <span style={{ color:"#34d399" }}>● 15〜20: 良好(7pt)</span>
+                  <span style={{ color:"#fbbf24" }}>● 10〜15: 普通(0pt)</span>
+                  <span style={{ color:"#f87171" }}>● 10未満: 要注意(0pt)</span>
+                  <span style={{ color:"#475569" }}>｜ 米国基準: 40以上</span>
                 </div>
               </div>
             </Sec>
@@ -1017,6 +1089,19 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
 
             {waccResult ? (
               <div>
+                {/* スコアへの反映ボタン */}
+                <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12, padding:"8px 12px", background:"#111827", borderRadius:6 }}>
+                  <span style={{ color:"#475569", fontSize:R_CURRENT.sm, flex:1 }}>
+                    スプレッド: <span style={{ color: waccResult.spread > 0 ? "#4ade80" : "#f87171", fontWeight:700 }}>{pct(waccResult.spread)}</span>
+                    　→ 総合スコアに反映するには保存してください
+                  </span>
+                  <button
+                    style={{ ...S.miniBtn, color:"#4ade80", borderColor:"#4ade80" }}
+                    onClick={() => updatePeriod(selected.id, "__meta__", "waccSpread", String(waccResult.spread))}
+                  >
+                    スコアに反映・保存
+                  </button>
+                </div>
                 {/* WACC計算結果 */}
                 <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(min(150px,45vw),1fr))", gap:10, marginBottom:16 }}>
                   {[
@@ -1685,7 +1770,7 @@ function WatchDetail({ watchSelected, watchlist, baseYear, annualKeys, qtrKeys, 
           <Tag color="#f59e0b">{watchSelected.ticker}</Tag>
           <Tag color="#a78bfa">{watchSelected.sector}</Tag>
           <span style={{ background:"#1a1200", color:"#f59e0b", border:"1px solid #f59e0b44", borderRadius:6, padding:"4px 10px", fontSize:R.sm }}>👀 保有候補</span>
-          {sc != null && <span style={{ background:scoreColor(sc)+"22", color:scoreColor(sc), border:"1px solid "+scoreColor(sc)+"44", borderRadius:6, padding:"4px 10px", fontSize:16, fontWeight:700 }}>総合スコア {sc}pt</span>}
+          {sc != null && <ScoreBadge sc={sc} stockId={selected?.id} />}
         </div>
         <div style={{ textAlign:"right" }}>
           <div style={{ fontSize:24, fontWeight:900, color:"#f1f5f9" }}>¥{watchSelected.currentPrice.toLocaleString()}</div>
@@ -2313,10 +2398,7 @@ export default function App() {
                     </span>
                     <span style={{ color:"#e2e8f0" }}>¥{(h.qty*h.currentPrice).toLocaleString()}</span>
                     <span><Delta val={pnlPct} fmt={v => v.toFixed(2)+"%"} /></span>
-                    <span style={{ color:hsc!=null?scoreColor(hsc):"#475569", fontWeight:700, cursor:"help", position:"relative" }}
-                      title={SCORE_CRITERIA.map(c2 => (c2.label)+"["+c2.cat+"] 良好:"+(c2.good)+" 優良:"+(c2.great)).join('\n')}>
-                      {hsc!=null?hsc+"pt":"—"}
-                    </span>
+                    <ScoreBadge sc={hsc} stockId={h.id} />
                     <span style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
                       <button style={S.miniBtn} onClick={() => { setSelected(h); setTab("detail"); setDetailTab("memo"); }}>メモ</button>
                       <button style={S.miniBtn} onClick={() => { setSelected(h); setTab("detail"); setDetailTab("metrics"); }}>詳細</button>
