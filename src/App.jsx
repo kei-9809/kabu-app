@@ -429,48 +429,6 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
   });
   const [showWacc, setShowWacc] = useState(false);
 
-  // WACC計算
-  const waccResult = useMemo(() => {
-    const beta = parseFloat(waccParams.beta);
-    const kd   = parseFloat(waccParams.kd) / 100;
-    const rf   = parseFloat(waccParams.rf) / 100;
-    const rp   = parseFloat(waccParams.rp) / 100;
-    if (isNaN(beta) || isNaN(kd) || isNaN(rf) || isNaN(rp)) return null;
-    if (!cc || !cc.marketCap) return null;
-
-    const ke = rf + beta * rp; // CAPM
-    const E = cc.marketCap;
-    const fl2 = n(ff.fixLiab);
-    const D = fl2 != null ? fl2 : 0;
-    const V = E + D;
-    if (V === 0) return null;
-    const t = cc.taxRate || 0.30;
-    const wacc = ke * (E / V) + kd * (1 - t) * (D / V);
-    const roic = cc.roic || 0;
-    const spread = roic - wacc;
-
-    // 投資判断スコア
-    const checks = [
-      { label:"ROIC > WACC（価値創造）",    ok: spread > 0,   val: `${pct(roic)} > ${pct(wacc)}`, impact:"high" },
-      { label:"スプレッド > 2%（余裕あり）", ok: spread > 0.02, val: `${(spread*100).toFixed(2)}%`,  impact:"high" },
-      { label:"PER < 20倍",                ok: cc.per != null && cc.per < 20, val: cc.per ? xfmt(cc.per) : "—", impact:"mid" },
-      { label:"ROE > 10%",                 ok: cc.roe != null && cc.roe > 0.10, val: cc.roe ? pct(cc.roe) : "—", impact:"mid" },
-      { label:"自己資本比率 > 30%",         ok: cc.equityRatio != null && cc.equityRatio > 0.30, val: cc.equityRatio ? pct(cc.equityRatio) : "—", impact:"mid" },
-      { label:"営業利益率 > 10%",           ok: cc.opMargin != null && cc.opMargin > 0.10, val: cc.opMargin ? pct(cc.opMargin) : "—", impact:"mid" },
-      { label:"流動比率 > 150%",            ok: cc.currentRatio != null && cc.currentRatio > 1.5, val: cc.currentRatio ? pct(cc.currentRatio) : "—", impact:"low" },
-      { label:"PBR < 3倍",                 ok: cc.pbr != null && cc.pbr < 3, val: cc.pbr ? xfmt(cc.pbr) : "—", impact:"low" },
-    ];
-    const score = checks.filter(c2 => c2.ok).length;
-    const verdict = spread > 0.02 && score >= 6 ? "強い買い候補" :
-                    spread > 0    && score >= 5 ? "買い候補" :
-                    spread > -0.01&& score >= 4 ? "中立・様子見" :
-                    spread < 0    && score <= 3 ? "要注意" : "中立";
-    const verdictColor = verdict === "強い買い候補" ? "#4ade80" :
-                         verdict === "買い候補"     ? "#34d399" :
-                         verdict === "中立・様子見" ? "#fbbf24" : "#f87171";
-    return { ke, kd, wacc, E, D, V, t, spread, checks, score, verdict, verdictColor };
-  }, [waccParams, cc, ff]);
-
   const annualData = useMemo(() => {
     return annualKeys.map(yr => {
       const fd = periods[yr] || {};
@@ -506,6 +464,45 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
     price: f.price || latestAnnual.f.price,
     shinyoBairitu: latestAnnual.f.shinyoBairitu || f.shinyoBairitu,
   } : f;
+
+  // WACC計算（cc・ffの後に定義）
+  const waccResult = useMemo(() => {
+    const beta = parseFloat(waccParams.beta);
+    const kd   = parseFloat(waccParams.kd) / 100;
+    const rf   = parseFloat(waccParams.rf) / 100;
+    const rp   = parseFloat(waccParams.rp) / 100;
+    if (isNaN(beta) || isNaN(kd) || isNaN(rf) || isNaN(rp)) return null;
+    if (!cc || !cc.marketCap) return null;
+    const ke = rf + beta * rp;
+    const E = cc.marketCap;
+    const fl2 = n(ff.fixLiab);
+    const D = fl2 != null ? fl2 : 0;
+    const V = E + D;
+    if (V === 0) return null;
+    const t = cc.taxRate || 0.30;
+    const wacc = ke * (E / V) + kd * (1 - t) * (D / V);
+    const roic = cc.roic || 0;
+    const spread = roic - wacc;
+    const checks = [
+      { label:"ROIC > WACC（価値創造）",    ok: spread > 0,   val: pct(roic)+" > "+pct(wacc), impact:"high" },
+      { label:"スプレッド > 2%（余裕あり）", ok: spread > 0.02, val: (spread*100).toFixed(2)+"%", impact:"high" },
+      { label:"PER < 20倍",                ok: cc.per != null && cc.per < 20, val: cc.per ? xfmt(cc.per) : "—", impact:"mid" },
+      { label:"ROE > 10%",                 ok: cc.roe != null && cc.roe > 0.10, val: cc.roe ? pct(cc.roe) : "—", impact:"mid" },
+      { label:"自己資本比率 > 30%",         ok: cc.equityRatio != null && cc.equityRatio > 0.30, val: cc.equityRatio ? pct(cc.equityRatio) : "—", impact:"mid" },
+      { label:"営業利益率 > 10%",           ok: cc.opMargin != null && cc.opMargin > 0.10, val: cc.opMargin ? pct(cc.opMargin) : "—", impact:"mid" },
+      { label:"流動比率 > 150%",            ok: cc.currentRatio != null && cc.currentRatio > 1.5, val: cc.currentRatio ? pct(cc.currentRatio) : "—", impact:"low" },
+      { label:"PBR < 3倍",                 ok: cc.pbr != null && cc.pbr < 3, val: cc.pbr ? xfmt(cc.pbr) : "—", impact:"low" },
+    ];
+    const score = checks.filter(c2 => c2.ok).length;
+    const verdict = spread > 0.02 && score >= 6 ? "強い買い候補" :
+                    spread > 0    && score >= 5 ? "買い候補" :
+                    spread > -0.01&& score >= 4 ? "中立・様子見" :
+                    spread < 0    && score <= 3 ? "要注意" : "中立";
+    const verdictColor = verdict === "強い買い候補" ? "#4ade80" :
+                         verdict === "買い候補"     ? "#34d399" :
+                         verdict === "中立・様子見" ? "#fbbf24" : "#f87171";
+    return { ke, kd, wacc, E, D, V, t, spread, checks, score, verdict, verdictColor };
+  }, [waccParams, cc, ff]);
 
   // 今期予想指標の計算
   const fc = useMemo(() => {
