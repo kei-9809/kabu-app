@@ -1,4 +1,5 @@
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
+import React from "react";
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line,
   RadarChart, Radar, PolarGrid, PolarAngleAxis,
@@ -504,9 +505,21 @@ function calcChg(cur, prev) {
 // 財務指標タブ（多期間対応）
 function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R, TS }) {
   const [metricsView, setMetricsView] = useState("current");
-  const [waccParams, setWaccParams] = useState({
-    beta: "", kd: "", rf: "1.5", rp: "5.5"
+  const [waccParams, setWaccParams] = useState(() => {
+    try {
+      const d = localStorage.getItem("kabulens_wacc_"+(selected?.id||""));
+      return d ? JSON.parse(d) : { beta:"", kd:"", rf:"1.5", rp:"5.5" };
+    } catch { return { beta:"", kd:"", rf:"1.5", rp:"5.5" }; }
   });
+
+  // 銘柄切り替え時にwaccParamsを再読み込み
+  useEffect(() => {
+    if (!selected) return;
+    try {
+      const d = localStorage.getItem("kabulens_wacc_"+selected.id);
+      setWaccParams(d ? JSON.parse(d) : { beta:"", kd:"", rf:"1.5", rp:"5.5" });
+    } catch {}
+  }, [selected?.id]);
   const [showWacc, setShowWacc] = useState(false);
 
   const annualData = useMemo(() => {
@@ -611,11 +624,21 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
     return { ke, kd, kdSource, wacc, E, D, V, t, spread, checks, score, verdict, verdictColor };
   }, [waccParams, cc, ff, fc]);
 
-  // waccSpreadを銘柄データに保存（スコア計算に使用）
+  // waccSpreadをperiodsに保存（スコア計算に使用）
+  const prevSpreadRef = useRef(null);
   useEffect(() => {
     if (!waccResult || !selected) return;
-    updatePeriod(selected.id, "__meta__", "waccSpread", String(waccResult.spread));
-  }, [waccResult?.spread]);
+    const spread = waccResult.spread;
+    if (prevSpreadRef.current === spread) return;
+    prevSpreadRef.current = spread;
+    updatePeriod(selected.id, "__meta__", "waccSpread", String(spread));
+  });
+
+  // waccParamsをlocalStorageに保存
+  useEffect(() => {
+    if (!selected) return;
+    try { localStorage.setItem("kabulens_wacc_"+selected.id, JSON.stringify(waccParams)); } catch {}
+  }, [waccParams, selected?.id]);
 
   const trendData = useMemo(() => {
     return annualData.map(({ label, f: fd, c: ca }, i) => {
