@@ -75,30 +75,54 @@ function calcAll(f) {
 
 function financialScore(c) {
   let s = 0, t = 0;
-  const add = (cond, pts) => { if (cond != null) { if (cond) s += pts; t += pts; } };
-  add(c.per != null && c.per < 20, 10); add(c.pbr != null && c.pbr < 2, 10);
-  add(c.psr != null && c.psr < 3, 8); add(c.evEbitda != null && c.evEbitda < 15, 10);
-  add(c.roe != null && c.roe > 0.10, 10); add(c.roa != null && c.roa > 0.05, 8);
-  add(c.grossMargin != null && c.grossMargin > 0.30, 8); add(c.opMargin != null && c.opMargin > 0.10, 8);
-  add(c.currentRatio != null && c.currentRatio > 1.5, 8); add(c.equityRatio != null && c.equityRatio > 0.30, 8);
-  // Rule of 40（20以上で10pt、15以上で5pt）
-  if (c.rule40 != null) { add(c.rule40 >= 20, 10); if (c.rule40 >= 15 && c.rule40 < 20) { s += 5; t += 10; } }
+  const add2 = (val, goodCond, greatCond, goodPts, greatPts) => {
+    if (val == null) return;
+    const pts = greatCond ? greatPts : goodCond ? goodPts : 0;
+    s += pts;
+    t += greatPts; // 最大点を分母に
+  };
+
+  // 割安性 25pt
+  add2(c.per,        c.per < 25,          c.per < 15,          4,  10);
+  add2(c.pbr,        c.pbr < 3,           c.pbr < 1.5,         3,  8);
+  add2(c.psr,        c.psr < 5,           c.psr < 2,           3,  7);
+
+  // 収益性 25pt
+  add2(c.roe,        c.roe > 0.08,        c.roe > 0.15,        5,  12);
+  add2(c.opMargin,   c.opMargin > 0.05,   c.opMargin > 0.15,   3,  8);
+  add2(c.roa,        c.roa > 0.03,        c.roa > 0.07,        2,  5);
+
+  // 成長性 25pt
+  add2(c.rule40,     c.rule40 >= 15,      c.rule40 >= 20,      7,  15);
+  add2(c.grossMargin,c.grossMargin > 0.25,c.grossMargin > 0.40,4,  10);
+
+  // 資本効率 15pt（WACC未入力時はスキップ）
+  if (c.spread != null) {
+    add2(c.spread,   c.spread > 0,        c.spread > 0.02,     5,  10);
+  }
+  add2(c.evEbitda,   c.evEbitda < 20,     c.evEbitda < 10,     2,  5);
+
+  // 健全性 10pt
+  add2(c.equityRatio,c.equityRatio > 0.30,c.equityRatio > 0.50,2,  4);
+  add2(c.currentRatio,c.currentRatio > 1.2,c.currentRatio > 2.0,2, 3);
+
   return t > 0 ? Math.round((s / t) * 100) : null;
 }
 
 // スコアの説明
 const SCORE_CRITERIA = [
-  { label:"PER < 20倍",        pts:10, hint:"株価収益率" },
-  { label:"PBR < 2倍",         pts:10, hint:"株価純資産倍率" },
-  { label:"PSR < 3倍",         pts:8,  hint:"株価売上高倍率" },
-  { label:"EV/EBITDA < 15倍",  pts:10, hint:"企業価値倍率" },
-  { label:"ROE > 10%",         pts:10, hint:"自己資本利益率" },
-  { label:"ROA > 5%",          pts:8,  hint:"総資産利益率" },
-  { label:"粗利率 > 30%",      pts:8,  hint:"売上総利益率" },
-  { label:"営業利益率 > 10%",  pts:8,  hint:"営業効率" },
-  { label:"流動比率 > 150%",   pts:8,  hint:"短期安全性" },
-  { label:"自己資本比率 > 30%", pts:8,  hint:"財務健全性" },
-  { label:"Rule of 40 ≥ 20(10pt) / ≥15(5pt)", pts:10, hint:"グロース健全性（日本基準）" },
+  { label:"PER",        good:"<25倍: 4pt",  great:"<15倍: 10pt",  cat:"割安性" },
+  { label:"PBR",        good:"<3倍: 3pt",   great:"<1.5倍: 8pt",  cat:"割安性" },
+  { label:"PSR",        good:"<5倍: 3pt",   great:"<2倍: 7pt",    cat:"割安性" },
+  { label:"ROE",        good:">8%: 5pt",    great:">15%: 12pt",   cat:"収益性" },
+  { label:"営業利益率",  good:">5%: 3pt",    great:">15%: 8pt",    cat:"収益性" },
+  { label:"ROA",        good:">3%: 2pt",    great:">7%: 5pt",     cat:"収益性" },
+  { label:"Rule of 40", good:"≥15: 7pt",    great:"≥20: 15pt",    cat:"成長性" },
+  { label:"粗利率",      good:">25%: 4pt",   great:">40%: 10pt",   cat:"成長性" },
+  { label:"ROIC-WACC",  good:">0%: 5pt",    great:">2%: 10pt",    cat:"資本効率" },
+  { label:"EV/EBITDA",  good:"<20倍: 2pt",  great:"<10倍: 5pt",   cat:"資本効率" },
+  { label:"自己資本比率",good:">30%: 2pt",   great:">50%: 4pt",    cat:"健全性" },
+  { label:"流動比率",    good:">120%: 2pt",  great:">200%: 3pt",   cat:"健全性" },
 ];
 
 // periodsベースでスコア計算するヘルパー
@@ -124,7 +148,9 @@ function scoreFromPeriods(h, globalBaseYear) {
   const salesGrowth = curSales && prevSales && prevSales > 0 ? (curSales - prevSales) / prevSales * 100 : null;
   const opMarginPct = c.opMargin != null ? c.opMargin * 100 : null;
   const rule40 = salesGrowth != null && opMarginPct != null ? salesGrowth + opMarginPct : null;
-  return financialScore({ ...c, rule40 });
+  // WACCスプレッド（保存済みの値を使用）
+  const spread = h.waccSpread != null ? parseFloat(h.waccSpread) : null;
+  return financialScore({ ...c, rule40, spread });
 }
 
 const LS_KEY = "kabulens_v2";
@@ -584,6 +610,12 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
                          verdict === "中立・様子見" ? "#fbbf24" : "#f87171";
     return { ke, kd, kdSource, wacc, E, D, V, t, spread, checks, score, verdict, verdictColor };
   }, [waccParams, cc, ff, fc]);
+
+  // waccSpreadを銘柄データに保存（スコア計算に使用）
+  useEffect(() => {
+    if (!waccResult || !selected) return;
+    updatePeriod(selected.id, "__meta__", "waccSpread", String(waccResult.spread));
+  }, [waccResult?.spread]);
 
   const trendData = useMemo(() => {
     return annualData.map(({ label, f: fd, c: ca }, i) => {
@@ -1523,6 +1555,8 @@ export default function App() {
   const [showPriceUpdate, setShowPriceUpdate] = useState(false);
   const [priceInputs, setPriceInputs] = useState({});
   const [shinInputs, setShinInputs] = useState({});
+  const [qtyInputs, setQtyInputs] = useState({});
+  const [costInputs, setCostInputs] = useState({});
 
   const save = useCallback(updater => {
     setPortfolio(prev => {
@@ -1601,21 +1635,31 @@ export default function App() {
     save(p => p.map(h => {
       const np = priceInputs[h.id];
       const ns = shinInputs[h.id];
+      const nq = qtyInputs[h.id];
+      const nc = costInputs[h.id];
       let updated = { ...h };
       if (np && !isNaN(+np)) updated = { ...updated, currentPrice:+np, financials:{ ...updated.financials, price:np } };
       if (ns !== undefined && ns !== "") updated = { ...updated, financials:{ ...updated.financials, shinyoBairitu:ns } };
+      if (nq && !isNaN(+nq) && +nq > 0) updated = { ...updated, qty:+nq };
+      if (nc && !isNaN(+nc) && +nc > 0) updated = { ...updated, avgCost:+nc };
       return updated;
     }));
     if (selected) {
       const np = priceInputs[selected.id];
       const ns = shinInputs[selected.id];
+      const nq = qtyInputs[selected.id];
+      const nc = costInputs[selected.id];
       let upd = { ...selected };
       if (np && !isNaN(+np)) upd = { ...upd, currentPrice:+np, financials:{ ...upd.financials, price:np } };
       if (ns !== undefined && ns !== "") upd = { ...upd, financials:{ ...upd.financials, shinyoBairitu:ns } };
+      if (nq && !isNaN(+nq) && +nq > 0) upd = { ...upd, qty:+nq };
+      if (nc && !isNaN(+nc) && +nc > 0) upd = { ...upd, avgCost:+nc };
       setSelected(upd);
     }
     setPriceInputs({});
     setShinInputs({});
+    setQtyInputs({});
+    setCostInputs({});
     setShowPriceUpdate(false);
   };
 
@@ -1976,12 +2020,18 @@ export default function App() {
                 <button style={{ ...S.miniBtn, color:"#fbbf24", borderColor:"#fbbf24" }} onClick={() => {
                   const inp = {};
                   const shin = {};
+                  const qty = {};
+                  const cost = {};
                   portfolio.forEach(h => {
                     inp[h.id] = String(h.currentPrice);
                     shin[h.id] = h.financials?.shinyoBairitu || "";
+                    qty[h.id] = String(h.qty);
+                    cost[h.id] = String(h.avgCost);
                   });
                   setPriceInputs(inp);
                   setShinInputs(shin);
+                  setQtyInputs(qty);
+                  setCostInputs(cost);
                   setShowPriceUpdate(v => !v);
                 }}>📊 株価を更新</button>
                 <button style={S.addBtn} onClick={() => setShowAdd(v => !v)}>+ 銘柄追加</button>
@@ -1990,30 +2040,32 @@ export default function App() {
 
             {showPriceUpdate && (
               <div style={{ ...S.card, marginBottom:16, border:"1px solid #fbbf2444" }}>
-                <div style={{ color:"#fbbf24", fontWeight:700, marginBottom:8 }}>📊 株価・信用倍率の一括更新</div>
-                <div style={{ color:"#64748b", fontSize:R.sm, marginBottom:12 }}>Yahoo Finance / 株探などで確認した最新値を入力してください。</div>
-                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(min(240px,90vw),1fr))", gap:12, marginBottom:12 }}>
+                <div style={{ color:"#fbbf24", fontWeight:700, marginBottom:8 }}>📊 株価・保有情報の一括更新</div>
+                <div style={{ color:"#64748b", fontSize:R.sm, marginBottom:12 }}>空欄の場合は現在の値を維持します。</div>
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(min(280px,90vw),1fr))", gap:12, marginBottom:12 }}>
                   {portfolio.map(h => (
                     <div key={h.id} style={{ background:"#111827", borderRadius:8, padding:"12px 14px" }}>
-                      <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:8, fontSize:R.md }}>{h.name}（{h.ticker}）</div>
+                      <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:10, fontSize:R.md }}>{h.name}（{h.ticker}）</div>
                       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
                         <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
                           <label style={{ color:"#64748b", fontSize:R.sm }}>現在株価（円）</label>
-                          <input
-                            value={priceInputs[h.id] ?? String(h.currentPrice)}
-                            onChange={e => { const v=e.target.value; if(v===""||/^\d*\.?\d*$/.test(v)) setPriceInputs(p=>({...p,[h.id]:v})); }}
-                            style={S.input} inputMode="decimal"
-                          />
+                          <input value={priceInputs[h.id] ?? String(h.currentPrice)} onChange={e => { const v=e.target.value; if(v===""||/^\d*\.?\d*$/.test(v)) setPriceInputs(p=>({...p,[h.id]:v})); }} style={S.input} inputMode="decimal" />
                           <span style={{ fontSize:R.sm, color:"#334155" }}>前回: ¥{h.currentPrice.toLocaleString()}</span>
                         </div>
                         <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
                           <label style={{ color:"#64748b", fontSize:R.sm }}>信用倍率（倍）</label>
-                          <input
-                            value={shinInputs[h.id] ?? (h.financials?.shinyoBairitu || "")}
-                            onChange={e => { const v=e.target.value; if(v===""||/^\d*\.?\d*$/.test(v)) setShinInputs(p=>({...p,[h.id]:v})); }}
-                            style={S.input} inputMode="decimal" placeholder="例: 2.5"
-                          />
+                          <input value={shinInputs[h.id] ?? (h.financials?.shinyoBairitu || "")} onChange={e => { const v=e.target.value; if(v===""||/^\d*\.?\d*$/.test(v)) setShinInputs(p=>({...p,[h.id]:v})); }} style={S.input} inputMode="decimal" placeholder="例: 2.5" />
                           <span style={{ fontSize:R.sm, color:"#334155" }}>前回: {h.financials?.shinyoBairitu || "—"}倍</span>
+                        </div>
+                        <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
+                          <label style={{ color:"#64748b", fontSize:R.sm }}>保有数（株）</label>
+                          <input value={qtyInputs[h.id] ?? String(h.qty)} onChange={e => { const v=e.target.value; if(v===""||/^\d*$/.test(v)) setQtyInputs(p=>({...p,[h.id]:v})); }} style={S.input} inputMode="numeric" />
+                          <span style={{ fontSize:R.sm, color:"#334155" }}>前回: {h.qty.toLocaleString()}株</span>
+                        </div>
+                        <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
+                          <label style={{ color:"#64748b", fontSize:R.sm }}>平均取得単価（円）</label>
+                          <input value={costInputs[h.id] ?? String(h.avgCost)} onChange={e => { const v=e.target.value; if(v===""||/^\d*\.?\d*$/.test(v)) setCostInputs(p=>({...p,[h.id]:v})); }} style={S.input} inputMode="decimal" />
+                          <span style={{ fontSize:R.sm, color:"#334155" }}>前回: ¥{h.avgCost.toLocaleString()}</span>
                         </div>
                       </div>
                     </div>
@@ -2078,7 +2130,7 @@ export default function App() {
                     <span style={{ color:"#e2e8f0" }}>¥{(h.qty*h.currentPrice).toLocaleString()}</span>
                     <span><Delta val={pnlPct} fmt={v => v.toFixed(2)+"%"} /></span>
                     <span style={{ color:hsc!=null?scoreColor(hsc):"#475569", fontWeight:700, cursor:"help", position:"relative" }}
-                      title={SCORE_CRITERIA.map(c2 => (c2.label)+"("+(c2.pts)+"pt): "+(c2.hint)).join('\n')}>
+                      title={SCORE_CRITERIA.map(c2 => (c2.label)+"["+c2.cat+"] 良好:"+(c2.good)+" 優良:"+(c2.great)).join('\n')}>
                       {hsc!=null?hsc+"pt":"—"}
                     </span>
                     <span style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
