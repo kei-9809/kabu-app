@@ -142,7 +142,7 @@ const makeS = R => ({
 });
 
 // グローバルデフォルト（外部コンポーネント用・PCサイズ）
-const R_DEFAULT = { scale:"lg", base:16, sm:16, md:16, lg:18, xl:22, xxl:26, chartSm:200, chartMd:250, chartLg:300, chartXl:320, grid2:"1fr 1fr", grid3:"1fr 1fr 1fr", isMobile:false };
+const R_DEFAULT = { scale:"lg", base:13, sm:12, md:13, lg:14, xl:18, xxl:22, chartSm:180, chartMd:220, chartLg:260, chartXl:300, grid2:"1fr 1fr", grid3:"1fr 1fr 1fr", isMobile:false };
 let S = makeS(R_DEFAULT);
 let R_CURRENT = R_DEFAULT;
 
@@ -160,18 +160,18 @@ function useResponsive() {
     return () => window.removeEventListener("resize", handler);
   }, []);
   if (w < 600) return {
-    scale:"sm", base:14, sm:12, md:14, lg:16, xl:20, xxl:22,
-    chartSm:160, chartMd:200, chartLg:240, chartXl:280,
+    scale:"sm", base:12, sm:11, md:12, lg:13, xl:16, xxl:18,
+    chartSm:140, chartMd:170, chartLg:200, chartXl:230,
     grid2:"1fr", grid3:"1fr", isMobile:true,
   };
   if (w < 1024) return {
-    scale:"md", base:15, sm:14, md:15, lg:17, xl:20, xxl:24,
-    chartSm:180, chartMd:220, chartLg:260, chartXl:300,
+    scale:"md", base:13, sm:12, md:13, lg:14, xl:17, xxl:20,
+    chartSm:160, chartMd:190, chartLg:220, chartXl:260,
     grid2:"1fr 1fr", grid3:"1fr 1fr", isMobile:false,
   };
   return {
-    scale:"lg", base:16, sm:16, md:16, lg:18, xl:22, xxl:26,
-    chartSm:200, chartMd:250, chartLg:300, chartXl:320,
+    scale:"lg", base:13, sm:12, md:13, lg:14, xl:18, xxl:22,
+    chartSm:180, chartMd:220, chartLg:260, chartXl:300,
     grid2:"1fr 1fr", grid3:"1fr 1fr 1fr", isMobile:false,
   };
 }
@@ -881,6 +881,8 @@ function InputTab({ selected, periods, updatePeriod, baseYear, annualKeys, qtrKe
 }
 
 export default function App() {
+  const [zoom, setZoom] = useState(100);
+
   const R = useResponsive();
   S = makeS(R);
   R_CURRENT = R;
@@ -1138,7 +1140,7 @@ export default function App() {
   }, [selected]);
 
   return (
-    <div style={S.root}>
+    <div style={{ ...S.root, transformOrigin:"top left", transform:`scale(${zoom/100})`, width:`${10000/zoom}%` }}>
       <header style={S.header}>
         <div style={{ display:"flex", alignItems:"center", gap:8 }}>
           <span style={{ fontSize:22 }}>📈</span>
@@ -1157,6 +1159,12 @@ export default function App() {
               ↩ 更新を元に戻す
             </button>
           )}
+          <div style={{ display:"flex", alignItems:"center", gap:4, background:"#111827", border:"1px solid #334155", borderRadius:6, padding:"2px 6px" }}>
+            <button style={{ background:"none", border:"none", color:"#94a3b8", cursor:"pointer", fontSize:16, padding:"0 4px", fontFamily:"inherit" }} onClick={() => setZoom(z => Math.max(50, z-10))}>−</button>
+            <span style={{ color:"#64748b", fontSize:12, minWidth:36, textAlign:"center" }}>{zoom}%</span>
+            <button style={{ background:"none", border:"none", color:"#94a3b8", cursor:"pointer", fontSize:16, padding:"0 4px", fontFamily:"inherit" }} onClick={() => setZoom(z => Math.min(200, z+10))}>＋</button>
+            <button style={{ background:"none", border:"none", color:"#475569", cursor:"pointer", fontSize:11, padding:"0 4px", fontFamily:"inherit" }} onClick={() => setZoom(100)}>reset</button>
+          </div>
         </nav>
       </header>
 
