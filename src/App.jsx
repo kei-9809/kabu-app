@@ -637,8 +637,24 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
                   β・借入金利を入力してください。支払利息を数値入力タブに入力すると借入金利が自動計算されます。Rf・市場リスクプレミアムはデフォルト値を変更可能です。
                 </div>
                 <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(min(160px,45vw),1fr))", gap:12 }}>
+                  {/* β入力欄（リンク付き） */}
+                  <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
+                    <label style={{ color:"#64748b", fontSize:R_CURRENT.sm }}>β（ベータ）</label>
+                    <input
+                      value={waccParams.beta}
+                      onChange={e => { const v=e.target.value; if(v===""||/^-?\d*\.?\d*$/.test(v)) setWaccParams(p=>({...p,beta:v})); }}
+                      style={S.input} placeholder="1.2" inputMode="decimal"
+                    />
+                    <a
+                      href={`https://finance.yahoo.co.jp/quote/${selected?.ticker}.T`}
+                      target="_blank" rel="noreferrer"
+                      style={{ color:"#60a5fa", fontSize:R_CURRENT.sm, textDecoration:"none" }}
+                    >
+                      📊 Yahoo Finance({selected?.ticker})でβを確認 ↗
+                    </a>
+                  </div>
+                  {/* 借入金利・Rf・RPは配列で */}
                   {[
-                    ["β（ベータ）", "beta", "Yahoo Finance等で確認", "1.2"],
                     ["借入金利 Kd（%）手動入力", "kd", cc.kdAuto != null ? `空欄で自動計算値 ${(cc.kdAuto*100).toFixed(2)}% を使用` : "支払利息を入力すると自動計算", ""],
                     ["リスクフリーレート Rf（%）", "rf", "日本国債10年利回り", "1.5"],
                     ["市場リスクプレミアム（%）", "rp", "日本株超過リターン目安", "5.5"],
