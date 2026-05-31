@@ -471,6 +471,28 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
   } : f;
 
   // WACC計算（cc・ffの後に定義）
+  const fc = useMemo(() => {
+    const fd = periods[FORECAST_KEY] || {};
+    if (!Object.values(fd).some(v => v !== "" && v != null)) return null;
+    const base = latestAnnual ? latestAnnual.f : {};
+    // 株価・株式数・純資産は実績継承、予想数値で上書き
+    const merged = {
+      ...base,
+      price: ff.price,
+      sales: fd.sales || base.sales,
+      netProfit: fd.netProfit,
+      opProfit: fd.opProfit,
+      dividend: fd.dividend,
+      // EBITDA・減価償却は予想なしなのでnull
+      ebitda: "",
+      depTangible: "",
+      depIntangible: "",
+    };
+    return calcAll(merged);
+  }, [periods, latestAnnual, ff]);
+
+
+  // WACC計算（fc定義後に配置）
   const waccResult = useMemo(() => {
     const beta = parseFloat(waccParams.beta);
     const rf   = parseFloat(waccParams.rf) / 100;
@@ -513,27 +535,6 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
                          verdict === "中立・様子見" ? "#fbbf24" : "#f87171";
     return { ke, kd, kdSource, wacc, E, D, V, t, spread, checks, score, verdict, verdictColor };
   }, [waccParams, cc, ff, fc]);
-
-  // 今期予想指標の計算
-  const fc = useMemo(() => {
-    const fd = periods[FORECAST_KEY] || {};
-    if (!Object.values(fd).some(v => v !== "" && v != null)) return null;
-    const base = latestAnnual ? latestAnnual.f : {};
-    // 株価・株式数・純資産は実績継承、予想数値で上書き
-    const merged = {
-      ...base,
-      price: ff.price,
-      sales: fd.sales || base.sales,
-      netProfit: fd.netProfit,
-      opProfit: fd.opProfit,
-      dividend: fd.dividend,
-      // EBITDA・減価償却は予想なしなのでnull
-      ebitda: "",
-      depTangible: "",
-      depIntangible: "",
-    };
-    return calcAll(merged);
-  }, [periods, latestAnnual, ff]);
 
   const trendData = useMemo(() => {
     return annualData.map(({ label, f: fd, c: ca }) => ({
@@ -649,7 +650,7 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
                 ))}
               </div>
               <div style={{ marginTop:8, color:"#475569" }}>
-                ROICがWACCを上回る（スプレッド&gt;0）= 企業が資本コスト以上のリターンを生んでいる = 価値創造
+                ROICがWACCを上回る（スプレッド {">"} 0）= 企業が資本コスト以上のリターンを生んでいる = 価値創造
               </div>
             </div>
 
@@ -1432,19 +1433,21 @@ export default function App() {
 
   const f  = selected?.financials || {};
   const c  = selected ? calcAll(f) : {};
-  // 総合スコアはMetricsTab内のccと同じ最新本決算データを使用
-  const _latestPeriod = useMemo(() => {
+  // 総合スコアは最新本決算データで計算
+  const sc = useMemo(() => {
     if (!selected) return null;
     const periods = (portfolio.find(h=>h.id===selected.id)||selected).periods || {};
     const baseKey = String(baseYear);
-    const fd = periods[baseKey] || {};
+    let fd = periods[baseKey] || {};
     if (!Object.values(fd).some(v => v !== "" && v != null)) {
-      const filled = [String(baseYear-1), String(baseYear-2)].map(yr => periods[yr]||{}).find(d => Object.values(d).some(v => v !== "" && v != null));
-      return filled ? calcAll({ ...filled, price: f.price||filled.price, shinyoBairitu: filled.shinyoBairitu||f.shinyoBairitu }) : null;
+      const prev = [String(baseYear-1), String(baseYear-2)].map(yr => periods[yr]||{}).find(d => Object.values(d).some(v => v !== "" && v != null));
+      fd = prev || {};
     }
-    return calcAll({ ...fd, price: f.price||fd.price, shinyoBairitu: fd.shinyoBairitu||f.shinyoBairitu });
+    const merged = Object.values(fd).some(v => v !== "" && v != null)
+      ? { ...fd, price: f.price||fd.price, shinyoBairitu: fd.shinyoBairitu||f.shinyoBairitu }
+      : f;
+    return financialScore(calcAll(merged));
   }, [selected, portfolio, baseYear, f]);
-  const sc = financialScore(_latestPeriod || c);
   const cmpStocks = portfolio.filter(h => compareIds.includes(h.id));
   const radarData = useMemo(() => {
     const norm = (v, lo, hi, inv=false) => {
