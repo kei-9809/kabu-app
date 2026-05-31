@@ -213,6 +213,43 @@ const INPUT_FIELDS = [
   { label:"信用倍率（倍）", key:"shinyoBairitu" },
 ]; 
 
+// 凡例クリックで表示/非表示できる折れ線グラフ
+function ToggleLineChart({ data, lines, yFormatter, tooltipFormatter, height=200, refLines=[], TS }) {
+  const [hidden, setHidden] = useState({});
+  const toggle = key => setHidden(h => ({ ...h, [key]: !h[key] }));
+  return (
+    <div>
+      {/* カスタム凡例 */}
+      <div style={{ display:"flex", flexWrap:"wrap", gap:"6px 14px", marginBottom:10 }}>
+        {lines.map(({ key, color, name }) => (
+          <span key={key} onClick={() => toggle(key)}
+            style={{ display:"flex", alignItems:"center", gap:5, fontSize:12, color: hidden[key] ? "#334155" : "#94a3b8", cursor:"pointer", userSelect:"none" }}>
+            <span style={{ width:14, height:3, background: hidden[key] ? "#334155" : color, display:"inline-block", borderRadius:2, flexShrink:0 }} />
+            {name || key}
+          </span>
+        ))}
+      </div>
+      <ResponsiveContainer width="100%" height={height}>
+        <LineChart data={data}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+          <XAxis dataKey="name" tick={{ fill:"#94a3b8", fontSize:12 }} />
+          <YAxis tick={{ fill:"#64748b", fontSize:11 }} tickFormatter={yFormatter} />
+          <Tooltip formatter={tooltipFormatter} contentStyle={TS} itemStyle={{ color:"#e2e8f0" }} />
+          {refLines.map(r => (
+            <ReferenceLine key={r.label} y={r.y} stroke={r.color} strokeDasharray="4 4"
+              label={{ value:r.label, fill:r.color, fontSize:10 }} />
+          ))}
+          {lines.map(({ key, color, name }) => (
+            hidden[key] ? null :
+            <Line key={key} type="monotone" dataKey={key} stroke={color} strokeWidth={2}
+              dot={{ fill:color, r:3 }} connectNulls name={name || key} />
+          ))}
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
 // ── 多期間入力フィールド定義 ──────────────────────────────────────────────────
 const PERIOD_FIELDS = [
   { label:"株価（円）",              key:"price" },
@@ -508,86 +545,79 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, TS
 
           {/* 売上高・営業利益・純利益グラフ */}
           <div style={S.card}>
-            <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:12 }}>売上高・営業利益・純利益推移</div>
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={annualData.map(({ label, f: fd }) => ({
+            <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:4 }}>売上高・営業利益・純利益推移</div>
+            <div style={{ color:"#475569", fontSize:11, marginBottom:12 }}>凡例をクリックで表示/非表示</div>
+            <ToggleLineChart
+              data={annualData.map(({ label, f: fd }) => ({
                 name: label,
                 売上高: n(fd.sales) ? Math.round(n(fd.sales)/1e8)/10 : null,
                 営業利益: n(fd.opProfit) ? Math.round(n(fd.opProfit)/1e8)/10 : null,
                 純利益: n(fd.netProfit) ? Math.round(n(fd.netProfit)/1e8)/10 : null,
-              }))}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                <XAxis dataKey="name" tick={{ fill:"#94a3b8", fontSize:11 }} />
-                <YAxis tick={{ fill:"#64748b", fontSize:10 }} tickFormatter={v => v+"億"} />
-                <Tooltip formatter={v => v+"億円"} contentStyle={TS} itemStyle={{ color:"#e2e8f0" }} />
-                <Legend wrapperStyle={{ color:"#94a3b8", fontSize:11 }} />
-                <Bar dataKey="売上高" fill="#60a5fa" radius={[3,3,0,0]} />
-                <Bar dataKey="営業利益" fill="#4ade80" radius={[3,3,0,0]} />
-                <Bar dataKey="純利益" fill="#a78bfa" radius={[3,3,0,0]} />
-              </BarChart>
-            </ResponsiveContainer>
+                EBITDA: annualData.find(d=>d.label===label)?.c?.ebitda ? Math.round(annualData.find(d=>d.label===label).c.ebitda/1e8)/10 : null,
+              }))}
+              lines={[
+                { key:"売上高",   color:"#60a5fa" },
+                { key:"営業利益", color:"#4ade80" },
+                { key:"純利益",   color:"#a78bfa" },
+                { key:"EBITDA",  color:"#fbbf24" },
+              ]}
+              yFormatter={v => v+"億"}
+              tooltipFormatter={v => v+"億円"}
+              height={220}
+              TS={TS}
+            />
           </div>
 
-          {/* 利益率・ROEトレンド */}
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
-            <div style={S.card}>
-              <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:12 }}>利益率トレンド（折れ線）</div>
-              <ResponsiveContainer width="100%" height={200}>
-                <LineChart data={trendData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                  <XAxis dataKey="name" tick={{ fill:"#94a3b8", fontSize:11 }} />
-                  <YAxis tick={{ fill:"#64748b", fontSize:10 }} tickFormatter={v => v+"%"} />
-                  <Tooltip formatter={v => v+"%"} contentStyle={TS} itemStyle={{ color:"#e2e8f0" }} />
-                  <Legend wrapperStyle={{ color:"#94a3b8", fontSize:11 }} />
-                  <Line type="monotone" dataKey="粗利率" stroke="#fbbf24" strokeWidth={2} dot={{ fill:"#fbbf24" }} connectNulls />
-                  <Line type="monotone" dataKey="営業利益率" stroke="#4ade80" strokeWidth={2} dot={{ fill:"#4ade80" }} connectNulls />
-                  <Line type="monotone" dataKey="経常利益率" stroke="#60a5fa" strokeWidth={2} dot={{ fill:"#60a5fa" }} connectNulls />
-                  <Line type="monotone" dataKey="純利益率" stroke="#a78bfa" strokeWidth={2} dot={{ fill:"#a78bfa" }} connectNulls />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-            <div style={S.card}>
-              <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:12 }}>ROE・ROAトレンド</div>
-              <ResponsiveContainer width="100%" height={180}>
-                <LineChart data={trendData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                  <XAxis dataKey="name" tick={{ fill:"#94a3b8", fontSize:11 }} />
-                  <YAxis tick={{ fill:"#64748b", fontSize:10 }} tickFormatter={v => v+"%"} />
-                  <Tooltip formatter={v => v+"%"} contentStyle={TS} itemStyle={{ color:"#e2e8f0" }} />
-                  <Legend wrapperStyle={{ color:"#94a3b8", fontSize:11 }} />
-                  <Line type="monotone" dataKey="ROE" stroke="#4ade80" strokeWidth={2} dot={{ fill:"#4ade80" }} connectNulls />
-                  <Line type="monotone" dataKey="ROA" stroke="#60a5fa" strokeWidth={2} dot={{ fill:"#60a5fa" }} connectNulls />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
+          {/* 利益率トレンド */}
+          <div style={S.card}>
+            <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:4 }}>利益率トレンド</div>
+            <div style={{ color:"#475569", fontSize:11, marginBottom:12 }}>凡例をクリックで表示/非表示</div>
+            <ToggleLineChart
+              data={trendData}
+              lines={[
+                { key:"粗利率",    color:"#fbbf24" },
+                { key:"営業利益率", color:"#4ade80" },
+                { key:"経常利益率", color:"#60a5fa" },
+                { key:"純利益率",  color:"#a78bfa" },
+              ]}
+              yFormatter={v => v+"%"}
+              tooltipFormatter={v => v+"%"}
+              height={220}
+              TS={TS}
+            />
           </div>
 
-          {/* EBITDAとEV/EBITDA推移 */}
+          {/* ROE・ROAトレンド / EV/EBITDA */}
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
             <div style={S.card}>
-              <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:12 }}>EBITDA推移</div>
-              <ResponsiveContainer width="100%" height={180}>
-                <BarChart data={trendData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                  <XAxis dataKey="name" tick={{ fill:"#94a3b8", fontSize:11 }} />
-                  <YAxis tick={{ fill:"#64748b", fontSize:10 }} tickFormatter={v => v+"億"} />
-                  <Tooltip formatter={v => v+"億円"} contentStyle={TS} itemStyle={{ color:"#e2e8f0" }} />
-                  <Bar dataKey="EBITDA" fill="#60a5fa" radius={[3,3,0,0]} />
-                </BarChart>
-              </ResponsiveContainer>
+              <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:4 }}>ROE・ROAトレンド</div>
+              <div style={{ color:"#475569", fontSize:11, marginBottom:8 }}>凡例をクリックで表示/非表示</div>
+              <ToggleLineChart
+                data={trendData}
+                lines={[
+                  { key:"ROE",  color:"#4ade80" },
+                  { key:"ROA",  color:"#60a5fa" },
+                ]}
+                yFormatter={v => v+"%"}
+                tooltipFormatter={v => v+"%"}
+                height={200}
+                TS={TS}
+              />
             </div>
             <div style={S.card}>
-              <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:12 }}>EV/EBITDAトレンド</div>
-              <ResponsiveContainer width="100%" height={180}>
-                <LineChart data={trendData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                  <XAxis dataKey="name" tick={{ fill:"#94a3b8", fontSize:11 }} />
-                  <YAxis tick={{ fill:"#64748b", fontSize:10 }} tickFormatter={v => v+"x"} />
-                  <Tooltip formatter={v => v+"倍"} contentStyle={TS} itemStyle={{ color:"#e2e8f0" }} />
-                  <ReferenceLine y={10} stroke="#4ade80" strokeDasharray="4 4" label={{ value:"10x", fill:"#4ade80", fontSize:9 }} />
-                  <Line type="monotone" dataKey="EV_EBITDA" stroke="#a78bfa" strokeWidth={2} dot={{ fill:"#a78bfa" }} connectNulls name="EV/EBITDA" />
-                </LineChart>
-              </ResponsiveContainer>
+              <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:4 }}>EV/EBITDAトレンド</div>
+              <div style={{ color:"#475569", fontSize:11, marginBottom:8 }}>凡例をクリックで表示/非表示</div>
+              <ToggleLineChart
+                data={trendData}
+                lines={[
+                  { key:"EV_EBITDA", color:"#a78bfa", name:"EV/EBITDA" },
+                ]}
+                yFormatter={v => v+"x"}
+                tooltipFormatter={v => v+"倍"}
+                height={200}
+                refLines={[{ y:10, label:"10x", color:"#4ade80" }]}
+                TS={TS}
+              />
             </div>
           </div>
         </div>
@@ -1787,24 +1817,24 @@ export default function App() {
 }
 
 const S = {
-  root:    { minHeight:"100vh", background:"#0a0f1a", fontFamily:"'DM Mono','Courier New',monospace", color:"#e2e8f0" },
+  root:    { minHeight:"100vh", background:"#0a0f1a", fontFamily:"'DM Mono','Courier New',monospace", color:"#e2e8f0", fontSize:14 },
   header:  { display:"flex", alignItems:"center", justifyContent:"space-between", padding:"12px 24px", background:"#0d1424", borderBottom:"1px solid #1e293b", flexWrap:"wrap", gap:8 },
-  navBtn:  { background:"transparent", border:"1px solid #1e293b", color:"#64748b", padding:"6px 14px", borderRadius:6, cursor:"pointer", fontSize:12, fontFamily:"inherit" },
+  navBtn:  { background:"transparent", border:"1px solid #1e293b", color:"#64748b", padding:"6px 14px", borderRadius:6, cursor:"pointer", fontSize:13, fontFamily:"inherit" },
   navOn:   { background:"#0f2a1a", border:"1px solid #4ade80", color:"#4ade80" },
   sbItem:  { flex:1, padding:"12px 20px", borderRight:"1px solid #1e293b", minWidth:120 },
-  sbLabel: { fontSize:11, color:"#475569", marginBottom:4, textTransform:"uppercase", letterSpacing:1 },
-  sbVal:   { fontSize:20, fontWeight:800 },
-  h2:      { fontSize:18, fontWeight:800, color:"#f1f5f9", margin:"0 0 16px 0", letterSpacing:1 },
+  sbLabel: { fontSize:12, color:"#475569", marginBottom:4, textTransform:"uppercase", letterSpacing:1 },
+  sbVal:   { fontSize:22, fontWeight:800 },
+  h2:      { fontSize:20, fontWeight:800, color:"#f1f5f9", margin:"0 0 16px 0", letterSpacing:1 },
   card:    { background:"#0d1424", border:"1px solid #1e293b", borderRadius:10, padding:20, marginBottom:16 },
   table:   { background:"#0d1424", border:"1px solid #1e293b", borderRadius:10, overflow:"hidden", marginBottom:16 },
   chips:   { display:"flex", flexWrap:"wrap", gap:8, marginBottom:16 },
-  chip:    { background:"#111827", border:"1px solid #1e293b", color:"#94a3b8", padding:"6px 12px", borderRadius:20, cursor:"pointer", fontSize:12, fontFamily:"inherit" },
+  chip:    { background:"#111827", border:"1px solid #1e293b", color:"#94a3b8", padding:"6px 14px", borderRadius:20, cursor:"pointer", fontSize:13, fontFamily:"inherit" },
   chipOn:  { background:"#0f2a1a", border:"1px solid #4ade80", color:"#4ade80" },
-  addBtn:  { background:"#0f2a1a", border:"1px solid #4ade80", color:"#4ade80", padding:"8px 16px", borderRadius:6, cursor:"pointer", fontSize:13, fontFamily:"inherit", fontWeight:700 },
-  miniBtn: { background:"#111827", border:"1px solid #334155", color:"#64748b", padding:"4px 10px", borderRadius:4, cursor:"pointer", fontSize:11, fontFamily:"inherit" },
-  input:   { background:"#111827", border:"1px solid #1e293b", color:"#e2e8f0", padding:"8px 12px", borderRadius:6, fontSize:13, fontFamily:"inherit", outline:"none", width:"100%", boxSizing:"border-box" },
-  sel:     { background:"#111827", border:"1px solid #1e293b", color:"#e2e8f0", padding:"8px 12px", borderRadius:6, fontSize:13, fontFamily:"inherit", width:"100%" },
+  addBtn:  { background:"#0f2a1a", border:"1px solid #4ade80", color:"#4ade80", padding:"8px 18px", borderRadius:6, cursor:"pointer", fontSize:14, fontFamily:"inherit", fontWeight:700 },
+  miniBtn: { background:"#111827", border:"1px solid #334155", color:"#64748b", padding:"5px 12px", borderRadius:4, cursor:"pointer", fontSize:12, fontFamily:"inherit" },
+  input:   { background:"#111827", border:"1px solid #1e293b", color:"#e2e8f0", padding:"8px 12px", borderRadius:6, fontSize:14, fontFamily:"inherit", outline:"none", width:"100%", boxSizing:"border-box" },
+  sel:     { background:"#111827", border:"1px solid #1e293b", color:"#e2e8f0", padding:"8px 12px", borderRadius:6, fontSize:14, fontFamily:"inherit", width:"100%" },
   kpi:     { background:"#111827", borderRadius:8, padding:"12px 14px" },
-  kpiL:    { color:"#475569", fontSize:11, marginBottom:4 },
-  kpiV:    { fontWeight:700, fontSize:15 },
+  kpiL:    { color:"#475569", fontSize:12, marginBottom:4 },
+  kpiV:    { fontWeight:700, fontSize:16 },
 };
