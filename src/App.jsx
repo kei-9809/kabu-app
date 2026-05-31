@@ -303,6 +303,37 @@ function ToggleLineChart({ data, lines, yFormatter, tooltipFormatter, height=200
   );
 }
 
+// 凡例クリックで表示/非表示できる棒グラフ
+function ToggleBarChart({ data, bars, yFormatter, tooltipFormatter, height=200, TS }) {
+  const [hidden, setHidden] = useState({});
+  const toggle = key => setHidden(h => ({ ...h, [key]: !h[key] }));
+  return (
+    <div>
+      <div style={{ display:"flex", flexWrap:"wrap", gap:"6px 14px", marginBottom:10 }}>
+        {bars.map(({ key, color }) => (
+          <span key={key} onClick={() => toggle(key)}
+            style={{ display:"flex", alignItems:"center", gap:5, fontSize:R_CURRENT.sm, color:hidden[key]?"#334155":"#94a3b8", cursor:"pointer", userSelect:"none" }}>
+            <span style={{ width:14, height:10, background:hidden[key]?"#334155":color, display:"inline-block", borderRadius:2, flexShrink:0 }} />
+            {key}
+          </span>
+        ))}
+      </div>
+      <ResponsiveContainer width="100%" height={height}>
+        <BarChart data={data}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+          <XAxis dataKey="name" tick={{ fill:"#94a3b8", fontSize:R_CURRENT.sm }} interval={0} angle={-45} textAnchor="end" height={60} />
+          <YAxis tick={{ fill:"#64748b", fontSize:R_CURRENT.sm }} tickFormatter={yFormatter} />
+          <Tooltip formatter={tooltipFormatter} contentStyle={TS} itemStyle={{ color:"#e2e8f0" }} />
+          {bars.map(({ key, color }) => (
+            hidden[key] ? null :
+            <Bar key={key} dataKey={key} fill={color} radius={[2,2,0,0]} />
+          ))}
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
 // ── 多期間入力フィールド定義 ──────────────────────────────────────────────────
 const PERIOD_FIELDS = [
   { label:"株価（円）",              key:"price" },
@@ -763,18 +794,18 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
             />
           </div>
 
-          {/* 累計値グラフ（ToggleLineChart） */}
+          {/* 累計値グラフ（棒グラフ・表示非表示切替） */}
           <div style={S.card}>
             <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:4 }}>四半期累計値推移</div>
             <div style={{ color:"#475569", fontSize:R_CURRENT.sm, marginBottom:12 }}>入力した累計値そのまま。凡例をクリックで表示/非表示</div>
-            <ToggleLineChart
+            <ToggleBarChart
               data={qtrData.map(({ label, f: fd }) => ({
                 name: label,
                 売上高: n(fd.sales) ? Math.round(n(fd.sales)/1e8)/10 : null,
                 営業利益: n(fd.opProfit) ? Math.round(n(fd.opProfit)/1e8)/10 : null,
                 純利益: n(fd.netProfit) ? Math.round(n(fd.netProfit)/1e8)/10 : null,
               }))}
-              lines={[
+              bars={[
                 { key:"売上高",   color:"#60a5fa" },
                 { key:"営業利益", color:"#4ade80" },
                 { key:"純利益",   color:"#a78bfa" },
