@@ -2359,10 +2359,10 @@ export default function App() {
   }, [portfolio, tPnL]);
 
   const safetyMargin = useMemo(() => {
-    // periodsベースのccのepsを使用
     const target = selected || watchSelected;
+    if (!target) return null;
     const allH = [...portfolio, ...watchlist];
-    const h = allH.find(x => x.id === target?.id) || target;
+    const h = allH.find(x => x.id === target.id) || target;
     const sb = getStockBaseYear(h, baseYear);
     const hPeriods = h.periods || {};
     let fd = hPeriods[String(sb)] || {};
@@ -2380,8 +2380,9 @@ export default function App() {
 
   const monteData = useMemo(() => {
     const target = selected || watchSelected;
+    if (!target) return null;
     const allH = [...portfolio, ...watchlist];
-    const h = allH.find(x => x.id === target?.id) || target;
+    const h = allH.find(x => x.id === target.id) || target;
     const sb = getStockBaseYear(h, baseYear);
     const hPeriods = h.periods || {};
     let fd = hPeriods[String(sb)] || {};
