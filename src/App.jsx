@@ -1720,13 +1720,13 @@ function InputTab({ selected, periods, updatePeriod, baseYear, annualKeys, qtrKe
             <div style={{ color:"#60a5fa", fontWeight:700, marginBottom:16 }}>{activeYear}年 本決算データ</div>
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(min(200px,45vw),1fr))", gap:14 }}>
               {PERIOD_FIELDS.map(({ label, key, hint }) => {
-                // 今期年（baseYear+1）の株価・信用倍率は現在株価から直接取得
                 const isCurrentYr = activeYear === String(baseYear + 1);
                 const isPrice = key === "price";
                 const isShin = key === "shinyoBairitu";
+                // 今期年の株価・信用倍率はportfolioのcurrentPrice/shinyoBairituを直接表示
                 let displayVal;
                 if (isCurrentYr && isPrice) {
-                  displayVal = selected.financials?.price || "";
+                  displayVal = String(selected.currentPrice || "");
                 } else if (isCurrentYr && isShin) {
                   displayVal = selected.financials?.shinyoBairitu || "";
                 } else {
@@ -1739,7 +1739,18 @@ function InputTab({ selected, periods, updatePeriod, baseYear, annualKeys, qtrKe
                     </label>
                     <input
                       value={displayVal}
-                      onChange={e => handleChange(activeYear, key, e.target.value)}
+                      onChange={e => {
+                        const v = e.target.value;
+                        if (isCurrentYr && isPrice) {
+                          // currentPriceとfinancials.priceを直接更新
+                          updatePeriod("__meta__", "currentPrice", +v || 0);
+                          updatePeriod("__meta__", "financials", { ...selected.financials, price: v });
+                        } else if (isCurrentYr && isShin) {
+                          updatePeriod("__meta__", "financials", { ...selected.financials, shinyoBairitu: v });
+                        } else {
+                          handleChange(activeYear, key, v);
+                        }
+                      }}
                       style={S.input}
                       placeholder="数値を入力"
                       inputMode="decimal"
@@ -1945,6 +1956,8 @@ export default function App() {
       if (h.id !== id) return h;
       if (periodKey === "__meta__") {
         if (fieldKey === "__periods__") return { ...h, periods: val };
+        if (fieldKey === "currentPrice") return { ...h, currentPrice: val };
+        if (fieldKey === "financials") return { ...h, financials: val };
         return { ...h, [fieldKey]: val };
       }
       const periods = { ...(h.periods || {}) };
@@ -1967,6 +1980,8 @@ export default function App() {
       if (!s || s.id !== id) return s;
       if (periodKey === "__meta__") {
         if (fieldKey === "__periods__") return { ...s, periods: val };
+        if (fieldKey === "currentPrice") return { ...s, currentPrice: val };
+        if (fieldKey === "financials") return { ...s, financials: val };
         return { ...s, [fieldKey]: val };
       }
       const periods = { ...(s.periods || {}) };
