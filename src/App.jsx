@@ -854,14 +854,11 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
   // WACC計算（cc・ffの後に定義）
   const fc = useMemo(() => {
     const fd = periods[FORECAST_KEY] || {};
-    // 今期年（baseYear+1）のデータも参照
-    const currentYrKey = String(baseYear + 1);
-    const currentYrFd = periods[currentYrKey] || {};
     if (!Object.values(fd).some(v => v !== "" && v != null)) return null;
     const base = latestAnnual ? latestAnnual.f : {};
-    // 株価は今期年のperiods > ff.price の優先順位
-    const currentPrice = currentYrFd.price || ff.price;
-    const currentShin = currentYrFd.shinyoBairitu || ff.shinyoBairitu;
+    // 株価は常に現在株価（f.price = financials.price）を使用 → 現状割高・割安の判断
+    const currentPrice = f.price || ff.price;
+    const currentShin = f.shinyoBairitu || ff.shinyoBairitu;
     const merged = {
       ...base,
       price: currentPrice,
@@ -875,7 +872,7 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
       depIntangible: "",
     };
     return calcAll(merged);
-  }, [periods, latestAnnual, ff, baseYear]);
+  }, [periods, latestAnnual, f, ff]);
 
 
   // WACC計算（fc定義後に配置）
@@ -1999,60 +1996,40 @@ export default function App() {
   }, [selected, portfolio, save]);
 
   const applyPrices = () => {
-    save(p => p.map(h => {
+    const updatedMap = {};
+    const newPortfolio = portfolio.map(h => {
       const np = priceInputs[h.id];
       const ns = shinInputs[h.id];
       const nq = qtyInputs[h.id];
       const nc = costInputs[h.id];
       let updated = { ...h };
+      const sb = getStockBaseYear(h, baseYear);
+      const currentYr = String(sb + 1); // 今期年
+
       if (np && !isNaN(+np)) {
-        updated = { ...updated, currentPrice:+np, financials:{ ...updated.financials, price:np } };
-        // 今期年（latestFiscalYear+1）のperiodsにも株価を同期
-        const sb = getStockBaseYear(h, baseYear);
-        const currentYr = String(sb + 1);
+        // currentPrice・financials.price・今期年periodsの株価を全て同期
         const periods = { ...(updated.periods || {}) };
         periods[currentYr] = { ...(periods[currentYr] || {}), price: np };
-        updated = { ...updated, periods };
+        updated = { ...updated, currentPrice:+np, financials:{ ...updated.financials, price:np }, periods };
       }
       if (ns !== undefined && ns !== "") {
-        updated = { ...updated, financials:{ ...updated.financials, shinyoBairitu:ns } };
-        // 今期年のperiodsにも信用倍率を同期
-        const sb = getStockBaseYear(h, baseYear);
-        const currentYr = String(sb + 1);
         const periods = { ...(updated.periods || {}) };
         periods[currentYr] = { ...(periods[currentYr] || {}), shinyoBairitu: ns };
-        updated = { ...updated, periods };
+        updated = { ...updated, financials:{ ...updated.financials, shinyoBairitu:ns }, periods };
       }
       if (nq && !isNaN(+nq) && +nq > 0) updated = { ...updated, qty:+nq };
       if (nc && !isNaN(+nc) && +nc > 0) updated = { ...updated, avgCost:+nc };
+      updatedMap[h.id] = updated;
       return updated;
-    }));
-    if (selected) {
-      const np = priceInputs[selected.id];
-      const ns = shinInputs[selected.id];
-      const nq = qtyInputs[selected.id];
-      const nc = costInputs[selected.id];
-      let upd = { ...selected };
-      if (np && !isNaN(+np)) {
-        upd = { ...upd, currentPrice:+np, financials:{ ...upd.financials, price:np } };
-        const sb = getStockBaseYear(upd, baseYear);
-        const currentYr = String(sb + 1);
-        const periods = { ...(upd.periods || {}) };
-        periods[currentYr] = { ...(periods[currentYr] || {}), price: np };
-        upd = { ...upd, periods };
-      }
-      if (ns !== undefined && ns !== "") {
-        upd = { ...upd, financials:{ ...upd.financials, shinyoBairitu:ns } };
-        const sb = getStockBaseYear(upd, baseYear);
-        const currentYr = String(sb + 1);
-        const periods = { ...(upd.periods || {}) };
-        periods[currentYr] = { ...(periods[currentYr] || {}), shinyoBairitu: ns };
-        upd = { ...upd, periods };
-      }
-      if (nq && !isNaN(+nq) && +nq > 0) upd = { ...upd, qty:+nq };
-      if (nc && !isNaN(+nc) && +nc > 0) upd = { ...upd, avgCost:+nc };
-      setSelected(upd);
+    });
+
+    // portfolioとselectedを同時更新
+    setPortfolio(newPortfolio);
+    saveData(newPortfolio);
+    if (selected && updatedMap[selected.id]) {
+      setSelected(updatedMap[selected.id]);
     }
+
     setPriceInputs({});
     setShinInputs({});
     setQtyInputs({});
