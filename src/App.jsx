@@ -1331,29 +1331,20 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
                       <td colSpan={annualData.length+1+(fc?1:0)} style={{ padding:"8px 10px", color:"#475569", fontSize:16, background:"#111827", letterSpacing:1 }}>{label}</td>
                     </tr>
                   );
-                  // 今期予想用のgetterマッピング
-                  const fcGetter = {
-                    "売上高":     () => n(periods[FORECAST_KEY]?.sales),
-                    "営業利益":   () => n(periods[FORECAST_KEY]?.opProfit),
-                    "経常利益":   () => null,
-                    "当期純利益": () => n(periods[FORECAST_KEY]?.netProfit),
-                    "EBITDA":    () => null,
-                    "粗利率":     () => null,
-                    "営業利益率": () => fc?.opMargin,
-                    "経常利益率": () => null,
-                    "純利益率":   () => fc?.netMargin,
-                    "ROE":       () => fc?.roe,
-                    "ROA":       () => fc?.roa,
-                    "ROIC":      () => null,
-                    "自己資本比率":() => null,
-                    "流動比率":   () => null,
-                    "固定長期適合率":() => null,
-                    "EV/EBITDA": () => null,
-                    "PER":       () => fc?.per,
-                    "PBR":       () => null,
-                    "EPS":       () => fc?.eps,
-                    "1株配当":    () => n(periods[FORECAST_KEY]?.dividend),
-                  };
+                  // 今期予想値（入力があるものだけ）
+                  const fcValMap = fc ? {
+                    "売上高":     n(periods[FORECAST_KEY]?.sales),
+                    "営業利益":   n(periods[FORECAST_KEY]?.opProfit),
+                    "当期純利益": n(periods[FORECAST_KEY]?.netProfit),
+                    "営業利益率": fc.opMargin,
+                    "純利益率":   fc.netMargin,
+                    "ROE":       fc.roe,
+                    "ROA":       fc.roa,
+                    "PER":       fc.per,
+                    "EPS":       fc.eps,
+                    "1株配当":    n(periods[FORECAST_KEY]?.dividend),
+                  } : {};
+                  const fcVal = fc ? fcValMap[label] : undefined;
                   return (
                   <tr key={label} style={{ borderBottom:"1px solid #1e293b" }}>
                     <td style={{ padding:"6px 10px", color:"#64748b", fontSize:16 }}>{label}</td>
@@ -1368,10 +1359,9 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
                         </td>
                       );
                     })}
-                    {fc && fcGetter[label] && (
-                      <FcCell fcVal={fcGetter[label]()} prevVal={getter(annualData[annualData.length-1])} formatter={formatter} />
+                    {fc && (
+                      <FcCell fcVal={fcVal != null ? fcVal : null} prevVal={getter(annualData[annualData.length-1])} formatter={formatter} />
                     )}
-                    {fc && !fcGetter[label] && <td style={{ textAlign:"right", padding:"6px 10px", background:"#1a1200", color:"#334155" }}>—</td>}
                   </tr>
                   );
                 })}
