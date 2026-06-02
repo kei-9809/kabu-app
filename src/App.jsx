@@ -1166,7 +1166,7 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
                   </span>
                   <button
                     style={{ ...S.miniBtn, color:"#4ade80", borderColor:"#4ade80" }}
-                    onClick={() => updatePeriod(selected.id, "__meta__", "waccSpread", String(waccResult.spread))}
+                    onClick={() => updatePeriod("__meta__", "waccSpread", String(waccResult.spread))}
                   >
                     スコアに反映・保存
                   </button>
@@ -1605,8 +1605,8 @@ function StockUndoButton({ selected, updatePeriod, S, undoTrigger }) {
       style={{ ...S.miniBtn, color:"#fbbf24", borderColor:"#fbbf24" }}
       onClick={() => {
         if (!window.confirm(selected.name+" の決算年更新を元に戻します。よろしいですか？")) return;
-        updatePeriod(selected.id, "__meta__", "latestFiscalYear", String(saved.stockBase));
-        updatePeriod(selected.id, "__meta__", "__periods__", saved.periods);
+        updatePeriod("__meta__", "latestFiscalYear", String(saved.stockBase));
+        updatePeriod("__meta__", "__periods__", saved.periods);
         try { localStorage.removeItem(undoKey); } catch {}
         setSaved(null);
       }}
@@ -1624,7 +1624,7 @@ function InputTab({ selected, periods, updatePeriod, baseYear, annualKeys, qtrKe
 
   const handleChange = (periodKey, fieldKey, val) => {
     if (val === "" || val === "-" || /^-?\d*\.?\d*$/.test(val)) {
-      updatePeriod(selected.id, periodKey, fieldKey, val);
+      updatePeriod(periodKey, fieldKey, val);
     }
   };
 
@@ -1646,7 +1646,7 @@ function InputTab({ selected, periods, updatePeriod, baseYear, annualKeys, qtrKe
             <label style={{ color:"#64748b", fontSize:R_CURRENT.sm }}>決算月</label>
             <select
               value={selected.fiscalMonth || "3"}
-              onChange={e => updatePeriod(selected.id, "__meta__", "fiscalMonth", e.target.value)}
+              onChange={e => updatePeriod("__meta__", "fiscalMonth", e.target.value)}
               style={S.sel}
             >
               {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => (
@@ -1659,7 +1659,7 @@ function InputTab({ selected, periods, updatePeriod, baseYear, annualKeys, qtrKe
             <label style={{ color:"#64748b", fontSize:R_CURRENT.sm }}>最新本決算年（直近期）</label>
             <input
               value={selected.latestFiscalYear || ""}
-              onChange={e => updatePeriod(selected.id, "__meta__", "latestFiscalYear", e.target.value)}
+              onChange={e => updatePeriod("__meta__", "latestFiscalYear", e.target.value)}
               style={S.input}
               placeholder={"例: "+baseYear}
               inputMode="numeric"
@@ -1691,8 +1691,8 @@ function InputTab({ selected, periods, updatePeriod, baseYear, annualKeys, qtrKe
                 newPeriods[key] = oldPeriods[key];
               });
               if (oldPeriods[FORECAST_KEY]) newPeriods[FORECAST_KEY] = oldPeriods[FORECAST_KEY];
-              updatePeriod(selected.id, "__meta__", "latestFiscalYear", String(next));
-              updatePeriod(selected.id, "__meta__", "__periods__", newPeriods);
+              updatePeriod("__meta__", "latestFiscalYear", String(next));
+              updatePeriod("__meta__", "__periods__", newPeriods);
               setUndoTrigger(t => t + 1);
             }}
           >
@@ -1920,28 +1920,29 @@ export default function App() {
   }, [selected, save]);
 
   // 多期間データ更新
-  const updatePeriod = useCallback((id, periodKey, fieldKey, val) => {
+  const updatePeriod = useCallback((periodKey, fieldKey, val) => {
+    if (!selected) return;
+    const id = selected.id;
     save(p => p.map(h => {
       if (h.id !== id) return h;
       if (periodKey === "__meta__") {
-        if (fieldKey === "__periods__") return { ...h, periods: val }; // periodsをまるごと更新
+        if (fieldKey === "__periods__") return { ...h, periods: val };
         return { ...h, [fieldKey]: val };
       }
       const periods = { ...(h.periods || {}) };
       periods[periodKey] = { ...(periods[periodKey] || {}), [fieldKey]: val };
       return { ...h, periods };
     }));
-    if (selected?.id === id) {
-      setSelected(s => {
-        if (periodKey === "__meta__") {
-          if (fieldKey === "__periods__") return { ...s, periods: val };
-          return { ...s, [fieldKey]: val };
-        }
-        const periods = { ...(s.periods || {}) };
-        periods[periodKey] = { ...(periods[periodKey] || {}), [fieldKey]: val };
-        return { ...s, periods };
-      });
-    }
+    setSelected(s => {
+      if (!s || s.id !== id) return s;
+      if (periodKey === "__meta__") {
+        if (fieldKey === "__periods__") return { ...s, periods: val };
+        return { ...s, [fieldKey]: val };
+      }
+      const periods = { ...(s.periods || {}) };
+      periods[periodKey] = { ...(periods[periodKey] || {}), [fieldKey]: val };
+      return { ...s, periods };
+    });
   }, [selected, save]);
 
   const addStock = () => {
@@ -2564,15 +2565,16 @@ export default function App() {
             {/* 候補銘柄の詳細 */}
             {watchSelected && !selected && (
               <WatchDetail
-                watchSelected={watchSelected}
+                watchSelected={watchlist.find(h=>h.id===watchSelected.id)||watchSelected}
                 watchlist={watchlist}
-                baseYear={baseYear}
-                annualKeys={ANNUAL_KEYS}
-                qtrKeys={QTR_KEYS}
+                baseYear={getStockBaseYear(watchlist.find(h=>h.id===watchSelected.id)||watchSelected, baseYear)}
+                annualKeys={getAnnualKeys(getStockBaseYear(watchlist.find(h=>h.id===watchSelected.id)||watchSelected, baseYear))}
+                qtrKeys={getQtrKeys(getStockBaseYear(watchlist.find(h=>h.id===watchSelected.id)||watchSelected, baseYear))}
+                globalBaseYear={baseYear}
                 detailTab={detailTab}
                 setDetailTab={setDetailTab}
                 updateWatchPeriod={updateWatchPeriod}
-                sc={scoreFromPeriods(watchSelected, baseYear)}
+                sc={scoreFromPeriods(watchlist.find(h=>h.id===watchSelected.id)||watchSelected, baseYear)}
                 R={R} TS={TS} S={S}
               />
             )}
