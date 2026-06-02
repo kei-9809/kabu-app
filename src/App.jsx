@@ -1407,7 +1407,7 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
           {/* 利益率トレンド */}
           <div style={S.card}>
             <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:4 }}>利益率トレンド</div>
-            <div style={{ color:"#475569", fontSize:16, marginBottom:12 }}>凡例をクリックで表示/非表示</div>
+            <div style={{ color:"#475569", fontSize:16, marginBottom:12 }}>凡例をクリックで表示/非表示。{fc && <span style={{ color:"#fbbf24" }}>今期予想値を含む</span>}</div>
             <ToggleLineChart
               data={trendData}
               lines={[
@@ -2268,9 +2268,11 @@ export default function App() {
   const toggleCompare = id => setCompareIds(p => p.includes(id) ? p.filter(x => x !== id) : p.length < 4 ? [...p, id] : p);
 
   const simRows = useCallback(() => {
-    if (!selected) return [];
+    const target = selected || watchSelected;
+    if (!target) return [];
     // 最新本決算データをperiodsから取得
-    const h = portfolio.find(x => x.id === selected.id) || selected;
+    const allH = [...portfolio, ...watchlist];
+    const h = allH.find(x => x.id === target.id) || target;
     const sb = getStockBaseYear(h, baseYear);
     const hPeriods = h.periods || {};
     let fd = hPeriods[String(sb)] || {};
@@ -2302,7 +2304,7 @@ export default function App() {
       const dc = simParams.reinvest ? Math.round(price*(Math.pow(1+dr,y)-1)) : Math.round(price*dr*y);
       return { year:y===0?"現在":y+"年後", base, bear, bull, evp, dc, ps:Math.round(ps), po:Math.round(po), pe:parseFloat(pe.toFixed(2)) };
     });
-  }, [selected, portfolio, baseYear, simParams]);
+  }, [selected, watchSelected, portfolio, watchlist, baseYear, simParams]);
 
   const f  = (portfolio.find(h=>h.id===selected?.id)||selected)?.financials || {};
   const c  = selected ? calcAll(f) : {};
@@ -2358,8 +2360,9 @@ export default function App() {
 
   const safetyMargin = useMemo(() => {
     // periodsベースのccのepsを使用
-    const h = portfolio.find(x => x.id === selected?.id) || selected;
-    if (!h) return null;
+    const target = selected || watchSelected;
+    const allH = [...portfolio, ...watchlist];
+    const h = allH.find(x => x.id === target?.id) || target;
     const sb = getStockBaseYear(h, baseYear);
     const hPeriods = h.periods || {};
     let fd = hPeriods[String(sb)] || {};
@@ -2373,11 +2376,12 @@ export default function App() {
     const price = h.currentPrice;
     const fair = cMerged.eps * +simParams.targetPer;
     return { fair:Math.round(fair), price, margin:(fair-price)/price*100 };
-  }, [selected, portfolio, baseYear, simParams.targetPer]);
+  }, [selected, watchSelected, portfolio, watchlist, baseYear, simParams.targetPer]);
 
   const monteData = useMemo(() => {
-    const h = portfolio.find(x => x.id === selected?.id) || selected;
-    if (!h) return null;
+    const target = selected || watchSelected;
+    const allH = [...portfolio, ...watchlist];
+    const h = allH.find(x => x.id === target?.id) || target;
     const sb = getStockBaseYear(h, baseYear);
     const hPeriods = h.periods || {};
     let fd = hPeriods[String(sb)] || {};
@@ -2407,7 +2411,7 @@ export default function App() {
       return { range:Math.round((lo+hi)/2).toLocaleString(), count:finals.filter(v => v>=lo&&v<hi).length };
     });
     return { bins, p10:p(0.10), p25:p(0.25), p50:p(0.50), p75:p(0.75), p90:p(0.90), mean:Math.round(finals.reduce((a,b)=>a+b,0)/1000), probUp:finals.filter(v=>v>price).length/10, price };
-  }, [selected, portfolio, baseYear, simParams]);
+  }, [selected, watchSelected, portfolio, watchlist, baseYear, simParams]);
 
   const pnlSummary = useMemo(() => {
     if (!selected) return [];
@@ -3063,11 +3067,15 @@ export default function App() {
             <h2 style={S.h2}>シミュレーション</h2>
             <div style={S.chips}>
               {portfolio.map(h => (
-                <button key={h.id} style={{ ...S.chip, ...(selected?.id===h.id?S.chipOn:{}) }} onClick={() => setSelected(h)}>{h.ticker} {h.name}</button>
+                <button key={h.id} style={{ ...S.chip, ...(selected?.id===h.id?S.chipOn:{}) }} onClick={() => { setSelected(h); setWatchSelected(null); }}>{h.ticker} {h.name}</button>
+              ))}
+              {watchlist.length > 0 && <span style={{ color:"#475569", fontSize:R.sm, alignSelf:"center" }}>｜候補:</span>}
+              {watchlist.map(h => (
+                <button key={h.id} style={{ ...S.chip, ...(watchSelected?.id===h.id?{ ...S.chipOn, borderColor:"#f59e0b", color:"#f59e0b" }:{}), borderStyle:"dashed" }} onClick={() => { setWatchSelected(h); setSelected(null); }}>{h.ticker} {h.name}</button>
               ))}
             </div>
-            {!selected && <div style={S.card}><span style={{ color:"#64748b" }}>銘柄を選択してください。</span></div>}
-            {selected && (
+            {!selected && !watchSelected && <div style={S.card}><span style={{ color:"#64748b" }}>銘柄を選択してください。</span></div>}
+            {(selected || watchSelected) && (
               <>
                 <div style={{ ...S.card, marginBottom:16 }}>
                   <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:12 }}>設定 — {selected.name}（{selected.ticker}）</div>
