@@ -2215,7 +2215,7 @@ export default function App() {
     return scoreFromPeriods(h, baseYear);
   }, [selected, portfolio, baseYear]);
   const allStocks = useMemo(() => [...portfolio, ...watchlist], [portfolio, watchlist]);
-  const cmpStocks = allStocks.filter(h => compareIds.includes(h.id));
+  const cmpStocks = useMemo(() => allStocks.filter(h => compareIds.includes(h.id)), [allStocks, compareIds]);
   // cmpStocksの各銘柄について最新本決算データを取得するヘルパー
   const getCmpCalc = (h) => {
     const sb = getStockBaseYear(h, baseYear);
