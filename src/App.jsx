@@ -796,6 +796,17 @@ function ScoreCriteriaEditor({ selected, R, S, onModeChange }) {
   );
 }
 
+// 今期予想テーブルセル
+function FcCell({ fcVal, prevVal, formatter }) {
+  const chg = calcChg(fcVal, prevVal);
+  return (
+    <td style={{ textAlign:"right", padding:"6px 10px", background:"#1a1200" }}>
+      <div style={{ color:"#fbbf24", fontWeight:600 }}>{fcVal != null ? formatter(fcVal) : "—"}</div>
+      {fcVal != null && prevVal != null && <div style={{ color:chgColor(chg), fontSize:14 }}>{chgStr(chg)}</div>}
+    </td>
+  );
+}
+
 function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R, TS }) {
   const [metricsView, setMetricsView] = useState("current");
   const [waccParams, setWaccParams] = useState(() => {
@@ -856,9 +867,10 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
     const fd = periods[FORECAST_KEY] || {};
     if (!Object.values(fd).some(v => v !== "" && v != null)) return null;
     const base = latestAnnual ? latestAnnual.f : {};
-    // 株価は常に現在株価（f.price = financials.price）を使用 → 現状割高・割安の判断
-    const currentPrice = f.price || ff.price;
-    const currentShin = f.shinyoBairitu || ff.shinyoBairitu;
+    // 株価は selected.currentPrice（ポートフォリオ表示と同じ値）を使用
+    const latestSelected = portfolio.find(h => h.id === selected?.id) || selected;
+    const currentPrice = latestSelected ? String(latestSelected.currentPrice) : (f.price || ff.price);
+    const currentShin = (latestSelected?.financials?.shinyoBairitu) || ff.shinyoBairitu;
     const merged = {
       ...base,
       price: currentPrice,
@@ -872,7 +884,7 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
       depIntangible: "",
     };
     return calcAll(merged);
-  }, [periods, latestAnnual, f, ff]);
+  }, [periods, latestAnnual, f, ff, selected, portfolio]);
 
 
   // WACC計算（fc定義後に配置）
@@ -926,14 +938,12 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
   }, [waccParams, selected?.id]);
 
   const trendData = useMemo(() => {
-    return annualData.map(({ label, f: fd, c: ca }, i) => {
-      // 売上成長率（前年比）
+    const rows = annualData.map(({ label, f: fd, c: ca }, i) => {
       const prevSales = i > 0 ? n(annualData[i-1].f.sales) : null;
       const curSales = n(fd.sales);
       const salesGrowth = (curSales != null && prevSales != null && prevSales > 0)
         ? parseFloat(((curSales - prevSales) / prevSales * 100).toFixed(1))
         : null;
-      // Rule of 40 = 売上成長率(%) + 営業利益率(%)
       const opMarginPct = ca.opMargin != null ? parseFloat((ca.opMargin*100).toFixed(1)) : null;
       const rule40 = (salesGrowth != null && opMarginPct != null)
         ? parseFloat((salesGrowth + opMarginPct).toFixed(1))
@@ -957,9 +967,48 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
         PSR: ca.psr ? parseFloat(ca.psr.toFixed(2)) : null,
         売上成長率: salesGrowth,
         Rule40: rule40,
+        isForecast: false,
       };
     });
-  }, [annualData]);
+
+    // 今期予想データを追加（入力があれば）
+    if (fc) {
+      const lastRow = rows[rows.length - 1];
+      const prevSalesForFc = lastRow ? (n(annualData[annualData.length-1].f.sales)) : null;
+      const fcSales = fc.marketCap != null ? null : null; // PSR計算用はfc内で済み
+      const fcSalesRaw = n(periods[FORECAST_KEY]?.sales) || n(annualData[annualData.length-1]?.f?.sales);
+      const fcSalesGrowth = (fcSalesRaw != null && prevSalesForFc != null && prevSalesForFc > 0)
+        ? parseFloat(((fcSalesRaw - prevSalesForFc) / prevSalesForFc * 100).toFixed(1))
+        : null;
+      const fcOpMargin = fc.opMargin != null ? parseFloat((fc.opMargin*100).toFixed(1)) : null;
+      const fcRule40 = (fcSalesGrowth != null && fcOpMargin != null)
+        ? parseFloat((fcSalesGrowth + fcOpMargin).toFixed(1))
+        : null;
+      const fcSalesVal = n(periods[FORECAST_KEY]?.sales);
+      rows.push({
+        name: "今期予想",
+        売上高: fcSalesVal ? parseFloat(fmtM(fcSalesVal).replace(/[^0-9.-]/g,"")) : null,
+        営業利益: n(periods[FORECAST_KEY]?.opProfit) ? parseFloat(fmtM(n(periods[FORECAST_KEY]?.opProfit)).replace(/[^0-9.-]/g,"")) : null,
+        純利益: n(periods[FORECAST_KEY]?.netProfit) ? parseFloat(fmtM(n(periods[FORECAST_KEY]?.netProfit)).replace(/[^0-9.-]/g,"")) : null,
+        EBITDA: null,
+        ROE: fc.roe ? parseFloat((fc.roe*100).toFixed(1)) : null,
+        ROA: fc.roa ? parseFloat((fc.roa*100).toFixed(1)) : null,
+        営業利益率: fcOpMargin,
+        経常利益率: null,
+        純利益率: fc.netMargin ? parseFloat((fc.netMargin*100).toFixed(1)) : null,
+        粗利率: null,
+        自己資本比率: null,
+        EV_EBITDA: null,
+        PER: fc.per ? parseFloat(fc.per.toFixed(2)) : null,
+        PBR: null,
+        PSR: fc.psr ? parseFloat(fc.psr.toFixed(2)) : null,
+        売上成長率: fcSalesGrowth,
+        Rule40: fcRule40,
+        isForecast: true,
+      });
+    }
+    return rows;
+  }, [annualData, fc, periods]);
 
   const qtrData = useMemo(() => {
     return qtrKeys.map(key => {
@@ -1245,6 +1294,7 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
                       {i > 0 && <span style={{ display:"block", color:"#334155", fontSize:16 }}>前年比</span>}
                     </th>
                   ))}
+                  {fc && <th style={{ textAlign:"right", padding:"6px 10px", color:"#fbbf24", fontSize:16, minWidth:100 }}>今期予想<span style={{ display:"block", color:"#334155", fontSize:16 }}>前年比</span></th>}
                 </tr>
               </thead>
               <tbody>
@@ -1278,9 +1328,32 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
                   // セクションヘッダー行
                   if (getter === null) return (
                     <tr key={label}>
-                      <td colSpan={annualData.length+1} style={{ padding:"8px 10px", color:"#475569", fontSize:16, background:"#111827", letterSpacing:1 }}>{label}</td>
+                      <td colSpan={annualData.length+1+(fc?1:0)} style={{ padding:"8px 10px", color:"#475569", fontSize:16, background:"#111827", letterSpacing:1 }}>{label}</td>
                     </tr>
                   );
+                  // 今期予想用のgetterマッピング
+                  const fcGetter = {
+                    "売上高":     () => n(periods[FORECAST_KEY]?.sales),
+                    "営業利益":   () => n(periods[FORECAST_KEY]?.opProfit),
+                    "経常利益":   () => null,
+                    "当期純利益": () => n(periods[FORECAST_KEY]?.netProfit),
+                    "EBITDA":    () => null,
+                    "粗利率":     () => null,
+                    "営業利益率": () => fc?.opMargin,
+                    "経常利益率": () => null,
+                    "純利益率":   () => fc?.netMargin,
+                    "ROE":       () => fc?.roe,
+                    "ROA":       () => fc?.roa,
+                    "ROIC":      () => null,
+                    "自己資本比率":() => null,
+                    "流動比率":   () => null,
+                    "固定長期適合率":() => null,
+                    "EV/EBITDA": () => null,
+                    "PER":       () => fc?.per,
+                    "PBR":       () => null,
+                    "EPS":       () => fc?.eps,
+                    "1株配当":    () => n(periods[FORECAST_KEY]?.dividend),
+                  };
                   return (
                   <tr key={label} style={{ borderBottom:"1px solid #1e293b" }}>
                     <td style={{ padding:"6px 10px", color:"#64748b", fontSize:16 }}>{label}</td>
@@ -1295,6 +1368,10 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
                         </td>
                       );
                     })}
+                    {fc && fcGetter[label] && (
+                      <FcCell fcVal={fcGetter[label]()} prevVal={getter(annualData[annualData.length-1])} formatter={formatter} />
+                    )}
+                    {fc && !fcGetter[label] && <td style={{ textAlign:"right", padding:"6px 10px", background:"#1a1200", color:"#334155" }}>—</td>}
                   </tr>
                   );
                 })}
@@ -1305,14 +1382,14 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
           {/* 売上高・営業利益・純利益グラフ */}
           <div style={S.card}>
             <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:4 }}>売上高・営業利益・純利益推移</div>
-            <div style={{ color:"#475569", fontSize:16, marginBottom:12 }}>凡例をクリックで表示/非表示</div>
+            <div style={{ color:"#475569", fontSize:16, marginBottom:12 }}>凡例をクリックで表示/非表示。<span style={{ color:"#fbbf24" }}>●</span> は今期予想</div>
             <ToggleLineChart
-              data={annualData.map(({ label, f: fd }) => ({
-                name: label,
-                売上高: n(fd.sales) ? Math.round(n(fd.sales)/1e8)/10 : null,
-                営業利益: n(fd.opProfit) ? Math.round(n(fd.opProfit)/1e8)/10 : null,
-                純利益: n(fd.netProfit) ? Math.round(n(fd.netProfit)/1e8)/10 : null,
-                EBITDA: annualData.find(d=>d.label===label)?.c?.ebitda ? Math.round(annualData.find(d=>d.label===label).c.ebitda/1e8)/10 : null,
+              data={trendData.map(d => ({
+                name: d.name,
+                売上高: d.売上高,
+                営業利益: d.営業利益,
+                純利益: d.純利益,
+                EBITDA: d.EBITDA,
               }))}
               lines={[
                 { key:"売上高",   color:"#60a5fa" },
@@ -2192,10 +2269,23 @@ export default function App() {
 
   const simRows = useCallback(() => {
     if (!selected) return [];
-    const f = selected.financials;
-    const price = n(f.price)||selected.currentPrice;
-    const sales = n(f.sales)||0, sh = n(f.shares)||1;
-    const eb = n(f.ebitda)||0, curNet = n(f.netProfit)||0, curOp = n(f.opProfit)||0;
+    // 最新本決算データをperiodsから取得
+    const h = portfolio.find(x => x.id === selected.id) || selected;
+    const sb = getStockBaseYear(h, baseYear);
+    const hPeriods = h.periods || {};
+    let fd = hPeriods[String(sb)] || {};
+    if (!Object.values(fd).some(v => v !== "" && v != null)) {
+      const prev = [String(sb-1), String(sb-2)].map(yr => hPeriods[yr]||{}).find(d => Object.values(d).some(v => v !== "" && v != null));
+      fd = prev || {};
+    }
+    // financialsにフォールバック
+    const fBase = h.financials || {};
+    const price = h.currentPrice || n(fBase.price) || 0;
+    const sales = n(fd.sales) || n(fBase.sales) || 0;
+    const sh = n(fd.shares) || n(fBase.shares) || 1;
+    const curOp = n(fd.opProfit) || n(fBase.opProfit) || 0;
+    const curNet = n(fd.netProfit) || n(fBase.netProfit) || 0;
+    const eb = n(fd.ebitda) || n(fBase.ebitda) || (curOp * 1.3);
     const g = +simParams.growthRate/100, tm = +simParams.targetMargin/100;
     const cm = sales > 0 && curOp ? curOp/sales : tm*0.5;
     const tPer = +simParams.targetPer, tEv = simParams.targetEvEbitda ? +simParams.targetEvEbitda : null;
@@ -2212,7 +2302,7 @@ export default function App() {
       const dc = simParams.reinvest ? Math.round(price*(Math.pow(1+dr,y)-1)) : Math.round(price*dr*y);
       return { year:y===0?"現在":y+"年後", base, bear, bull, evp, dc, ps:Math.round(ps), po:Math.round(po), pe:parseFloat(pe.toFixed(2)) };
     });
-  }, [selected, simParams]);
+  }, [selected, portfolio, baseYear, simParams]);
 
   const f  = (portfolio.find(h=>h.id===selected?.id)||selected)?.financials || {};
   const c  = selected ? calcAll(f) : {};
@@ -2267,19 +2357,42 @@ export default function App() {
   }, [portfolio, tPnL]);
 
   const safetyMargin = useMemo(() => {
-    if (!selected||!c.eps||c.eps<=0) return null;
-    const price = n(f.price)||selected.currentPrice;
-    const fair = c.eps * +simParams.targetPer;
+    // periodsベースのccのepsを使用
+    const h = portfolio.find(x => x.id === selected?.id) || selected;
+    if (!h) return null;
+    const sb = getStockBaseYear(h, baseYear);
+    const hPeriods = h.periods || {};
+    let fd = hPeriods[String(sb)] || {};
+    if (!Object.values(fd).some(v => v !== "" && v != null)) {
+      const prev = [String(sb-1), String(sb-2)].map(yr => hPeriods[yr]||{}).find(d => Object.values(d).some(v => v !== "" && v != null));
+      fd = prev || {};
+    }
+    const fMerged = { ...fd, price: String(h.currentPrice) };
+    const cMerged = calcAll(fMerged);
+    if (!cMerged.eps || cMerged.eps <= 0) return null;
+    const price = h.currentPrice;
+    const fair = cMerged.eps * +simParams.targetPer;
     return { fair:Math.round(fair), price, margin:(fair-price)/price*100 };
-  }, [selected, f, c, simParams.targetPer]);
+  }, [selected, portfolio, baseYear, simParams.targetPer]);
 
   const monteData = useMemo(() => {
-    if (!selected||!c.eps||c.eps<=0) return null;
-    const price = n(f.price)||selected.currentPrice;
+    const h = portfolio.find(x => x.id === selected?.id) || selected;
+    if (!h) return null;
+    const sb = getStockBaseYear(h, baseYear);
+    const hPeriods = h.periods || {};
+    let fd = hPeriods[String(sb)] || {};
+    if (!Object.values(fd).some(v => v !== "" && v != null)) {
+      const prev = [String(sb-1), String(sb-2)].map(yr => hPeriods[yr]||{}).find(d => Object.values(d).some(v => v !== "" && v != null));
+      fd = prev || {};
+    }
+    const fMerged = { ...fd, price: String(h.currentPrice) };
+    const cMerged = calcAll(fMerged);
+    if (!cMerged.eps || cMerged.eps <= 0) return null;
+    const price = h.currentPrice;
     const g = +simParams.growthRate/100, tPer = +simParams.targetPer, yr = +simParams.years||5;
     const finals = [];
     for (let t = 0; t < 1000; t++) {
-      let e = c.eps;
+      let e = cMerged.eps;
       for (let y = 0; y < yr; y++) {
         const u1 = Math.random(), u2 = Math.random();
         e *= (1 + g + Math.sqrt(-2*Math.log(u1))*Math.cos(2*Math.PI*u2)*g*0.5);
@@ -2294,7 +2407,7 @@ export default function App() {
       return { range:Math.round((lo+hi)/2).toLocaleString(), count:finals.filter(v => v>=lo&&v<hi).length };
     });
     return { bins, p10:p(0.10), p25:p(0.25), p50:p(0.50), p75:p(0.75), p90:p(0.90), mean:Math.round(finals.reduce((a,b)=>a+b,0)/1000), probUp:finals.filter(v=>v>price).length/10, price };
-  }, [selected, f, c, simParams]);
+  }, [selected, portfolio, baseYear, simParams]);
 
   const pnlSummary = useMemo(() => {
     if (!selected) return [];
