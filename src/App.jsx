@@ -1839,7 +1839,7 @@ function WatchDetail({ watchSelected, watchlist, baseYear, annualKeys, qtrKeys, 
           <Tag color="#f59e0b">{watchSelected.ticker}</Tag>
           <Tag color="#a78bfa">{watchSelected.sector}</Tag>
           <span style={{ background:"#1a1200", color:"#f59e0b", border:"1px solid #f59e0b44", borderRadius:6, padding:"4px 10px", fontSize:R.sm }}>👀 保有候補</span>
-          {sc != null && <ScoreBadge sc={sc} stockId={selected?.id} large={true} />}
+          {sc != null && <ScoreBadge sc={sc} stockId={watchSelected.id} large={true} />}
         </div>
         <div style={{ textAlign:"right" }}>
           <div style={{ fontSize:24, fontWeight:900, color:"#f1f5f9" }}>¥{watchSelected.currentPrice.toLocaleString()}</div>
