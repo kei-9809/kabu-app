@@ -3078,7 +3078,7 @@ export default function App() {
             {(selected || watchSelected) && (
               <>
                 <div style={{ ...S.card, marginBottom:16 }}>
-                  <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:12 }}>設定 — {selected.name}（{selected.ticker}）</div>
+                  <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:12 }}>設定 — {(selected || watchSelected).name}（{(selected || watchSelected).ticker}）</div>
                   <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(min(155px,45vw),1fr))", gap:12 }}>
                     <FInput label="予測年数（年）" value={simParams.years} onChange={v => setSimParams(p => ({ ...p, years:v }))} numOnly={true} />
                     <FInput label="売上成長率（基本）%" value={simParams.growthRate} onChange={v => setSimParams(p => ({ ...p, growthRate:v }))} numOnly={true} />
