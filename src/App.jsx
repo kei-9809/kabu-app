@@ -1719,19 +1719,35 @@ function InputTab({ selected, periods, updatePeriod, baseYear, annualKeys, qtrKe
           <div style={{ ...S.card, border:"1px solid #334155" }}>
             <div style={{ color:"#60a5fa", fontWeight:700, marginBottom:16 }}>{activeYear}年 本決算データ</div>
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(min(200px,45vw),1fr))", gap:14 }}>
-              {PERIOD_FIELDS.map(({ label, key, hint }) => (
-                <div key={key} style={{ display:"flex", flexDirection:"column", gap:3 }}>
-                  <label style={{ color:"#64748b", fontSize:16 }}>{label}</label>
-                  <input
-                    value={periods[activeYear]?.[key] || ""}
-                    onChange={e => handleChange(activeYear, key, e.target.value)}
-                    style={S.input}
-                    placeholder="数値を入力"
-                    inputMode="decimal"
-                  />
-                  {hint && <span style={{ color:"#334155", fontSize:16 }}>{hint}</span>}
-                </div>
-              ))}
+              {PERIOD_FIELDS.map(({ label, key, hint }) => {
+                // 今期年（baseYear+1）の株価・信用倍率は現在株価から直接取得
+                const isCurrentYr = activeYear === String(baseYear + 1);
+                const isPrice = key === "price";
+                const isShin = key === "shinyoBairitu";
+                let displayVal;
+                if (isCurrentYr && isPrice) {
+                  displayVal = selected.financials?.price || "";
+                } else if (isCurrentYr && isShin) {
+                  displayVal = selected.financials?.shinyoBairitu || "";
+                } else {
+                  displayVal = periods[activeYear]?.[key] || "";
+                }
+                return (
+                  <div key={key} style={{ display:"flex", flexDirection:"column", gap:3 }}>
+                    <label style={{ color:"#64748b", fontSize:16 }}>{label}
+                      {isCurrentYr && (isPrice || isShin) && <span style={{ color:"#4ade80", fontSize:12, marginLeft:6 }}>↔ 株価更新と連動</span>}
+                    </label>
+                    <input
+                      value={displayVal}
+                      onChange={e => handleChange(activeYear, key, e.target.value)}
+                      style={S.input}
+                      placeholder="数値を入力"
+                      inputMode="decimal"
+                    />
+                    {hint && <span style={{ color:"#334155", fontSize:16 }}>{hint}</span>}
+                  </div>
+                );
+              })}
             </div>
           </div>
 
