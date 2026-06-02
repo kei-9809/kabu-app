@@ -854,23 +854,28 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
   // WACC計算（cc・ffの後に定義）
   const fc = useMemo(() => {
     const fd = periods[FORECAST_KEY] || {};
+    // 今期年（baseYear+1）のデータも参照
+    const currentYrKey = String(baseYear + 1);
+    const currentYrFd = periods[currentYrKey] || {};
     if (!Object.values(fd).some(v => v !== "" && v != null)) return null;
     const base = latestAnnual ? latestAnnual.f : {};
-    // 株価・株式数・純資産は実績継承、予想数値で上書き
+    // 株価は今期年のperiods > ff.price の優先順位
+    const currentPrice = currentYrFd.price || ff.price;
+    const currentShin = currentYrFd.shinyoBairitu || ff.shinyoBairitu;
     const merged = {
       ...base,
-      price: ff.price,
+      price: currentPrice,
+      shinyoBairitu: currentShin,
       sales: fd.sales || base.sales,
       netProfit: fd.netProfit,
       opProfit: fd.opProfit,
       dividend: fd.dividend,
-      // EBITDA・減価償却は予想なしなのでnull
       ebitda: "",
       depTangible: "",
       depIntangible: "",
     };
     return calcAll(merged);
-  }, [periods, latestAnnual, ff]);
+  }, [periods, latestAnnual, ff, baseYear]);
 
 
   // WACC計算（fc定義後に配置）
@@ -1931,7 +1936,19 @@ export default function App() {
       }
       const periods = { ...(h.periods || {}) };
       periods[periodKey] = { ...(periods[periodKey] || {}), [fieldKey]: val };
-      return { ...h, periods };
+      let updated = { ...h, periods };
+      // 今期年（latestFiscalYear+1）の株価・信用倍率のみcurrentPrice/financialsに同期
+      const sb = getStockBaseYear(h, baseYear);
+      const currentYr = String(sb + 1);
+      if (periodKey === currentYr) {
+        if (fieldKey === "price" && val && !isNaN(+val)) {
+          updated = { ...updated, currentPrice:+val, financials:{ ...updated.financials, price:val } };
+        }
+        if (fieldKey === "shinyoBairitu") {
+          updated = { ...updated, financials:{ ...updated.financials, shinyoBairitu:val } };
+        }
+      }
+      return updated;
     }));
     setSelected(s => {
       if (!s || s.id !== id) return s;
@@ -1941,9 +1958,20 @@ export default function App() {
       }
       const periods = { ...(s.periods || {}) };
       periods[periodKey] = { ...(periods[periodKey] || {}), [fieldKey]: val };
-      return { ...s, periods };
+      let updated = { ...s, periods };
+      const sb = getStockBaseYear(s, baseYear);
+      const currentYr = String(sb + 1);
+      if (periodKey === currentYr) {
+        if (fieldKey === "price" && val && !isNaN(+val)) {
+          updated = { ...updated, currentPrice:+val, financials:{ ...updated.financials, price:val } };
+        }
+        if (fieldKey === "shinyoBairitu") {
+          updated = { ...updated, financials:{ ...updated.financials, shinyoBairitu:val } };
+        }
+      }
+      return updated;
     });
-  }, [selected, save]);
+  }, [selected, baseYear, save]);
 
   const addStock = () => {
     const { ticker, name, sector, qty, avgCost, currentPrice } = addForm;
@@ -1977,8 +2005,24 @@ export default function App() {
       const nq = qtyInputs[h.id];
       const nc = costInputs[h.id];
       let updated = { ...h };
-      if (np && !isNaN(+np)) updated = { ...updated, currentPrice:+np, financials:{ ...updated.financials, price:np } };
-      if (ns !== undefined && ns !== "") updated = { ...updated, financials:{ ...updated.financials, shinyoBairitu:ns } };
+      if (np && !isNaN(+np)) {
+        updated = { ...updated, currentPrice:+np, financials:{ ...updated.financials, price:np } };
+        // 今期年（latestFiscalYear+1）のperiodsにも株価を同期
+        const sb = getStockBaseYear(h, baseYear);
+        const currentYr = String(sb + 1);
+        const periods = { ...(updated.periods || {}) };
+        periods[currentYr] = { ...(periods[currentYr] || {}), price: np };
+        updated = { ...updated, periods };
+      }
+      if (ns !== undefined && ns !== "") {
+        updated = { ...updated, financials:{ ...updated.financials, shinyoBairitu:ns } };
+        // 今期年のperiodsにも信用倍率を同期
+        const sb = getStockBaseYear(h, baseYear);
+        const currentYr = String(sb + 1);
+        const periods = { ...(updated.periods || {}) };
+        periods[currentYr] = { ...(periods[currentYr] || {}), shinyoBairitu: ns };
+        updated = { ...updated, periods };
+      }
       if (nq && !isNaN(+nq) && +nq > 0) updated = { ...updated, qty:+nq };
       if (nc && !isNaN(+nc) && +nc > 0) updated = { ...updated, avgCost:+nc };
       return updated;
@@ -1989,8 +2033,22 @@ export default function App() {
       const nq = qtyInputs[selected.id];
       const nc = costInputs[selected.id];
       let upd = { ...selected };
-      if (np && !isNaN(+np)) upd = { ...upd, currentPrice:+np, financials:{ ...upd.financials, price:np } };
-      if (ns !== undefined && ns !== "") upd = { ...upd, financials:{ ...upd.financials, shinyoBairitu:ns } };
+      if (np && !isNaN(+np)) {
+        upd = { ...upd, currentPrice:+np, financials:{ ...upd.financials, price:np } };
+        const sb = getStockBaseYear(upd, baseYear);
+        const currentYr = String(sb + 1);
+        const periods = { ...(upd.periods || {}) };
+        periods[currentYr] = { ...(periods[currentYr] || {}), price: np };
+        upd = { ...upd, periods };
+      }
+      if (ns !== undefined && ns !== "") {
+        upd = { ...upd, financials:{ ...upd.financials, shinyoBairitu:ns } };
+        const sb = getStockBaseYear(upd, baseYear);
+        const currentYr = String(sb + 1);
+        const periods = { ...(upd.periods || {}) };
+        periods[currentYr] = { ...(periods[currentYr] || {}), shinyoBairitu: ns };
+        upd = { ...upd, periods };
+      }
       if (nq && !isNaN(+nq) && +nq > 0) upd = { ...upd, qty:+nq };
       if (nc && !isNaN(+nc) && +nc > 0) upd = { ...upd, avgCost:+nc };
       setSelected(upd);
@@ -2156,7 +2214,22 @@ export default function App() {
     const h = portfolio.find(h=>h.id===selected.id)||selected;
     return scoreFromPeriods(h, baseYear);
   }, [selected, portfolio, baseYear]);
-  const cmpStocks = portfolio.filter(h => compareIds.includes(h.id));
+  const allStocks = useMemo(() => [...portfolio, ...watchlist], [portfolio, watchlist]);
+  const cmpStocks = allStocks.filter(h => compareIds.includes(h.id));
+  // cmpStocksの各銘柄について最新本決算データを取得するヘルパー
+  const getCmpCalc = (h) => {
+    const sb = getStockBaseYear(h, baseYear);
+    const periods = h.periods || {};
+    let fd = periods[String(sb)] || {};
+    if (!Object.values(fd).some(v => v !== "" && v != null)) {
+      const prev = [String(sb-1), String(sb-2)].map(yr => periods[yr]||{}).find(d => Object.values(d).some(v => v !== "" && v != null));
+      fd = prev || {};
+    }
+    const f = h.financials || {};
+    const merged = Object.values(fd).some(v => v !== "" && v != null)
+      ? { ...fd, price: f.price||fd.price } : f;
+    return calcAll(merged);
+  };
   const radarData = useMemo(() => {
     const norm = (v, lo, hi, inv=false) => {
       if (v==null||isNaN(v)) return 0;
@@ -2164,13 +2237,13 @@ export default function App() {
       return inv ? 100-s : s;
     };
     return [
-      { m:"割安(PER)",   ...Object.fromEntries(cmpStocks.map(h => [h.ticker, norm(calcAll(h.financials).per,5,40,true)])) },
-      { m:"収益性(ROE)", ...Object.fromEntries(cmpStocks.map(h => [h.ticker, norm((calcAll(h.financials).roe||0)*100,0,30)])) },
-      { m:"効率性(ROA)", ...Object.fromEntries(cmpStocks.map(h => [h.ticker, norm((calcAll(h.financials).roa||0)*100,0,15)])) },
-      { m:"利益率(営業)", ...Object.fromEntries(cmpStocks.map(h => [h.ticker, norm((calcAll(h.financials).opMargin||0)*100,0,30)])) },
-      { m:"安全性",      ...Object.fromEntries(cmpStocks.map(h => [h.ticker, norm((calcAll(h.financials).equityRatio||0)*100,0,80)])) },
-      { m:"流動性",      ...Object.fromEntries(cmpStocks.map(h => [h.ticker, norm((calcAll(h.financials).currentRatio||0)*100,0,300)])) },
-      { m:"配当",        ...Object.fromEntries(cmpStocks.map(h => [h.ticker, norm((calcAll(h.financials).dividendYield||0)*100,0,6)])) },
+      { m:"割安(PER)",   ...Object.fromEntries(cmpStocks.map(h => [h.ticker, norm(getCmpCalc(h).per,5,40,true)])) },
+      { m:"収益性(ROE)", ...Object.fromEntries(cmpStocks.map(h => [h.ticker, norm((getCmpCalc(h).roe||0)*100,0,30)])) },
+      { m:"効率性(ROA)", ...Object.fromEntries(cmpStocks.map(h => [h.ticker, norm((getCmpCalc(h).roa||0)*100,0,15)])) },
+      { m:"利益率(営業)", ...Object.fromEntries(cmpStocks.map(h => [h.ticker, norm((getCmpCalc(h).opMargin||0)*100,0,30)])) },
+      { m:"安全性",      ...Object.fromEntries(cmpStocks.map(h => [h.ticker, norm((getCmpCalc(h).equityRatio||0)*100,0,80)])) },
+      { m:"流動性",      ...Object.fromEntries(cmpStocks.map(h => [h.ticker, norm((getCmpCalc(h).currentRatio||0)*100,0,300)])) },
+      { m:"配当",        ...Object.fromEntries(cmpStocks.map(h => [h.ticker, norm((getCmpCalc(h).dividendYield||0)*100,0,6)])) },
     ];
   }, [cmpStocks]);
 
@@ -2733,6 +2806,10 @@ export default function App() {
               {portfolio.map(h => (
                 <button key={h.id} style={{ ...S.chip, ...(compareIds.includes(h.id)?S.chipOn:{}) }} onClick={() => toggleCompare(h.id)}>{h.ticker} {h.name}</button>
               ))}
+              {watchlist.length > 0 && <span style={{ color:"#475569", fontSize:R.sm, alignSelf:"center" }}>｜候補:</span>}
+              {watchlist.map(h => (
+                <button key={h.id} style={{ ...S.chip, ...(compareIds.includes(h.id)?{ ...S.chipOn, borderColor:"#f59e0b", color:"#f59e0b" }:{}), borderStyle:"dashed" }} onClick={() => toggleCompare(h.id)}>{h.ticker} {h.name}</button>
+              ))}
             </div>
             {cmpStocks.length < 2 ? (
               <div style={S.card}><span style={{ color:"#64748b" }}>2社以上選択してください。</span></div>
@@ -2753,19 +2830,19 @@ export default function App() {
                     <tbody>
                       {[
                         ["総合スコア", h => scoreFromPeriods(h, baseYear), v => v!=null?v+"pt ("+scoreLabel(v)+")":"—", v => v!=null?scoreColor(v):"#475569"],
-                        ["PER",        h => calcAll(h.financials).per,             v => v?xfmt(v):"—",      v => v&&v<15?"#4ade80":v&&v<25?"#fbbf24":"#f87171"],
-                        ["PBR",        h => calcAll(h.financials).pbr,             v => v?xfmt(v):"—",      v => v&&v<1.5?"#4ade80":"#94a3b8"],
-                        ["PSR",        h => calcAll(h.financials).psr,             v => v?xfmt(v):"—",      () => "#94a3b8"],
-                        ["EV/EBITDA",  h => calcAll(h.financials).evEbitda,        v => v?xfmt(v):"—",      v => v&&v<10?"#4ade80":"#94a3b8"],
-                        ["ROE",        h => calcAll(h.financials).roe,             v => v?pct(v):"—",       v => v&&v>0.15?"#4ade80":"#94a3b8"],
-                        ["ROA",        h => calcAll(h.financials).roa,             v => v?pct(v):"—",       v => v&&v>0.05?"#4ade80":"#94a3b8"],
-                        ["営業利益率", h => calcAll(h.financials).opMargin,        v => v?pct(v):"—",       v => v&&v>0.10?"#4ade80":"#94a3b8"],
-                        ["粗利率",     h => calcAll(h.financials).grossMargin,     v => v?pct(v):"—",       v => v&&v>0.40?"#4ade80":"#94a3b8"],
-                        ["自己資本比率",h => calcAll(h.financials).equityRatio,    v => v?pct(v):"—",       v => v&&v>0.40?"#4ade80":"#94a3b8"],
-                        ["流動比率",   h => calcAll(h.financials).currentRatio,    v => v?pct(v):"—",       v => v&&v>2?"#4ade80":v&&v>1?"#fbbf24":"#f87171"],
-                        ["配当利回り", h => calcAll(h.financials).dividendYield,   v => v?pct(v):"—",       v => v&&v>0.03?"#4ade80":"#94a3b8"],
+                        ["PER",        h => getCmpCalc(h).per,             v => v?xfmt(v):"—",      v => v&&v<15?"#4ade80":v&&v<25?"#fbbf24":"#f87171"],
+                        ["PBR",        h => getCmpCalc(h).pbr,             v => v?xfmt(v):"—",      v => v&&v<1.5?"#4ade80":"#94a3b8"],
+                        ["PSR",        h => getCmpCalc(h).psr,             v => v?xfmt(v):"—",      () => "#94a3b8"],
+                        ["EV/EBITDA",  h => getCmpCalc(h).evEbitda,        v => v?xfmt(v):"—",      v => v&&v<10?"#4ade80":"#94a3b8"],
+                        ["ROE",        h => getCmpCalc(h).roe,             v => v?pct(v):"—",       v => v&&v>0.15?"#4ade80":"#94a3b8"],
+                        ["ROA",        h => getCmpCalc(h).roa,             v => v?pct(v):"—",       v => v&&v>0.05?"#4ade80":"#94a3b8"],
+                        ["営業利益率", h => getCmpCalc(h).opMargin,        v => v?pct(v):"—",       v => v&&v>0.10?"#4ade80":"#94a3b8"],
+                        ["粗利率",     h => getCmpCalc(h).grossMargin,     v => v?pct(v):"—",       v => v&&v>0.40?"#4ade80":"#94a3b8"],
+                        ["自己資本比率",h => getCmpCalc(h).equityRatio,    v => v?pct(v):"—",       v => v&&v>0.40?"#4ade80":"#94a3b8"],
+                        ["流動比率",   h => getCmpCalc(h).currentRatio,    v => v?pct(v):"—",       v => v&&v>2?"#4ade80":v&&v>1?"#fbbf24":"#f87171"],
+                        ["配当利回り", h => getCmpCalc(h).dividendYield,   v => v?pct(v):"—",       v => v&&v>0.03?"#4ade80":"#94a3b8"],
                         ["信用倍率",   h => h.financials.shinyoBairitu,            v => v?v+"倍":"—",        v => n(v)>3?"#f87171":"#94a3b8"],
-                        ["時価総額",   h => calcAll(h.financials).marketCap,       v => v?fmtM(v):"—",      () => "#e2e8f0"],
+                        ["時価総額",   h => getCmpCalc(h).marketCap,       v => v?fmtM(v):"—",      () => "#e2e8f0"],
                       ].map(([label, getter, formatter, colorFn]) => (
                         <tr key={label} style={{ borderBottom:"1px solid #1e293b" }}>
                           <td style={{ padding:"8px 12px", color:"#64748b", fontSize:16 }}>{label}</td>
@@ -2806,7 +2883,7 @@ export default function App() {
                     <div style={{ position:"absolute", top:0, bottom:0, left:"50%", width:1, background:"#1e293b" }} />
                     <div style={{ position:"absolute", left:0, right:0, top:"50%", height:1, background:"#1e293b" }} />
                     {cmpStocks.map((h, i) => {
-                      const cm = calcAll(h.financials);
+                      const cm = getCmpCalc(h);
                       const px = Math.min(Math.max((cm.equityRatio||0)*100,0),80)/80*85+7;
                       const py = 100-Math.min(Math.max((cm.opMargin||0)*100,0),30)/30*85-7;
                       return (
@@ -2826,7 +2903,7 @@ export default function App() {
                     <div style={{ color:"#94a3b8", fontSize:16, marginBottom:12 }}>ROE・ROA・ROIC比較</div>
                     <ResponsiveContainer width="100%" height={R.chartSm}>
                       <BarChart data={cmpStocks.map(h => {
-                        const cm = calcAll(h.financials);
+                        const cm = getCmpCalc(h);
                         return { name:h.ticker, ROE:parseFloat(((cm.roe||0)*100).toFixed(1)), ROA:parseFloat(((cm.roa||0)*100).toFixed(1)), ROIC:parseFloat(((cm.roic||0)*100).toFixed(1)) };
                       })}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
@@ -2844,7 +2921,7 @@ export default function App() {
                   <div style={S.card}>
                     <div style={{ color:"#94a3b8", fontSize:16, marginBottom:12 }}>PER比較</div>
                     <ResponsiveContainer width="100%" height={R.chartSm}>
-                      <BarChart data={cmpStocks.map(h => ({ name:h.ticker, PER:parseFloat((calcAll(h.financials).per||0).toFixed(2)) }))}>
+                      <BarChart data={cmpStocks.map(h => ({ name:h.ticker, PER:parseFloat((getCmpCalc(h).per||0).toFixed(2)) }))}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                         <XAxis dataKey="name" tick={{ fill:"#94a3b8", fontSize:R.sm }} />
                         <YAxis tick={{ fill:"#64748b", fontSize:R.sm }} tickFormatter={v => v+"x"} />
