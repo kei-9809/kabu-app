@@ -2214,7 +2214,7 @@ export default function App() {
     });
   }, [selected, simParams]);
 
-  const f  = selected?.financials || {};
+  const f  = (portfolio.find(h=>h.id===selected?.id)||selected)?.financials || {};
   const c  = selected ? calcAll(f) : {};
   // 総合スコアは最新本決算データで計算
   const sc = useMemo(() => {
