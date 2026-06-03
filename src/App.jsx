@@ -2290,6 +2290,7 @@ export default function App() {
       return { year:y===0?"現在":y+"年後", base, bear, bull, evp, dc, ps:Math.round(ps), po:Math.round(po), pe:parseFloat(pe.toFixed(2)), usePsr };
     });
   }, [selected, watchSelected, portfolio, watchlist, baseYear, simParams]);
+  const simRowsData = useMemo(() => simRows(), [simRows]);
 
   const f  = (portfolio.find(h=>h.id===selected?.id)||selected)?.financials || {};
   const c  = selected ? calcAll(f) : {};
@@ -3065,7 +3066,7 @@ export default function App() {
               <>
                 <div style={{ ...S.card, marginBottom:16 }}>
                   <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:12 }}>設定 — {(selected || watchSelected).name}（{(selected || watchSelected).ticker}）</div>
-                  <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(min(155px,45vw),1fr))", gap:12 }}>
+                  <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(min(180px,45vw),1fr))", gap:12 }}>
                     <FInput label="予測年数（年）" value={simParams.years} onChange={v => setSimParams(p => ({ ...p, years:v }))} numOnly={true} />
                     <FInput label="売上成長率（基本）%" value={simParams.growthRate} onChange={v => setSimParams(p => ({ ...p, growthRate:v }))} numOnly={true} />
                     <FInput label="目標営業利益率 %" value={simParams.targetMargin} onChange={v => setSimParams(p => ({ ...p, targetMargin:v }))} numOnly={true} />
@@ -3096,7 +3097,7 @@ export default function App() {
                       {/* シナリオ計算式の説明 */}
                       <div style={{ background:"#111827", borderRadius:8, padding:"12px 14px", marginBottom:16, fontSize:16, lineHeight:1.8 }}>
                         <div style={{ color:"#60a5fa", fontWeight:700, marginBottom:6 }}>📐 計算式</div>
-                        {simRows().length > 0 && simRows()[0].usePsr ? (
+                        {simRowsData.length > 0 && simRowsData[0].usePsr ? (
                           <div style={{ color:"#64748b" }}>
                             <span style={{ color:"#fbbf24" }}>PSR法（赤字企業）</span>：
                             推定株価 = 売上高 × 成長係数 × <span style={{ color:"#e2e8f0" }}>目標PSR</span> ÷ 発行済株式数
@@ -3111,15 +3112,15 @@ export default function App() {
                           {[
                             ["🐂 強気", "#4ade80",
                               `成長率 ${+simParams.growthRate>=0?"+":""}${Math.round(+simParams.growthRate*(+simParams.growthRate>=0?1.6:0.4))}%`,
-                              simRows().length>0&&simRows()[0].usePsr ? `目標PSR = ${(+simParams.targetPsr*1.2).toFixed(1)}x` : `目標PER = ${(+simParams.targetPer*1.2).toFixed(1)}x`,
+                              simRowsData.length>0&&simRowsData[0].usePsr ? `目標PSR = ${(+simParams.targetPsr*1.2).toFixed(1)}x` : `目標PER = ${(+simParams.targetPer*1.2).toFixed(1)}x`,
                               "高成長→高いバリュエーションを適用"],
                             ["📊 基本", "#60a5fa",
                               `成長率 ${+simParams.growthRate>=0?"+":""}${simParams.growthRate}%`,
-                              simRows().length>0&&simRows()[0].usePsr ? `目標PSR = ${simParams.targetPsr}x` : `目標PER = ${simParams.targetPer}x`,
+                              simRowsData.length>0&&simRowsData[0].usePsr ? `目標PSR = ${simParams.targetPsr}x` : `目標PER = ${simParams.targetPer}x`,
                               "入力値通りの成長・バリュエーション"],
                             ["🐻 弱気", "#f87171",
                               `成長率 ${+simParams.growthRate>=0?"+":""}${Math.round(+simParams.growthRate*(+simParams.growthRate>=0?0.4:1.6))}%`,
-                              simRows().length>0&&simRows()[0].usePsr ? `目標PSR = ${(+simParams.targetPsr*0.8).toFixed(1)}x` : `目標PER = ${(+simParams.targetPer*0.8).toFixed(1)}x`,
+                              simRowsData.length>0&&simRowsData[0].usePsr ? `目標PSR = ${(+simParams.targetPsr*0.8).toFixed(1)}x` : `目標PER = ${(+simParams.targetPer*0.8).toFixed(1)}x`,
                               "成長鈍化→低いバリュエーションを適用"],
                           ].map(([label, color, growthStr, valStr, desc]) => (
                             <div key={label} style={{ background:"#0d1424", borderRadius:6, padding:"8px 10px", borderLeft:`3px solid ${color}` }}>
@@ -3132,7 +3133,7 @@ export default function App() {
                         </div>
                       </div>
                       <ResponsiveContainer width="100%" height={R.chartXl}>
-                        <AreaChart data={simRows()}>
+                        <AreaChart data={simRowsData}>
                           <defs>
                             <linearGradient id="gbull" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#4ade80" stopOpacity={0.2}/><stop offset="95%" stopColor="#4ade80" stopOpacity={0}/></linearGradient>
                             <linearGradient id="gbase" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#60a5fa" stopOpacity={0.2}/><stop offset="95%" stopColor="#60a5fa" stopOpacity={0}/></linearGradient>
@@ -3148,14 +3149,14 @@ export default function App() {
                           <Area type="monotone" dataKey="bull" stroke="#4ade80" strokeWidth={2} fill="url(#gbull)" name="強気" />
                           <Area type="monotone" dataKey="base" stroke="#60a5fa" strokeWidth={2} fill="url(#gbase)" name="基本" />
                           <Area type="monotone" dataKey="bear" stroke="#f87171" strokeWidth={2} fill="url(#gbear)" name="弱気" />
-                          {simRows().some(d => d.evp) && <Line type="monotone" dataKey="evp" stroke="#a78bfa" strokeWidth={2} strokeDasharray="4 4" name="EV/EBITDA法" />}
+                          {simRowsData.some(d => d.evp) && <Line type="monotone" dataKey="evp" stroke="#a78bfa" strokeWidth={2} strokeDasharray="4 4" name="EV/EBITDA法" />}
                         </AreaChart>
                       </ResponsiveContainer>
                     </div>
 
                     <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(min(200px,45vw),1fr))", gap:12, marginBottom:16 }}>
                       {[["bull","強気","#4ade80"],["base","基本","#60a5fa"],["bear","弱気","#f87171"]].map(([key, label, color]) => {
-                        const rows = simRows();
+                        const rows = simRowsData;
                         const last = rows[rows.length-1]?.[key];
                         const breakY = rows.findIndex(r => r[key] && r[key] > selected.avgCost);
                         const cagr = last && selected.currentPrice > 0 ? ((Math.pow(last/selected.currentPrice, 1/(+simParams.years||1))-1)*100).toFixed(1) : null;
@@ -3176,7 +3177,7 @@ export default function App() {
                         <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:4 }}>配当累計</div>
                         <div style={{ color:"#475569", fontSize:16, marginBottom:8 }}>利回り{simParams.dividendRate}% {simParams.reinvest?"複利":"単純"}</div>
                         <ResponsiveContainer width="100%" height={R.chartSm}>
-                          <BarChart data={simRows()}>
+                          <BarChart data={simRowsData}>
                             <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                             <XAxis dataKey="year" tick={{ fill:"#94a3b8", fontSize:R.sm }} />
                             <YAxis tick={{ fill:"#64748b", fontSize:R.sm }} tickFormatter={v => v?.toLocaleString()} />
@@ -3189,7 +3190,7 @@ export default function App() {
                         <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:4 }}>売上・営業利益推移</div>
                         <div style={{ color:"#475569", fontSize:16, marginBottom:8 }}>成長率{simParams.growthRate}% x 利益率{simParams.targetMargin}%</div>
                         <ResponsiveContainer width="100%" height={R.chartSm}>
-                          <LineChart data={simRows()}>
+                          <LineChart data={simRowsData}>
                             <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                             <XAxis dataKey="year" tick={{ fill:"#94a3b8", fontSize:R.sm }} />
                             <YAxis tick={{ fill:"#64748b", fontSize:R.sm }} tickFormatter={v => fmtM(v)} />
@@ -3214,7 +3215,7 @@ export default function App() {
                             </tr>
                           </thead>
                           <tbody>
-                            {simRows().map((r, i) => (
+                            {simRowsData.map((r, i) => (
                               <tr key={i} style={{ borderBottom:"1px solid #1e293b", background:i===0?"#111827":"transparent" }}>
                                 <td style={{ padding:"8px 10px", color:"#94a3b8", fontWeight:i===0?700:400 }}>{r.year}</td>
                                 <td style={{ textAlign:"right", padding:"8px 10px", color:"#4ade80", fontWeight:700 }}>{"¥"+(r.bull?.toLocaleString()||"—")}</td>
