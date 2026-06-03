@@ -2418,7 +2418,7 @@ export default function App() {
       // 1年後のEPS
       const u1 = Math.random(), u2 = Math.random();
       e *= (1 + g + Math.sqrt(-2*Math.log(u1))*Math.cos(2*Math.PI*u2)*g*0.5);
-      finals.push(e > 0 ? Math.round(e*(tPer+(Math.random()-0.5)*tPer*0.3)) : 0);
+      finals.push(e > 0 ? Math.round(e * tPer) : 0);
     }
     finals.sort((a,b) => a-b);
     const p = pct2 => finals[Math.floor(1000*pct2)];
@@ -3352,12 +3352,17 @@ export default function App() {
                               <div style={{ background:"#0d1424", borderRadius:6, padding:"8px 12px" }}>
                                 <div style={{ color:"#94a3b8", marginBottom:4 }}>② 1年後のEPSをシミュレート</div>
                                 <div style={{ color:"#e2e8f0" }}>EPS × (1 + 成長率 + <span style={{ color:"#fbbf24" }}>正規乱数 × 成長率×0.5</span>)</div>
-                                <div style={{ color:"#475569", fontSize:16 }}>黄色部分がランダムな振れ幅（ボラティリティ）</div>
+                                <div style={{ color:"#475569", fontSize:16, marginTop:4 }}>
+                                  <span style={{ color:"#fbbf24" }}>正規乱数</span>とは平均0・標準偏差1のベル型分布からのランダム値。
+                                  0付近が出やすく、±2以上は稀（約5%）。
+                                  株価の実際のブレを近似するために使用。
+                                  例: 成長率15%のとき ±7.5%の上下振れが1σ。
+                                </div>
                               </div>
                               <div style={{ background:"#0d1424", borderRadius:6, padding:"8px 12px" }}>
                                 <div style={{ color:"#94a3b8", marginBottom:4 }}>③ 1年後の株価を推定</div>
-                                <div style={{ color:"#e2e8f0" }}>最終EPS × (目標PER±<span style={{ color:"#fbbf24" }}>±30%のランダム変動</span>)</div>
-                                <div style={{ color:"#475569", fontSize:16 }}>PERのランダム変動で市場評価のばらつきを表現</div>
+                                <div style={{ color:"#e2e8f0" }}>最終EPS × 目標PER（<span style={{ color:"#60a5fa" }}>{simParams.targetPer}倍・固定</span>）</div>
+                                <div style={{ color:"#475569", fontSize:16 }}>PERは固定、株価のばらつきはEPS成長のブレのみ</div>
                               </div>
                               <div style={{ background:"#0d1424", borderRadius:6, padding:"8px 12px" }}>
                                 <div style={{ color:"#94a3b8", marginBottom:4 }}>④ 1,000回繰り返して分布を表示</div>
