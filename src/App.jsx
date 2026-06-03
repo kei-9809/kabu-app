@@ -2418,7 +2418,7 @@ export default function App() {
       // 1年後のEPS
       const u1 = Math.random(), u2 = Math.random();
       e *= (1 + g + Math.sqrt(-2*Math.log(u1))*Math.cos(2*Math.PI*u2)*g*0.5);
-      finals.push(e > 0 ? Math.round(e * tPer) : 0);
+      finals.push(e > 0 ? Math.round(e*(tPer+(Math.random()-0.5)*tPer*0.5)) : 0);
     }
     finals.sort((a,b) => a-b);
     const p = pct2 => finals[Math.floor(1000*pct2)];
@@ -3361,8 +3361,11 @@ export default function App() {
                               </div>
                               <div style={{ background:"#0d1424", borderRadius:6, padding:"8px 12px" }}>
                                 <div style={{ color:"#94a3b8", marginBottom:4 }}>③ 1年後の株価を推定</div>
-                                <div style={{ color:"#e2e8f0" }}>最終EPS × 目標PER（<span style={{ color:"#60a5fa" }}>{simParams.targetPer}倍・固定</span>）</div>
-                                <div style={{ color:"#475569", fontSize:16 }}>PERは固定、株価のばらつきはEPS成長のブレのみ</div>
+                                <div style={{ color:"#e2e8f0" }}>最終EPS × (目標PER + <span style={{ color:"#fbbf24" }}>一様乱数×PER×50%</span>)</div>
+                                <div style={{ color:"#475569", fontSize:16, marginTop:4 }}>
+                                  目標PER±50%の範囲でランダムに変動。
+                                  例: 目標PER30倍 → 15〜45倍の範囲。市場の評価ブレを反映。
+                                </div>
                               </div>
                               <div style={{ background:"#0d1424", borderRadius:6, padding:"8px 12px" }}>
                                 <div style={{ color:"#94a3b8", marginBottom:4 }}>④ 1,000回繰り返して分布を表示</div>
