@@ -1953,7 +1953,7 @@ export default function App() {
   const [portfolioMode, setPortfolioMode] = useState("portfolio"); // "portfolio" | "watchlist"
   const ANNUAL_KEYS = getAnnualKeys(baseYear);
   const QTR_KEYS = getQtrKeys(baseYear);
-  const [simParams, setSimParams] = useState({ years:"5", growthRate:"15", targetMargin:"15", targetPer:"20", targetEvEbitda:"", dividendRate:"2", reinvest:true });
+  const [simParams, setSimParams] = useState({ years:"5", growthRate:"15", targetMargin:"15", targetPer:"20", targetPsr:"5", targetEvEbitda:"", dividendRate:"2", reinvest:true });
   const [simTab, setSimTab]       = useState("scenario");
   const [irForm, setIrForm]       = useState({ date:"", title:"", url:"", type:"決算" });
   const [showIrForm, setShowIrForm] = useState(false);
@@ -2233,7 +2233,6 @@ export default function App() {
   const simRows = useCallback(() => {
     const target = selected || watchSelected;
     if (!target) return [];
-    // 最新本決算データをperiodsから取得
     const allH = [...portfolio, ...watchlist];
     const h = allH.find(x => x.id === target.id) || target;
     const sb = getStockBaseYear(h, baseYear);
@@ -2243,7 +2242,6 @@ export default function App() {
       const prev = [String(sb-1), String(sb-2)].map(yr => hPeriods[yr]||{}).find(d => Object.values(d).some(v => v !== "" && v != null));
       fd = prev || {};
     }
-    // financialsにフォールバック
     const fBase = h.financials || {};
     const price = h.currentPrice || n(fBase.price) || 0;
     const sales = n(fd.sales) || n(fBase.sales) || 0;
@@ -2251,25 +2249,45 @@ export default function App() {
     const curOp = n(fd.opProfit) || n(fBase.opProfit) || 0;
     const curNet = n(fd.netProfit) || n(fBase.netProfit) || 0;
     const eb = n(fd.ebitda) || n(fBase.ebitda) || (curOp * 1.3);
-    const g = +simParams.growthRate/100, tm = +simParams.targetMargin/100;
+    const g = +simParams.growthRate/100;
+    const tm = +simParams.targetMargin/100;
+    const tPer = +simParams.targetPer;
+    const tPsr = +simParams.targetPsr || 5;
+    const tEv = simParams.targetEvEbitda ? +simParams.targetEvEbitda : null;
+    const dr = +simParams.dividendRate/100;
+    const yr = +simParams.years || 5;
     const cm = sales > 0 && curOp ? curOp/sales : tm*0.5;
-    const tPer = +simParams.targetPer, tEv = simParams.targetEvEbitda ? +simParams.targetEvEbitda : null;
-    const dr = +simParams.dividendRate/100, yr = +simParams.years||5;
+    // EPS>0ならPER法、赤字・ゼロならPSR法
+    const curEps = sh > 0 ? curNet/(sh*1000) : 0;
+    const usePsr = curEps <= 0;
     return Array.from({ length:yr+1 }, (_, y) => {
-      const gf = Math.pow(1+g, y), mp = yr > 0 ? y/yr : 1;
-      const pm = cm+(tm-cm)*mp, ps = sales*gf, po = ps*pm;
-      const nr = curOp > 0 ? curNet/curOp : 0.7, pn = po*nr;
-      const pe = sh > 0 ? pn/(sh*1000) : 0, peb = eb*gf;
-      const base = pe > 0 ? Math.round(pe*tPer) : null;
-      // 弱気: 成長率40%・PER80%、強気: 成長率160%・PER120%
-      // ただし成長率がマイナスの場合は弱気=悲観的（より大きな下落）に修正
-      const bearG = g >= 0 ? g * 0.4 : g * 1.6;  // 弱気成長率
-      const bullG = g >= 0 ? g * 1.6 : g * 0.4;  // 強気成長率
-      const bear = pe > 0 ? Math.round(pe * Math.pow(1+bearG, y) * tPer * 0.8) : null;
-      const bull = pe > 0 ? Math.round(pe * Math.pow(1+bullG, y) * tPer * 1.2) : null;
+      const gf = Math.pow(1+g, y);
+      const bearG = g >= 0 ? g*0.4 : g*1.6;
+      const bullG = g >= 0 ? g*1.6 : g*0.4;
+      const bearGf = Math.pow(1+bearG, y);
+      const bullGf = Math.pow(1+bullG, y);
+      const mp = yr > 0 ? y/yr : 1;
+      const pm = cm+(tm-cm)*mp;
+      const ps = sales*gf, po = ps*pm;
+      const nr = curOp > 0 ? curNet/curOp : 0.7;
+      const pn = po*nr;
+      const pe = sh > 0 ? pn/(sh*1000) : 0;
+      const peb = eb*gf;
+      let base, bear, bull;
+      if (usePsr) {
+        // PSR法（赤字企業）
+        base = sh > 0 ? Math.round(sales*gf    *tPsr/(sh*1000)) : null;
+        bear = sh > 0 ? Math.round(sales*bearGf*tPsr*0.8/(sh*1000)) : null;
+        bull = sh > 0 ? Math.round(sales*bullGf*tPsr*1.2/(sh*1000)) : null;
+      } else {
+        // PER法（黒字企業）
+        base = pe > 0 ? Math.round(pe*gf    *tPer)         : null;
+        bear = pe > 0 ? Math.round(pe*bearGf*tPer*0.8) : null;
+        bull = pe > 0 ? Math.round(pe*bullGf*tPer*1.2) : null;
+      }
       const evp = tEv != null && sh > 0 ? Math.round((peb*tEv)/(sh*1000)) : null;
       const dc = simParams.reinvest ? Math.round(price*(Math.pow(1+dr,y)-1)) : Math.round(price*dr*y);
-      return { year:y===0?"現在":y+"年後", base, bear, bull, evp, dc, ps:Math.round(ps), po:Math.round(po), pe:parseFloat(pe.toFixed(2)) };
+      return { year:y===0?"現在":y+"年後", base, bear, bull, evp, dc, ps:Math.round(ps), po:Math.round(po), pe:parseFloat(pe.toFixed(2)), usePsr };
     });
   }, [selected, watchSelected, portfolio, watchlist, baseYear, simParams]);
 
@@ -3051,7 +3069,8 @@ export default function App() {
                     <FInput label="予測年数（年）" value={simParams.years} onChange={v => setSimParams(p => ({ ...p, years:v }))} numOnly={true} />
                     <FInput label="売上成長率（基本）%" value={simParams.growthRate} onChange={v => setSimParams(p => ({ ...p, growthRate:v }))} numOnly={true} />
                     <FInput label="目標営業利益率 %" value={simParams.targetMargin} onChange={v => setSimParams(p => ({ ...p, targetMargin:v }))} numOnly={true} />
-                    <FInput label="目標PER（倍）" value={simParams.targetPer} onChange={v => setSimParams(p => ({ ...p, targetPer:v }))} numOnly={true} />
+                    <FInput label="目標PER（黒字時・倍）" value={simParams.targetPer} onChange={v => setSimParams(p => ({ ...p, targetPer:v }))} numOnly={true} />
+                    <FInput label="目標PSR（赤字時・倍）" value={simParams.targetPsr} onChange={v => setSimParams(p => ({ ...p, targetPsr:v }))} numOnly={true} />
                     <FInput label="目標EV/EBITDA（任意）" value={simParams.targetEvEbitda} onChange={v => setSimParams(p => ({ ...p, targetEvEbitda:v }))} numOnly={true} />
                     <FInput label="配当利回り %" value={simParams.dividendRate} onChange={v => setSimParams(p => ({ ...p, dividendRate:v }))} numOnly={true} />
                     <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
@@ -3061,7 +3080,7 @@ export default function App() {
                       </button>
                     </div>
                   </div>
-                  <div style={{ marginTop:10, fontSize:16, color:"#334155" }}>強気: 成長率x1.6 / 弱気: 成長率x0.4（自動計算）</div>
+                  <div style={{ marginTop:10, fontSize:16, color:"#334155" }}>強気: 成長率×1.6 / 弱気: 成長率×0.4（自動計算）</div>
                 </div>
 
                 <div style={{ display:"flex", gap:4, marginBottom:16, flexWrap:"wrap" }}>
@@ -3077,15 +3096,22 @@ export default function App() {
                       {/* シナリオ計算式の説明 */}
                       <div style={{ background:"#111827", borderRadius:8, padding:"12px 14px", marginBottom:16, fontSize:16, lineHeight:1.8 }}>
                         <div style={{ color:"#60a5fa", fontWeight:700, marginBottom:6 }}>📐 計算式</div>
-                        <div style={{ color:"#64748b" }}>
-                          <span style={{ color:"#e2e8f0" }}>予想EPS</span> = 当期純利益 ÷ 発行済株式数 &nbsp;→&nbsp;
-                          <span style={{ color:"#e2e8f0" }}>推定株価</span> = EPS × 成長係数 × 目標PER
-                        </div>
+                        {simRows().length > 0 && simRows()[0].usePsr ? (
+                          <div style={{ color:"#64748b" }}>
+                            <span style={{ color:"#fbbf24" }}>PSR法（赤字企業）</span>：
+                            <span style={{ color:"#e2e8f0" }}>推定株価</span> = 売上高 × 成長係数 × 目標PSR ÷ 発行済株式数
+                          </div>
+                        ) : (
+                          <div style={{ color:"#64748b" }}>
+                            <span style={{ color:"#4ade80" }}>PER法（黒字企業）</span>：
+                            <span style={{ color:"#e2e8f0" }}>推定株価</span> = EPS × 成長係数 × 目標PER
+                          </div>
+                        )}
                         <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8, marginTop:10 }}>
                           {[
-                            ["🐂 強気", "#4ade80", `成長率 ${+simParams.growthRate>=0?"+":""}${Math.round(+simParams.growthRate*(+simParams.growthRate>=0?1.6:0.4))}%`, `目標PER × 1.2 = ${(+simParams.targetPer*1.2).toFixed(1)}x`, "楽観的な成長・バリュエーション拡大"],
-                            ["📊 基本", "#60a5fa", `成長率 ${+simParams.growthRate>=0?"+":""}${simParams.growthRate}%`, `目標PER = ${simParams.targetPer}x`, "入力値通りの成長・バリュエーション維持"],
-                            ["🐻 弱気", "#f87171", `成長率 ${+simParams.growthRate>=0?"+":""}${Math.round(+simParams.growthRate*(+simParams.growthRate>=0?0.4:1.6))}%`, `目標PER × 0.8 = ${(+simParams.targetPer*0.8).toFixed(1)}x`, "成長鈍化・バリュエーション縮小"],
+                            ["🐂 強気", "#4ade80", `成長率 ${+simParams.growthRate>=0?"+":""}${Math.round(+simParams.growthRate*(+simParams.growthRate>=0?1.6:0.4))}%`, `目標倍率×1.2`, "高成長→市場が高バリュエーション付与"],
+                            ["📊 基本", "#60a5fa", `成長率 ${+simParams.growthRate>=0?"+":""}${simParams.growthRate}%`, `目標倍率×1.0`, "入力値通りの成長"],
+                            ["🐻 弱気", "#f87171", `成長率 ${+simParams.growthRate>=0?"+":""}${Math.round(+simParams.growthRate*(+simParams.growthRate>=0?0.4:1.6))}%`, `目標倍率×0.8`, "成長鈍化→市場がバリュエーション縮小"],
                           ].map(([label, color, growthStr, perStr, desc]) => (
                             <div key={label} style={{ background:"#0d1424", borderRadius:6, padding:"8px 10px", borderLeft:`3px solid ${color}` }}>
                               <div style={{ color, fontWeight:700, marginBottom:4 }}>{label}</div>
