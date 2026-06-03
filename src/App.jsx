@@ -1963,22 +1963,17 @@ export default function App() {
   const QTR_KEYS = getQtrKeys(baseYear);
 
   const [simParams, setSimParams] = useState(DEFAULT_SIM_PARAMS);
+  const [simEdit, setSimEdit]     = useState(DEFAULT_SIM_PARAMS);
   const [simTab, setSimTab]       = useState("scenario");
 
-  // 銘柄切り替え時にsimParamsを読み込む
+  // 銘柄切り替え時にsimParams/simEditを読み込む
   useEffect(() => {
     const target = selected || watchSelected;
     if (!target) return;
-    const saved = loadSimParams(target.id);
-    setSimParams(saved || DEFAULT_SIM_PARAMS);
+    const saved = loadSimParams(target.id) || DEFAULT_SIM_PARAMS;
+    setSimParams(saved);
+    setSimEdit(saved);
   }, [selected?.id, watchSelected?.id]);
-
-  // simParams変更時にlocalStorageに保存
-  useEffect(() => {
-    const target = selected || watchSelected;
-    if (!target) return;
-    saveSimParams(target.id, simParams);
-  }, [simParams, selected?.id, watchSelected?.id]);
   const [irForm, setIrForm]       = useState({ date:"", title:"", url:"", type:"決算" });
   const [showIrForm, setShowIrForm] = useState(false);
   const [addForm, setAddForm]     = useState({ ticker:"", name:"", sector:"", qty:"", avgCost:"", currentPrice:"" });
@@ -3097,21 +3092,33 @@ export default function App() {
                 <div style={{ ...S.card, marginBottom:16 }}>
                   <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:12 }}>設定 — {(selected || watchSelected).name}（{(selected || watchSelected).ticker}）</div>
                   <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(min(180px,45vw),1fr))", gap:12 }}>
-                    <FInput label="予測年数（年）" value={simParams.years} onChange={v => setSimParams(p => ({ ...p, years:v }))} numOnly={true} />
-                    <FInput label="売上成長率（基本）%" value={simParams.growthRate} onChange={v => setSimParams(p => ({ ...p, growthRate:v }))} numOnly={true} />
-                    <FInput label="目標営業利益率 %" value={simParams.targetMargin} onChange={v => setSimParams(p => ({ ...p, targetMargin:v }))} numOnly={true} />
-                    <FInput label="目標PER（黒字時・倍）" value={simParams.targetPer} onChange={v => setSimParams(p => ({ ...p, targetPer:v }))} numOnly={true} />
-                    <FInput label="目標PSR（赤字時・倍）" value={simParams.targetPsr} onChange={v => setSimParams(p => ({ ...p, targetPsr:v }))} numOnly={true} />
-                    <FInput label="目標EV/EBITDA（任意）" value={simParams.targetEvEbitda} onChange={v => setSimParams(p => ({ ...p, targetEvEbitda:v }))} numOnly={true} />
-                    <FInput label="配当利回り %" value={simParams.dividendRate} onChange={v => setSimParams(p => ({ ...p, dividendRate:v }))} numOnly={true} />
+                    <FInput label="予測年数（年）" value={simEdit.years} onChange={v => setSimEdit(p => ({ ...p, years:v }))} numOnly={true} />
+                    <FInput label="売上成長率（基本）%" value={simEdit.growthRate} onChange={v => setSimEdit(p => ({ ...p, growthRate:v }))} numOnly={true} />
+                    <FInput label="目標営業利益率 %" value={simEdit.targetMargin} onChange={v => setSimEdit(p => ({ ...p, targetMargin:v }))} numOnly={true} />
+                    <FInput label="目標PER（黒字時・倍）" value={simEdit.targetPer} onChange={v => setSimEdit(p => ({ ...p, targetPer:v }))} numOnly={true} />
+                    <FInput label="目標PSR（赤字時・倍）" value={simEdit.targetPsr} onChange={v => setSimEdit(p => ({ ...p, targetPsr:v }))} numOnly={true} />
+                    <FInput label="目標EV/EBITDA（任意）" value={simEdit.targetEvEbitda} onChange={v => setSimEdit(p => ({ ...p, targetEvEbitda:v }))} numOnly={true} />
+                    <FInput label="配当利回り %" value={simEdit.dividendRate} onChange={v => setSimEdit(p => ({ ...p, dividendRate:v }))} numOnly={true} />
                     <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
                       <label style={{ color:"#64748b", fontSize:16 }}>配当再投資</label>
-                      <button style={{ ...S.miniBtn, padding:"8px 12px", color:simParams.reinvest?"#4ade80":"#64748b", borderColor:simParams.reinvest?"#4ade80":"#334155" }} onClick={() => setSimParams(p => ({ ...p, reinvest:!p.reinvest }))}>
-                        {simParams.reinvest?"あり（複利）":"なし（単純）"}
+                      <button style={{ ...S.miniBtn, padding:"8px 12px", color:simEdit.reinvest?"#4ade80":"#64748b", borderColor:simEdit.reinvest?"#4ade80":"#334155" }} onClick={() => setSimEdit(p => ({ ...p, reinvest:!p.reinvest }))}>
+                        {simEdit.reinvest?"あり（複利）":"なし（単純）"}
                       </button>
                     </div>
                   </div>
-                  <div style={{ marginTop:10, fontSize:16, color:"#334155" }}>強気: 成長率×1.6 / 弱気: 成長率×0.4（自動計算）</div>
+                  <div style={{ marginTop:12, display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
+                    <button
+                      style={{ ...S.addBtn, padding:"8px 20px" }}
+                      onClick={() => {
+                        setSimParams(simEdit);
+                        const target = selected || watchSelected;
+                        if (target) saveSimParams(target.id, simEdit);
+                      }}
+                    >
+                      ▶ 再計算
+                    </button>
+                    <span style={{ color:"#334155", fontSize:16 }}>強気: 成長率×1.6 / 弱気: 成長率×0.4（自動計算）</span>
+                  </div>
                 </div>
 
                 <div style={{ display:"flex", gap:4, marginBottom:16, flexWrap:"wrap" }}>
