@@ -2411,14 +2411,13 @@ export default function App() {
     const cMerged = calcAll(fMerged);
     if (!cMerged.eps || cMerged.eps <= 0) return null;
     const price = h.currentPrice;
-    const g = +simParams.growthRate/100, tPer = +simParams.targetPer, yr = +simParams.years||5;
+    const g = +simParams.growthRate/100, tPer = +simParams.targetPer;
     const finals = [];
     for (let t = 0; t < 1000; t++) {
       let e = cMerged.eps;
-      for (let y = 0; y < yr; y++) {
-        const u1 = Math.random(), u2 = Math.random();
-        e *= (1 + g + Math.sqrt(-2*Math.log(u1))*Math.cos(2*Math.PI*u2)*g*0.5);
-      }
+      // 1年後のEPS
+      const u1 = Math.random(), u2 = Math.random();
+      e *= (1 + g + Math.sqrt(-2*Math.log(u1))*Math.cos(2*Math.PI*u2)*g*0.5);
       finals.push(e > 0 ? Math.round(e*(tPer+(Math.random()-0.5)*tPer*0.3)) : 0);
     }
     finals.sort((a,b) => a-b);
@@ -3341,7 +3340,7 @@ export default function App() {
                     ) : (
                       <div>
                         <div style={S.card}>
-                          <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:8 }}>モンテカルロシミュレーション（1,000回試行）</div>
+                          <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:8 }}>モンテカルロシミュレーション（1,000回試行・1年後）</div>
                           {/* 計算説明 */}
                           <div style={{ background:"#111827", borderRadius:8, padding:"12px 14px", marginBottom:16, fontSize:16, lineHeight:1.9 }}>
                             <div style={{ color:"#60a5fa", fontWeight:700, marginBottom:6 }}>📐 計算方法</div>
@@ -3351,12 +3350,12 @@ export default function App() {
                                 <div style={{ color:"#e2e8f0" }}>現在EPS（直近本決算）をスタート値とする</div>
                               </div>
                               <div style={{ background:"#0d1424", borderRadius:6, padding:"8px 12px" }}>
-                                <div style={{ color:"#94a3b8", marginBottom:4 }}>② 毎年EPS成長をシミュレート（{simParams.years}年間）</div>
+                                <div style={{ color:"#94a3b8", marginBottom:4 }}>② 1年後のEPSをシミュレート</div>
                                 <div style={{ color:"#e2e8f0" }}>EPS × (1 + 成長率 + <span style={{ color:"#fbbf24" }}>正規乱数 × 成長率×0.5</span>)</div>
                                 <div style={{ color:"#475569", fontSize:16 }}>黄色部分がランダムな振れ幅（ボラティリティ）</div>
                               </div>
                               <div style={{ background:"#0d1424", borderRadius:6, padding:"8px 12px" }}>
-                                <div style={{ color:"#94a3b8", marginBottom:4 }}>③ {simParams.years}年後の株価を推定</div>
+                                <div style={{ color:"#94a3b8", marginBottom:4 }}>③ 1年後の株価を推定</div>
                                 <div style={{ color:"#e2e8f0" }}>最終EPS × (目標PER±<span style={{ color:"#fbbf24" }}>±30%のランダム変動</span>)</div>
                                 <div style={{ color:"#475569", fontSize:16 }}>PERのランダム変動で市場評価のばらつきを表現</div>
                               </div>
