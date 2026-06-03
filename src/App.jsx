@@ -1953,8 +1953,33 @@ export default function App() {
   const [portfolioMode, setPortfolioMode] = useState("portfolio"); // "portfolio" | "watchlist"
   const ANNUAL_KEYS = getAnnualKeys(baseYear);
   const QTR_KEYS = getQtrKeys(baseYear);
-  const [simParams, setSimParams] = useState({ years:"5", growthRate:"15", targetMargin:"15", targetPer:"20", targetPsr:"5", targetEvEbitda:"", dividendRate:"2", reinvest:true });
+
+  const DEFAULT_SIM_PARAMS = { years:"5", growthRate:"15", targetMargin:"15", targetPer:"20", targetPsr:"5", targetEvEbitda:"", dividendRate:"2", reinvest:true };
+  const loadSimParams = (id) => {
+    try { const d = localStorage.getItem("kabulens_sim_"+id); return d ? JSON.parse(d) : null; } catch { return null; }
+  };
+  const saveSimParams = (id, params) => {
+    try { localStorage.setItem("kabulens_sim_"+id, JSON.stringify(params)); } catch {}
+  };
+
+  const [simParams, setSimParamsRaw] = useState(DEFAULT_SIM_PARAMS);
+  const setSimParams = (updater) => {
+    setSimParamsRaw(prev => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      const target = selected || watchSelected;
+      if (target) saveSimParams(target.id, next);
+      return next;
+    });
+  };
   const [simTab, setSimTab]       = useState("scenario");
+
+  // 銘柄切り替え時にsimParamsを読み込む
+  useEffect(() => {
+    const target = selected || watchSelected;
+    if (!target) return;
+    const saved = loadSimParams(target.id);
+    setSimParamsRaw(saved || DEFAULT_SIM_PARAMS);
+  }, [selected?.id, watchSelected?.id]);
   const [irForm, setIrForm]       = useState({ date:"", title:"", url:"", type:"決算" });
   const [showIrForm, setShowIrForm] = useState(false);
   const [addForm, setAddForm]     = useState({ ticker:"", name:"", sector:"", qty:"", avgCost:"", currentPrice:"" });
@@ -2257,9 +2282,10 @@ export default function App() {
     const dr = +simParams.dividendRate/100;
     const yr = +simParams.years || 5;
     const cm = sales > 0 && curOp ? curOp/sales : tm*0.5;
-    // EPS>0ならPER法、赤字・ゼロならPSR法
     const curEps = sh > 0 ? curNet/(sh*1000) : 0;
-    const usePsr = curEps <= 0;
+    // PERマイナス（赤字）or PER100倍以上（低収益）or EPS≤0 → PSR法
+    const currentPer = price > 0 && curEps > 0 ? price / curEps : null;
+    const usePsr = curEps <= 0 || (currentPer !== null && currentPer >= 100);
     return Array.from({ length:yr+1 }, (_, y) => {
       const gf = Math.pow(1+g, y);
       const bearG = g >= 0 ? g*0.4 : g*1.6;
@@ -2275,15 +2301,15 @@ export default function App() {
       const peb = eb*gf;
       let base, bear, bull;
       if (usePsr) {
-        // PSR法（赤字企業）
+        // PSR法（赤字・低収益企業）: 売上ベースで常に計算可能
         base = sh > 0 ? Math.round(sales*gf    *tPsr/(sh*1000)) : null;
         bear = sh > 0 ? Math.round(sales*bearGf*tPsr*0.8/(sh*1000)) : null;
         bull = sh > 0 ? Math.round(sales*bullGf*tPsr*1.2/(sh*1000)) : null;
       } else {
         // PER法（黒字企業）
-        base = pe > 0 ? Math.round(pe*gf    *tPer)         : null;
-        bear = pe > 0 ? Math.round(pe*bearGf*tPer*0.8) : null;
-        bull = pe > 0 ? Math.round(pe*bullGf*tPer*1.2) : null;
+        base = pe > 0 ? Math.round(pe*gf    *tPer)     : (sh>0 ? Math.round(sales*gf    *tPsr/(sh*1000)) : null);
+        bear = pe > 0 ? Math.round(pe*bearGf*tPer*0.8) : (sh>0 ? Math.round(sales*bearGf*tPsr*0.8/(sh*1000)) : null);
+        bull = pe > 0 ? Math.round(pe*bullGf*tPer*1.2) : (sh>0 ? Math.round(sales*bullGf*tPsr*1.2/(sh*1000)) : null);
       }
       const evp = tEv != null && sh > 0 ? Math.round((peb*tEv)/(sh*1000)) : null;
       const dc = simParams.reinvest ? Math.round(price*(Math.pow(1+dr,y)-1)) : Math.round(price*dr*y);
