@@ -2294,8 +2294,13 @@ export default function App() {
       const pe = sh > 0 ? pn/(sh*1000) : 0;
       const peb = eb*gf;
       let base, bear, bull;
-      if (usePsr) {
-        // PSR法（赤字・低収益企業）: 売上ベースで常に計算可能
+      if (y === 0) {
+        // 現在値は実際の現在株価
+        base = price;
+        bear = price;
+        bull = price;
+      } else if (usePsr) {
+        // PSR法（赤字・低収益企業）
         base = sh > 0 ? Math.round(sales*gf    *tPsr/(sh*1000)) : null;
         bear = sh > 0 ? Math.round(sales*bearGf*tPsr*0.8/(sh*1000)) : null;
         bull = sh > 0 ? Math.round(sales*bullGf*tPsr*1.2/(sh*1000)) : null;
