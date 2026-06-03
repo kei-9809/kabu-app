@@ -276,6 +276,14 @@ const LS_WATCH = "kabulens_watch_v1";
 const LS_CUSTOM_CRITERIA = "kabulens_custom_criteria";
 const LS_SCORE_MODE = "kabulens_score_mode";
 
+const DEFAULT_SIM_PARAMS = { years:"5", growthRate:"15", targetMargin:"15", targetPer:"20", targetPsr:"5", targetEvEbitda:"", dividendRate:"2", reinvest:true };
+const loadSimParams = (id) => {
+  try { const d = localStorage.getItem("kabulens_sim_"+id); return d ? JSON.parse(d) : null; } catch { return null; }
+};
+const saveSimParams = (id, params) => {
+  try { localStorage.setItem("kabulens_sim_"+id, JSON.stringify(params)); } catch {}
+};
+
 const loadScoreMode = (stockId) => {
   try { return localStorage.getItem(LS_SCORE_MODE+"_"+stockId) || "standard"; } catch { return "standard"; }
 };
@@ -1954,23 +1962,7 @@ export default function App() {
   const ANNUAL_KEYS = getAnnualKeys(baseYear);
   const QTR_KEYS = getQtrKeys(baseYear);
 
-  const DEFAULT_SIM_PARAMS = { years:"5", growthRate:"15", targetMargin:"15", targetPer:"20", targetPsr:"5", targetEvEbitda:"", dividendRate:"2", reinvest:true };
-  const loadSimParams = (id) => {
-    try { const d = localStorage.getItem("kabulens_sim_"+id); return d ? JSON.parse(d) : null; } catch { return null; }
-  };
-  const saveSimParams = (id, params) => {
-    try { localStorage.setItem("kabulens_sim_"+id, JSON.stringify(params)); } catch {}
-  };
-
-  const [simParams, setSimParamsRaw] = useState(DEFAULT_SIM_PARAMS);
-  const setSimParams = (updater) => {
-    setSimParamsRaw(prev => {
-      const next = typeof updater === "function" ? updater(prev) : updater;
-      const target = selected || watchSelected;
-      if (target) saveSimParams(target.id, next);
-      return next;
-    });
-  };
+  const [simParams, setSimParams] = useState(DEFAULT_SIM_PARAMS);
   const [simTab, setSimTab]       = useState("scenario");
 
   // 銘柄切り替え時にsimParamsを読み込む
@@ -1978,8 +1970,15 @@ export default function App() {
     const target = selected || watchSelected;
     if (!target) return;
     const saved = loadSimParams(target.id);
-    setSimParamsRaw(saved || DEFAULT_SIM_PARAMS);
+    setSimParams(saved || DEFAULT_SIM_PARAMS);
   }, [selected?.id, watchSelected?.id]);
+
+  // simParams変更時にlocalStorageに保存
+  useEffect(() => {
+    const target = selected || watchSelected;
+    if (!target) return;
+    saveSimParams(target.id, simParams);
+  }, [simParams, selected?.id, watchSelected?.id]);
   const [irForm, setIrForm]       = useState({ date:"", title:"", url:"", type:"決算" });
   const [showIrForm, setShowIrForm] = useState(false);
   const [addForm, setAddForm]     = useState({ ticker:"", name:"", sector:"", qty:"", avgCost:"", currentPrice:"" });
@@ -2312,7 +2311,12 @@ export default function App() {
         bull = pe > 0 ? Math.round(pe*bullGf*tPer*1.2) : (sh>0 ? Math.round(sales*bullGf*tPsr*1.2/(sh*1000)) : null);
       }
       const evp = tEv != null && sh > 0 ? Math.round((peb*tEv)/(sh*1000)) : null;
-      const dc = simParams.reinvest ? Math.round(price*(Math.pow(1+dr,y)-1)) : Math.round(price*dr*y);
+      // 配当累計：直近本決算の1株配当をベースに累積
+      const actualDividend = n(fd.dividend) || 0;
+      const divPerYear = actualDividend > 0 ? actualDividend : price * dr;
+      const dc = simParams.reinvest
+        ? Math.round(divPerYear * ((Math.pow(1+dr, y) - 1) / dr || y))
+        : Math.round(divPerYear * y);
       return { year:y===0?"現在":y+"年後", base, bear, bull, evp, dc, ps:Math.round(ps), po:Math.round(po), pe:parseFloat(pe.toFixed(2)), usePsr };
     });
   }, [selected, watchSelected, portfolio, watchlist, baseYear, simParams]);
