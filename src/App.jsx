@@ -2311,12 +2311,13 @@ export default function App() {
         bull = pe > 0 ? Math.round(pe*bullGf*tPer*1.2) : (sh>0 ? Math.round(sales*bullGf*tPsr*1.2/(sh*1000)) : null);
       }
       const evp = tEv != null && sh > 0 ? Math.round((peb*tEv)/(sh*1000)) : null;
-      // 配当累計：直近本決算の1株配当をベースに累積
+      // 配当累計：直近本決算の1株配当が入力されていればそれを使用、なければ0
       const actualDividend = n(fd.dividend) || 0;
-      const divPerYear = actualDividend > 0 ? actualDividend : price * dr;
-      const dc = simParams.reinvest
-        ? Math.round(divPerYear * ((Math.pow(1+dr, y) - 1) / dr || y))
-        : Math.round(divPerYear * y);
+      const dc = actualDividend > 0
+        ? (simParams.reinvest
+            ? Math.round(actualDividend * ((Math.pow(1+actualDividend/price, y) - 1) / (actualDividend/price) || y))
+            : Math.round(actualDividend * y))
+        : 0;
       return { year:y===0?"現在":y+"年後", base, bear, bull, evp, dc, ps:Math.round(ps), po:Math.round(po), pe:parseFloat(pe.toFixed(2)), usePsr };
     });
   }, [selected, watchSelected, portfolio, watchlist, baseYear, simParams]);
