@@ -796,16 +796,7 @@ function ScoreCriteriaEditor({ selected, R, S, onModeChange }) {
   );
 }
 
-// 今期予想テーブルセル
-function FcCell({ fcVal, prevVal, formatter }) {
-  const chg = calcChg(fcVal, prevVal);
-  return (
-    <td style={{ textAlign:"right", padding:"6px 10px", background:"#1a1200" }}>
-      <div style={{ color:"#fbbf24", fontWeight:600 }}>{fcVal != null ? formatter(fcVal) : "—"}</div>
-      {fcVal != null && prevVal != null && <div style={{ color:chgColor(chg), fontSize:14 }}>{chgStr(chg)}</div>}
-    </td>
-  );
-}
+
 
 function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R, TS }) {
   const [metricsView, setMetricsView] = useState("current");
@@ -867,10 +858,9 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
     const fd = periods[FORECAST_KEY] || {};
     if (!Object.values(fd).some(v => v !== "" && v != null)) return null;
     const base = latestAnnual ? latestAnnual.f : {};
-    // 株価は selected.currentPrice（ポートフォリオ表示と同じ値）を使用
-    const latestSelected = portfolio.find(h => h.id === selected?.id) || selected;
-    const currentPrice = latestSelected ? String(latestSelected.currentPrice) : (f.price || ff.price);
-    const currentShin = (latestSelected?.financials?.shinyoBairitu) || ff.shinyoBairitu;
+    // 株価はselected.currentPrice（propsで渡されたselectedから直接取得）
+    const currentPrice = selected?.currentPrice ? String(selected.currentPrice) : (f.price || ff.price);
+    const currentShin = selected?.financials?.shinyoBairitu || ff.shinyoBairitu;
     const merged = {
       ...base,
       price: currentPrice,
@@ -884,7 +874,7 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
       depIntangible: "",
     };
     return calcAll(merged);
-  }, [periods, latestAnnual, f, ff, selected, portfolio]);
+  }, [periods, latestAnnual, f, ff, selected]);
 
 
   // WACC計算（fc定義後に配置）
@@ -1297,6 +1287,7 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
                   {fc && <th style={{ textAlign:"right", padding:"6px 10px", color:"#fbbf24", fontSize:16, minWidth:100 }}>今期予想<span style={{ display:"block", color:"#334155", fontSize:16 }}>前年比</span></th>}
                 </tr>
               </thead>
+
               <tbody>
                 {[
                   ["― 規模 ―",      null, null],
@@ -1325,44 +1316,26 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
                   ["EPS",           d => d.c.eps,           v => v?"¥"+v.toFixed(1):"—"],
                   ["1株配当",        d => n(d.f.dividend),   v => v?"¥"+v:"—"],
                 ].map(([label, getter, formatter]) => {
-                  // セクションヘッダー行
                   if (getter === null) return (
                     <tr key={label}>
-                      <td colSpan={annualData.length+1+(fc?1:0)} style={{ padding:"8px 10px", color:"#475569", fontSize:16, background:"#111827", letterSpacing:1 }}>{label}</td>
+                      <td colSpan={annualData.length+1} style={{ padding:"8px 10px", color:"#475569", fontSize:16, background:"#111827", letterSpacing:1 }}>{label}</td>
                     </tr>
                   );
-                  // 今期予想値（入力があるものだけ）
-                  const fcValMap = fc ? {
-                    "売上高":     n(periods[FORECAST_KEY]?.sales),
-                    "営業利益":   n(periods[FORECAST_KEY]?.opProfit),
-                    "当期純利益": n(periods[FORECAST_KEY]?.netProfit),
-                    "営業利益率": fc.opMargin,
-                    "純利益率":   fc.netMargin,
-                    "ROE":       fc.roe,
-                    "ROA":       fc.roa,
-                    "PER":       fc.per,
-                    "EPS":       fc.eps,
-                    "1株配当":    n(periods[FORECAST_KEY]?.dividend),
-                  } : {};
-                  const fcVal = fc ? fcValMap[label] : undefined;
                   return (
-                  <tr key={label} style={{ borderBottom:"1px solid #1e293b" }}>
-                    <td style={{ padding:"6px 10px", color:"#64748b", fontSize:16 }}>{label}</td>
-                    {annualData.map(({ key }, i) => {
-                      const cur = getter(annualData[i]);
-                      const prev = i > 0 ? getter(annualData[i-1]) : null;
-                      const chg = calcChg(cur, prev);
-                      return (
-                        <td key={key} style={{ textAlign:"right", padding:"6px 10px" }}>
-                          <div style={{ color:"#e2e8f0", fontWeight:600 }}>{formatter(cur)}</div>
-                          {i > 0 && <div style={{ color:chgColor(chg), fontSize:16 }}>{chgStr(chg)}</div>}
-                        </td>
-                      );
-                    })}
-                    {fc && (
-                      <FcCell fcVal={fcVal != null ? fcVal : null} prevVal={getter(annualData[annualData.length-1])} formatter={formatter} />
-                    )}
-                  </tr>
+                    <tr key={label} style={{ borderBottom:"1px solid #1e293b" }}>
+                      <td style={{ padding:"6px 10px", color:"#64748b", fontSize:16 }}>{label}</td>
+                      {annualData.map(({ key }, i) => {
+                        const cur = getter(annualData[i]);
+                        const prev = i > 0 ? getter(annualData[i-1]) : null;
+                        const chg = calcChg(cur, prev);
+                        return (
+                          <td key={key} style={{ textAlign:"right", padding:"6px 10px" }}>
+                            <div style={{ color:"#e2e8f0", fontWeight:600 }}>{formatter(cur)}</div>
+                            {i > 0 && <div style={{ color:chgColor(chg), fontSize:16 }}>{chgStr(chg)}</div>}
+                          </td>
+                        );
+                      })}
+                    </tr>
                   );
                 })}
               </tbody>
