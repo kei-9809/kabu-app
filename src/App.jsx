@@ -3099,24 +3099,33 @@ export default function App() {
                         {simRows().length > 0 && simRows()[0].usePsr ? (
                           <div style={{ color:"#64748b" }}>
                             <span style={{ color:"#fbbf24" }}>PSR法（赤字企業）</span>：
-                            <span style={{ color:"#e2e8f0" }}>推定株価</span> = 売上高 × 成長係数 × 目標PSR ÷ 発行済株式数
+                            推定株価 = 売上高 × 成長係数 × <span style={{ color:"#e2e8f0" }}>目標PSR</span> ÷ 発行済株式数
                           </div>
                         ) : (
                           <div style={{ color:"#64748b" }}>
                             <span style={{ color:"#4ade80" }}>PER法（黒字企業）</span>：
-                            <span style={{ color:"#e2e8f0" }}>推定株価</span> = EPS × 成長係数 × 目標PER
+                            推定株価 = EPS × 成長係数 × <span style={{ color:"#e2e8f0" }}>目標PER</span>
                           </div>
                         )}
                         <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8, marginTop:10 }}>
                           {[
-                            ["🐂 強気", "#4ade80", `成長率 ${+simParams.growthRate>=0?"+":""}${Math.round(+simParams.growthRate*(+simParams.growthRate>=0?1.6:0.4))}%`, `目標倍率×1.2`, "高成長→市場が高バリュエーション付与"],
-                            ["📊 基本", "#60a5fa", `成長率 ${+simParams.growthRate>=0?"+":""}${simParams.growthRate}%`, `目標倍率×1.0`, "入力値通りの成長"],
-                            ["🐻 弱気", "#f87171", `成長率 ${+simParams.growthRate>=0?"+":""}${Math.round(+simParams.growthRate*(+simParams.growthRate>=0?0.4:1.6))}%`, `目標倍率×0.8`, "成長鈍化→市場がバリュエーション縮小"],
-                          ].map(([label, color, growthStr, perStr, desc]) => (
+                            ["🐂 強気", "#4ade80",
+                              `成長率 ${+simParams.growthRate>=0?"+":""}${Math.round(+simParams.growthRate*(+simParams.growthRate>=0?1.6:0.4))}%`,
+                              simRows().length>0&&simRows()[0].usePsr ? `目標PSR = ${(+simParams.targetPsr*1.2).toFixed(1)}x` : `目標PER = ${(+simParams.targetPer*1.2).toFixed(1)}x`,
+                              "高成長→高いバリュエーションを適用"],
+                            ["📊 基本", "#60a5fa",
+                              `成長率 ${+simParams.growthRate>=0?"+":""}${simParams.growthRate}%`,
+                              simRows().length>0&&simRows()[0].usePsr ? `目標PSR = ${simParams.targetPsr}x` : `目標PER = ${simParams.targetPer}x`,
+                              "入力値通りの成長・バリュエーション"],
+                            ["🐻 弱気", "#f87171",
+                              `成長率 ${+simParams.growthRate>=0?"+":""}${Math.round(+simParams.growthRate*(+simParams.growthRate>=0?0.4:1.6))}%`,
+                              simRows().length>0&&simRows()[0].usePsr ? `目標PSR = ${(+simParams.targetPsr*0.8).toFixed(1)}x` : `目標PER = ${(+simParams.targetPer*0.8).toFixed(1)}x`,
+                              "成長鈍化→低いバリュエーションを適用"],
+                          ].map(([label, color, growthStr, valStr, desc]) => (
                             <div key={label} style={{ background:"#0d1424", borderRadius:6, padding:"8px 10px", borderLeft:`3px solid ${color}` }}>
                               <div style={{ color, fontWeight:700, marginBottom:4 }}>{label}</div>
                               <div style={{ color:"#94a3b8", fontSize:16 }}>{growthStr}</div>
-                              <div style={{ color:"#94a3b8", fontSize:16 }}>{perStr}</div>
+                              <div style={{ color:"#94a3b8", fontSize:16 }}>{valStr}</div>
                               <div style={{ color:"#475569", fontSize:16, marginTop:4 }}>{desc}</div>
                             </div>
                           ))}
