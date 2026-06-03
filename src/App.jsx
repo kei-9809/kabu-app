@@ -3341,8 +3341,31 @@ export default function App() {
                     ) : (
                       <div>
                         <div style={S.card}>
-                          <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:4 }}>モンテカルロシミュレーション（1,000回試行）</div>
-                          <div style={{ color:"#475569", fontSize:16, marginBottom:16 }}>成長率にランダムなブレとPERの変動を加えた{simParams.years}年後の株価分布です。</div>
+                          <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:8 }}>モンテカルロシミュレーション（1,000回試行）</div>
+                          {/* 計算説明 */}
+                          <div style={{ background:"#111827", borderRadius:8, padding:"12px 14px", marginBottom:16, fontSize:16, lineHeight:1.9 }}>
+                            <div style={{ color:"#60a5fa", fontWeight:700, marginBottom:6 }}>📐 計算方法</div>
+                            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(min(280px,100%),1fr))", gap:10 }}>
+                              <div style={{ background:"#0d1424", borderRadius:6, padding:"8px 12px" }}>
+                                <div style={{ color:"#94a3b8", marginBottom:4 }}>① 出発点</div>
+                                <div style={{ color:"#e2e8f0" }}>現在EPS（直近本決算）をスタート値とする</div>
+                              </div>
+                              <div style={{ background:"#0d1424", borderRadius:6, padding:"8px 12px" }}>
+                                <div style={{ color:"#94a3b8", marginBottom:4 }}>② 毎年EPS成長をシミュレート（{simParams.years}年間）</div>
+                                <div style={{ color:"#e2e8f0" }}>EPS × (1 + 成長率 + <span style={{ color:"#fbbf24" }}>正規乱数 × 成長率×0.5</span>)</div>
+                                <div style={{ color:"#475569", fontSize:16 }}>黄色部分がランダムな振れ幅（ボラティリティ）</div>
+                              </div>
+                              <div style={{ background:"#0d1424", borderRadius:6, padding:"8px 12px" }}>
+                                <div style={{ color:"#94a3b8", marginBottom:4 }}>③ {simParams.years}年後の株価を推定</div>
+                                <div style={{ color:"#e2e8f0" }}>最終EPS × (目標PER±<span style={{ color:"#fbbf24" }}>±30%のランダム変動</span>)</div>
+                                <div style={{ color:"#475569", fontSize:16 }}>PERのランダム変動で市場評価のばらつきを表現</div>
+                              </div>
+                              <div style={{ background:"#0d1424", borderRadius:6, padding:"8px 12px" }}>
+                                <div style={{ color:"#94a3b8", marginBottom:4 }}>④ 1,000回繰り返して分布を表示</div>
+                                <div style={{ color:"#e2e8f0" }}>現在株価¥{monteData.price?.toLocaleString()}を上回る確率: <span style={{ color: monteData.probUp >= 50 ? "#4ade80" : "#f87171", fontWeight:700 }}>{monteData.probUp.toFixed(1)}%</span></div>
+                              </div>
+                            </div>
+                          </div>
                           <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(min(140px,45vw),1fr))", gap:10, marginBottom:20 }}>
                             {[
                               ["10%ile",     monteData.p10,  "#f87171"],
