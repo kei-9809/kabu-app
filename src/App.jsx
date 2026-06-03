@@ -2261,8 +2261,12 @@ export default function App() {
       const nr = curOp > 0 ? curNet/curOp : 0.7, pn = po*nr;
       const pe = sh > 0 ? pn/(sh*1000) : 0, peb = eb*gf;
       const base = pe > 0 ? Math.round(pe*tPer) : null;
-      const bear = pe > 0 ? Math.round(pe*Math.pow(1+g*0.4,y)*tPer*0.8) : null;
-      const bull = pe > 0 ? Math.round(pe*Math.pow(1+g*1.6,y)*tPer*1.2) : null;
+      // 弱気: 成長率40%・PER80%、強気: 成長率160%・PER120%
+      // ただし成長率がマイナスの場合は弱気=悲観的（より大きな下落）に修正
+      const bearG = g >= 0 ? g * 0.4 : g * 1.6;  // 弱気成長率
+      const bullG = g >= 0 ? g * 1.6 : g * 0.4;  // 強気成長率
+      const bear = pe > 0 ? Math.round(pe * Math.pow(1+bearG, y) * tPer * 0.8) : null;
+      const bull = pe > 0 ? Math.round(pe * Math.pow(1+bullG, y) * tPer * 1.2) : null;
       const evp = tEv != null && sh > 0 ? Math.round((peb*tEv)/(sh*1000)) : null;
       const dc = simParams.reinvest ? Math.round(price*(Math.pow(1+dr,y)-1)) : Math.round(price*dr*y);
       return { year:y===0?"現在":y+"年後", base, bear, bull, evp, dc, ps:Math.round(ps), po:Math.round(po), pe:parseFloat(pe.toFixed(2)) };
@@ -3069,9 +3073,28 @@ export default function App() {
                 {simTab === "scenario" && (
                   <div>
                     <div style={S.card}>
-                      <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:4 }}>株価推定（3シナリオ）</div>
-                      <div style={{ color:"#475569", fontSize:16, marginBottom:12 }}>
-                        強気: {Math.round(+simParams.growthRate*1.6)}% / 基本: {simParams.growthRate}% / 弱気: {Math.round(+simParams.growthRate*0.4)}%
+                      <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:8 }}>株価推定（3シナリオ）</div>
+                      {/* シナリオ計算式の説明 */}
+                      <div style={{ background:"#111827", borderRadius:8, padding:"12px 14px", marginBottom:16, fontSize:16, lineHeight:1.8 }}>
+                        <div style={{ color:"#60a5fa", fontWeight:700, marginBottom:6 }}>📐 計算式</div>
+                        <div style={{ color:"#64748b" }}>
+                          <span style={{ color:"#e2e8f0" }}>予想EPS</span> = 当期純利益 ÷ 発行済株式数 &nbsp;→&nbsp;
+                          <span style={{ color:"#e2e8f0" }}>推定株価</span> = EPS × 成長係数 × 目標PER
+                        </div>
+                        <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8, marginTop:10 }}>
+                          {[
+                            ["🐂 強気", "#4ade80", `成長率 ${+simParams.growthRate>=0?"+":""}${Math.round(+simParams.growthRate*(+simParams.growthRate>=0?1.6:0.4))}%`, `目標PER × 1.2 = ${(+simParams.targetPer*1.2).toFixed(1)}x`, "楽観的な成長・バリュエーション拡大"],
+                            ["📊 基本", "#60a5fa", `成長率 ${+simParams.growthRate>=0?"+":""}${simParams.growthRate}%`, `目標PER = ${simParams.targetPer}x`, "入力値通りの成長・バリュエーション維持"],
+                            ["🐻 弱気", "#f87171", `成長率 ${+simParams.growthRate>=0?"+":""}${Math.round(+simParams.growthRate*(+simParams.growthRate>=0?0.4:1.6))}%`, `目標PER × 0.8 = ${(+simParams.targetPer*0.8).toFixed(1)}x`, "成長鈍化・バリュエーション縮小"],
+                          ].map(([label, color, growthStr, perStr, desc]) => (
+                            <div key={label} style={{ background:"#0d1424", borderRadius:6, padding:"8px 10px", borderLeft:`3px solid ${color}` }}>
+                              <div style={{ color, fontWeight:700, marginBottom:4 }}>{label}</div>
+                              <div style={{ color:"#94a3b8", fontSize:16 }}>{growthStr}</div>
+                              <div style={{ color:"#94a3b8", fontSize:16 }}>{perStr}</div>
+                              <div style={{ color:"#475569", fontSize:16, marginTop:4 }}>{desc}</div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                       <ResponsiveContainer width="100%" height={R.chartXl}>
                         <AreaChart data={simRows()}>
