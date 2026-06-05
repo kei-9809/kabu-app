@@ -2625,7 +2625,7 @@ export default function App() {
                 <div style={{ color: portfolioMode==="watchlist"?"#f59e0b":"#94a3b8", fontWeight:700, marginBottom:12 }}>
                   {portfolioMode==="watchlist" ? "👀 候補銘柄を追加" : "新規銘柄追加"}
                 </div>
-                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(min(160px,45vw),1fr))", gap:12 }}>
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:12 }}>
                   <FInput label="証券コード（例: 7203）" value={addForm.ticker} onChange={v => setAddForm(p => ({ ...p, ticker:v }))} inputType="ticker" />
                   <FInput label="銘柄名" value={addForm.name} onChange={v => setAddForm(p => ({ ...p, name:v }))} maxLen={30} />
                   <FInput label="セクター" value={addForm.sector} onChange={v => setAddForm(p => ({ ...p, sector:v }))} maxLen={20} />
