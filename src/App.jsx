@@ -1406,7 +1406,7 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
               <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:4 }}>EV/EBITDAトレンド</div>
               <div style={{ color:"#475569", fontSize:16, marginBottom:8 }}>凡例をクリックで表示/非表示</div>
               <ToggleLineChart
-                data={trendData}
+                data={trendData.filter(d => !d.isForecast)}
                 lines={[
                   { key:"EV_EBITDA", color:"#a78bfa", name:"EV/EBITDA" },
                 ]}
@@ -1428,10 +1428,7 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
               {fc && <span style={{ color:"#fbbf24" }}> ●今期予想：今期予想入力値使用。</span>}
             </div>
             <ToggleLineChart
-              data={[
-                ...trendData.filter(d => d.PER != null || d.PBR != null || d.PSR != null),
-                ...(fc ? [{ name:"今期予想", PER: fc.per ? parseFloat(fc.per.toFixed(2)) : null, PBR: null, PSR: fc.psr ? parseFloat(fc.psr.toFixed(2)) : null }] : []),
-              ]}
+              data={trendData.filter(d => d.PER != null || d.PBR != null || d.PSR != null)}
               lines={[
                 { key:"PER", color:"#60a5fa" },
                 { key:"PBR", color:"#4ade80" },
