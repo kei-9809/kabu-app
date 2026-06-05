@@ -467,7 +467,7 @@ const Sec = ({ title, children }) => (
   </div>
 );
 
-const FInput = ({ label, value, onChange, hint="", numOnly=false, inputType="text", maxLen=200 }) => {
+const FInput = ({ label, value, onChange, hint="", placeholder="", numOnly=false, inputType="text", maxLen=200 }) => {
   const handleChange = e => {
     const v = e.target.value;
     if (numOnly) { if (v === "" || v === "-" || /^-?\d*\.?\d*$/.test(v)) onChange(v); return; }
@@ -480,7 +480,7 @@ const FInput = ({ label, value, onChange, hint="", numOnly=false, inputType="tex
     <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
       <label style={{ color:"#64748b", fontSize:16 }}>{label}</label>
       <input value={value} onChange={handleChange} style={S.input}
-        placeholder={numOnly?"数値":inputType==="date"?"2025-05-08":inputType==="url"?"https://...":""}
+        placeholder={placeholder || (numOnly?"数値":inputType==="date"?"2025-05-08":inputType==="url"?"https://...":"")}
         inputMode={numOnly||inputType==="ticker"?"decimal":"text"}
       />
       {hint && <span style={{ color:"#334155", fontSize:16 }}>{hint}</span>}
@@ -2626,7 +2626,7 @@ export default function App() {
                   {portfolioMode==="watchlist" ? "👀 候補銘柄を追加" : "新規銘柄追加"}
                 </div>
                 <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:12 }}>
-                  <FInput label="証券コード（例: 7203）" value={addForm.ticker} onChange={v => setAddForm(p => ({ ...p, ticker:v }))} inputType="ticker" />
+                  <FInput label="証券コード" placeholder="例: 7203" value={addForm.ticker} onChange={v => setAddForm(p => ({ ...p, ticker:v }))} inputType="ticker" />
                   <FInput label="銘柄名" value={addForm.name} onChange={v => setAddForm(p => ({ ...p, name:v }))} maxLen={30} />
                   <FInput label="セクター" value={addForm.sector} onChange={v => setAddForm(p => ({ ...p, sector:v }))} maxLen={20} />
                   {portfolioMode !== "watchlist" && <>
