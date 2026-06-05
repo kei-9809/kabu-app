@@ -936,8 +936,10 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
   }, [waccParams, selected?.id]);
 
   const trendData = useMemo(() => {
-    const rows = annualData.map(({ label, f: fd, c: ca }, i) => {
-      const prevSales = i > 0 ? n(annualData[i-1].f.sales) : null;
+    // baseYear+1（今期年）は除外し、確定した本決算のみ使用
+    const historicalData = annualData.filter(({ key }) => key !== String(baseYear + 1));
+    const rows = historicalData.map(({ label, f: fd, c: ca }, i) => {
+      const prevSales = i > 0 ? n(historicalData[i-1].f.sales) : null;
       const curSales = n(fd.sales);
       const salesGrowth = (curSales != null && prevSales != null && prevSales > 0)
         ? parseFloat(((curSales - prevSales) / prevSales * 100).toFixed(1))
@@ -968,45 +970,34 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
         isForecast: false,
       };
     });
-
-    // 今期予想データを追加（入力があれば）
+    // 今期予想を追加（fcがある場合のみ）
     if (fc) {
-      const lastRow = rows[rows.length - 1];
-      const prevSalesForFc = lastRow ? (n(annualData[annualData.length-1].f.sales)) : null;
-      const fcSales = fc.marketCap != null ? null : null; // PSR計算用はfc内で済み
-      const fcSalesRaw = n(periods[FORECAST_KEY]?.sales) || n(annualData[annualData.length-1]?.f?.sales);
-      const fcSalesGrowth = (fcSalesRaw != null && prevSalesForFc != null && prevSalesForFc > 0)
-        ? parseFloat(((fcSalesRaw - prevSalesForFc) / prevSalesForFc * 100).toFixed(1))
+      const lastHistorical = historicalData[historicalData.length - 1];
+      const prevSalesForFc = lastHistorical ? n(lastHistorical.f.sales) : null;
+      const fcSalesVal = n(periods[FORECAST_KEY]?.sales);
+      const fcSalesGrowth = (fcSalesVal != null && prevSalesForFc != null && prevSalesForFc > 0)
+        ? parseFloat(((fcSalesVal - prevSalesForFc) / prevSalesForFc * 100).toFixed(1))
         : null;
       const fcOpMargin = fc.opMargin != null ? parseFloat((fc.opMargin*100).toFixed(1)) : null;
       const fcRule40 = (fcSalesGrowth != null && fcOpMargin != null)
-        ? parseFloat((fcSalesGrowth + fcOpMargin).toFixed(1))
-        : null;
-      const fcSalesVal = n(periods[FORECAST_KEY]?.sales);
+        ? parseFloat((fcSalesGrowth + fcOpMargin).toFixed(1)) : null;
       rows.push({
         name: "今期予想",
         売上高: fcSalesVal ? parseFloat(fmtM(fcSalesVal).replace(/[^0-9.-]/g,"")) : null,
         営業利益: n(periods[FORECAST_KEY]?.opProfit) ? parseFloat(fmtM(n(periods[FORECAST_KEY]?.opProfit)).replace(/[^0-9.-]/g,"")) : null,
         純利益: n(periods[FORECAST_KEY]?.netProfit) ? parseFloat(fmtM(n(periods[FORECAST_KEY]?.netProfit)).replace(/[^0-9.-]/g,"")) : null,
-        EBITDA: null,
-        ROE: fc.roe ? parseFloat((fc.roe*100).toFixed(1)) : null,
+        EBITDA: null, ROE: fc.roe ? parseFloat((fc.roe*100).toFixed(1)) : null,
         ROA: fc.roa ? parseFloat((fc.roa*100).toFixed(1)) : null,
-        営業利益率: fcOpMargin,
-        経常利益率: null,
+        営業利益率: fcOpMargin, 経常利益率: null,
         純利益率: fc.netMargin ? parseFloat((fc.netMargin*100).toFixed(1)) : null,
-        粗利率: null,
-        自己資本比率: null,
-        EV_EBITDA: null,
+        粗利率: null, 自己資本比率: null, EV_EBITDA: null,
         PER: fc.per ? parseFloat(fc.per.toFixed(2)) : null,
-        PBR: null,
-        PSR: fc.psr ? parseFloat(fc.psr.toFixed(2)) : null,
-        売上成長率: fcSalesGrowth,
-        Rule40: fcRule40,
-        isForecast: true,
+        PBR: null, PSR: fc.psr ? parseFloat(fc.psr.toFixed(2)) : null,
+        売上成長率: fcSalesGrowth, Rule40: fcRule40, isForecast: true,
       });
     }
     return rows;
-  }, [annualData, fc, periods]);
+  }, [annualData, fc, periods, baseYear]);
 
   const qtrData = useMemo(() => {
     return qtrKeys.map(key => {
@@ -2354,13 +2345,13 @@ export default function App() {
       return inv ? 100-s : s;
     };
     return [
-      { m:"割安(PER)",   ...Object.fromEntries(cmpStocks.map(h => [h.ticker, norm(getCmpCalc(h).per,5,40,true)])) },
-      { m:"収益性(ROE)", ...Object.fromEntries(cmpStocks.map(h => [h.ticker, norm((getCmpCalc(h).roe||0)*100,0,30)])) },
-      { m:"効率性(ROA)", ...Object.fromEntries(cmpStocks.map(h => [h.ticker, norm((getCmpCalc(h).roa||0)*100,0,15)])) },
-      { m:"利益率(営業)", ...Object.fromEntries(cmpStocks.map(h => [h.ticker, norm((getCmpCalc(h).opMargin||0)*100,0,30)])) },
-      { m:"安全性",      ...Object.fromEntries(cmpStocks.map(h => [h.ticker, norm((getCmpCalc(h).equityRatio||0)*100,0,80)])) },
-      { m:"流動性",      ...Object.fromEntries(cmpStocks.map(h => [h.ticker, norm((getCmpCalc(h).currentRatio||0)*100,0,300)])) },
-      { m:"配当",        ...Object.fromEntries(cmpStocks.map(h => [h.ticker, norm((getCmpCalc(h).dividendYield||0)*100,0,6)])) },
+      { m:"割安(PER)",   ...Object.fromEntries(cmpStocks.map(h => [h.name, norm(getCmpCalc(h).per,5,40,true)])) },
+      { m:"収益性(ROE)", ...Object.fromEntries(cmpStocks.map(h => [h.name, norm((getCmpCalc(h).roe||0)*100,0,30)])) },
+      { m:"効率性(ROA)", ...Object.fromEntries(cmpStocks.map(h => [h.name, norm((getCmpCalc(h).roa||0)*100,0,15)])) },
+      { m:"利益率(営業)", ...Object.fromEntries(cmpStocks.map(h => [h.name, norm((getCmpCalc(h).opMargin||0)*100,0,30)])) },
+      { m:"安全性",      ...Object.fromEntries(cmpStocks.map(h => [h.name, norm((getCmpCalc(h).equityRatio||0)*100,0,80)])) },
+      { m:"流動性",      ...Object.fromEntries(cmpStocks.map(h => [h.name, norm((getCmpCalc(h).currentRatio||0)*100,0,300)])) },
+      { m:"配当",        ...Object.fromEntries(cmpStocks.map(h => [h.name, norm((getCmpCalc(h).dividendYield||0)*100,0,6)])) },
     ];
   }, [cmpStocks]);
 
@@ -3006,7 +2997,7 @@ export default function App() {
                       <PolarGrid stroke="#1e293b" />
                       <PolarAngleAxis dataKey="m" tick={{ fill:"#64748b", fontSize:R.sm }} />
                       {cmpStocks.map((h, i) => (
-                        <Radar key={h.id} name={h.ticker} dataKey={h.ticker} stroke={CMP_COLORS[i]} fill={CMP_COLORS[i]} fillOpacity={0.15} strokeWidth={2} />
+                        <Radar key={h.id} name={h.name} dataKey={h.name} stroke={CMP_COLORS[i]} fill={CMP_COLORS[i]} fillOpacity={0.15} strokeWidth={2} />
                       ))}
                       <Legend wrapperStyle={{ color:"#94a3b8", fontSize:R.sm }} />
                       <Tooltip formatter={v => Math.round(v)+"点"} contentStyle={TS} itemStyle={{ color:"#e2e8f0" }} />
@@ -3029,9 +3020,7 @@ export default function App() {
                       const px = Math.min(Math.max((cm.equityRatio||0)*100,0),80)/80*85+7;
                       const py = 100-Math.min(Math.max((cm.opMargin||0)*100,0),30)/30*85-7;
                       return (
-                        <div key={h.id} style={{ position:"absolute", left:(px)+"%", top:(py)+"%", transform:"translate(-50%,-50%)", background:CMP_COLORS[i], borderRadius:"50%", width:36, height:36, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, fontWeight:700, color:"#0a0f1a", boxShadow:"0 0 12px "+(CMP_COLORS[i])+"66" }}>
-                          {h.ticker}
-                        </div>
+                        <div key={h.id} style={{ position:"absolute", left:(px)+"%", top:(py)+"%", transform:"translate(-50%,-50%)", background:CMP_COLORS[i], borderRadius:"50%", width:20, height:20, boxShadow:"0 0 12px "+(CMP_COLORS[i])+"88" }} />
                       );
                     })}
                   </div>
@@ -3046,7 +3035,7 @@ export default function App() {
                     <ResponsiveContainer width="100%" height={R.chartSm}>
                       <BarChart data={cmpStocks.map(h => {
                         const cm = getCmpCalc(h);
-                        return { name:h.ticker, ROE:parseFloat(((cm.roe||0)*100).toFixed(1)), ROA:parseFloat(((cm.roa||0)*100).toFixed(1)), ROIC:parseFloat(((cm.roic||0)*100).toFixed(1)) };
+                        return { name:h.name, ROE:parseFloat(((cm.roe||0)*100).toFixed(1)), ROA:parseFloat(((cm.roa||0)*100).toFixed(1)), ROIC:parseFloat(((cm.roic||0)*100).toFixed(1)) };
                       })}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                         <XAxis dataKey="name" tick={{ fill:"#94a3b8", fontSize:R.sm }} />
@@ -3063,7 +3052,7 @@ export default function App() {
                   <div style={S.card}>
                     <div style={{ color:"#94a3b8", fontSize:16, marginBottom:12 }}>PER比較</div>
                     <ResponsiveContainer width="100%" height={R.chartSm}>
-                      <BarChart data={cmpStocks.map(h => ({ name:h.ticker, PER:parseFloat((getCmpCalc(h).per||0).toFixed(2)) }))}>
+                      <BarChart data={cmpStocks.map(h => ({ name:h.name, PER:parseFloat((getCmpCalc(h).per||0).toFixed(2)) }))}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                         <XAxis dataKey="name" tick={{ fill:"#94a3b8", fontSize:R.sm }} />
                         <YAxis tick={{ fill:"#64748b", fontSize:R.sm }} tickFormatter={v => v+"x"} />
