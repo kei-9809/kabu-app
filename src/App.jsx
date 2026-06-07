@@ -836,6 +836,109 @@ function ScoreCriteriaEditor({ selected, R, S, onModeChange }) {
 
 
 
+// 四半期前年同期比の平均表示
+function QtrYoYAvg({ qtrData, R }) {
+  const yoyData = qtrData.map(({ f: fd }, i) => {
+    const qIdx = ["Q1","Q2","Q3","Q4"].indexOf(qtrData[i].key.split("-")[1]);
+    const curS = n(fd.sales), curO = n(fd.opProfit), curN = n(fd.netProfit);
+    const pqS = qIdx>0?n(qtrData[i-1].f.sales):null;
+    const pqO = qIdx>0?n(qtrData[i-1].f.opProfit):null;
+    const pqN = qIdx>0?n(qtrData[i-1].f.netProfit):null;
+    const sS = curS!=null?(qIdx>0&&pqS!=null?curS-pqS:curS):null;
+    const sO = curO!=null?(qIdx>0&&pqO!=null?curO-pqO:curO):null;
+    const sN = curN!=null?(qIdx>0&&pqN!=null?curN-pqN:curN):null;
+    const pi = i-4, pqi = pi>=0?["Q1","Q2","Q3","Q4"].indexOf(qtrData[pi]?.key.split("-")[1]):-1;
+    const pcS=pi>=0?n(qtrData[pi].f.sales):null;
+    const pcO=pi>=0?n(qtrData[pi].f.opProfit):null;
+    const pcN=pi>=0?n(qtrData[pi].f.netProfit):null;
+    const ppS=pi>0&&pqi>0?n(qtrData[pi-1].f.sales):null;
+    const ppO=pi>0&&pqi>0?n(qtrData[pi-1].f.opProfit):null;
+    const ppN=pi>0&&pqi>0?n(qtrData[pi-1].f.netProfit):null;
+    const psS=pcS!=null?(pqi>0&&ppS!=null?pcS-ppS:pcS):null;
+    const psO=pcO!=null?(pqi>0&&ppO!=null?pcO-ppO:pcO):null;
+    const psN=pcN!=null?(pqi>0&&ppN!=null?pcN-ppN:pcN):null;
+    const chg = (a,b) => a!=null&&b!=null&&b!==0?parseFloat(((a-b)/Math.abs(b)*100).toFixed(1)):null;
+    return { s:chg(sS,psS), o:chg(sO,psO), nt:chg(sN,psN) };
+  });
+  const avg = (key) => {
+    const vals = yoyData.map(d => d[key]).filter(v => v != null);
+    return vals.length > 0 ? (vals.reduce((a,b) => a+b, 0) / vals.length).toFixed(1) : null;
+  };
+  const avgS = avg('s'), avgO = avg('o'), avgN = avg('nt');
+  if (!avgS && !avgO && !avgN) return null;
+  return (
+    <div style={{ marginTop:12, display:"flex", gap:16, flexWrap:"wrap", alignItems:"center" }}>
+      <span style={{ color:"#475569", fontSize:R.sm }}>全期間平均：</span>
+      {avgS != null && <span style={{ color:+avgS>=0?"#4ade80":"#f87171", fontSize:R.sm }}>売上高 {+avgS>=0?"+":""}{avgS}%</span>}
+      {avgO != null && <span style={{ color:+avgO>=0?"#4ade80":"#f87171", fontSize:R.sm }}>営業利益 {+avgO>=0?"+":""}{avgO}%</span>}
+      {avgN != null && <span style={{ color:+avgN>=0?"#4ade80":"#f87171", fontSize:R.sm }}>純利益 {+avgN>=0?"+":""}{avgN}%</span>}
+    </div>
+  );
+}
+
+// 今期予想達成率ドーナツグラフ
+function DonutProgress({ periods, qtrData, baseYear, fc, S, R }) {
+  const metrics = [
+    { label:"売上高",   fcKey:"sales",     color:"#60a5fa" },
+    { label:"営業利益", fcKey:"opProfit",  color:"#4ade80" },
+    { label:"純利益",   fcKey:"netProfit", color:"#a78bfa" },
+  ];
+  // 最新本決算年の入力済み最後のQ累計値を取得
+  const latestQData = ["Q4","Q3","Q2","Q1"].map(q => {
+    return qtrData.find(d => d.key === String(baseYear)+"-"+q);
+  }).find(d => d && Object.values(d.f).some(v => v !== "" && v != null));
+
+  if (!latestQData) return null;
+  const qLabel = latestQData.key.split("-")[1];
+  const qLabelFull = { Q1:"Q1累計", Q2:"Q2累計", Q3:"Q3累計", Q4:"通期" }[qLabel];
+
+  const hasAny = metrics.some(({ fcKey }) => {
+    const fcVal = n(periods[FORECAST_KEY]?.[fcKey]);
+    return fcVal && fcVal > 0;
+  });
+  if (!hasAny) return null;
+
+  return (
+    <div style={{ ...S.card, marginBottom:16 }}>
+      <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:4 }}>今期予想達成率（{baseYear}年 {qLabelFull}時点）</div>
+      <div style={{ color:"#475569", fontSize:R.sm, marginBottom:16 }}>今期予想に対する累計進捗</div>
+      <div style={{ display:"flex", gap:24, flexWrap:"wrap", justifyContent:"center" }}>
+        {metrics.map(({ label, fcKey, color }) => {
+          const fcVal = n(periods[FORECAST_KEY]?.[fcKey]);
+          const cumVal = n(latestQData.f[fcKey]);
+          if (!fcVal || fcVal <= 0) return null;
+          const progress = cumVal != null ? cumVal / fcVal * 100 : 0;
+          const r = 38, stroke = 10, size = 96;
+          const circ = 2 * Math.PI * r;
+          const dash = circ * Math.min(progress, 100) / 100;
+          const progressColor = progress >= 100 ? "#4ade80" : progress >= 75 ? "#60a5fa" : progress >= 50 ? "#fbbf24" : "#f87171";
+          return (
+            <div key={label} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6 }}>
+              <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+                <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#1e293b" strokeWidth={stroke} />
+                <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={progressColor} strokeWidth={stroke}
+                  strokeDasharray={`${dash} ${circ}`}
+                  strokeDashoffset={circ / 4}
+                  strokeLinecap="round"
+                />
+                <text x={size/2} y={size/2-4} textAnchor="middle" fill={progressColor} fontSize={13} fontWeight="bold">
+                  {progress.toFixed(0)}%
+                </text>
+                <text x={size/2} y={size/2+10} textAnchor="middle" fill="#475569" fontSize={9}>達成</text>
+              </svg>
+              <div style={{ textAlign:"center" }}>
+                <div style={{ color:"#94a3b8", fontSize:R.sm }}>{label}</div>
+                <div style={{ color:"#e2e8f0", fontSize:R.sm }}>{cumVal != null ? fmtM(cumVal) : "—"}</div>
+                <div style={{ color:"#334155", fontSize:R.sm }}>予想: {fmtM(fcVal)}</div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R, TS }) {
   const [metricsView, setMetricsView] = useState("current");
   const [openId, setOpenId] = useState(null);
@@ -1571,6 +1674,12 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
               ※ 達成率は今期予想（累計）に対する各四半期末時点の累計進捗率
             </div>}
           </div>
+
+          {/* 今期予想達成率ドーナツグラフ */}
+          {fc && (
+            <DonutProgress periods={periods} qtrData={qtrData} baseYear={baseYear} fc={fc} S={S} R={R_CURRENT} />
+          )}
+
           <div style={{ ...S.card, background:"#0a1628", border:"1px solid #1e3a5f", marginBottom:16 }}>
             <div style={{ color:"#60a5fa", fontSize:R_CURRENT.sm }}>
               📌 入力値は<strong>累計値</strong>です。Q1=第1四半期累計、Q2=上半期累計、Q3=第3四半期累計、Q4=通期。
@@ -1657,6 +1766,37 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
                 { key:"売上高前年比",   color:"#60a5fa" },
                 { key:"営業利益前年比", color:"#4ade80" },
                 { key:"純利益前年比",   color:"#a78bfa" },
+              ]}
+              yFormatter={v => v+"%"}
+              tooltipFormatter={v => v+"%"}
+              height={R_CURRENT.chartMd}
+              refLines={[{ y:0, label:"0%", color:"#475569" }]}
+              TS={TS}
+            />
+            <QtrYoYAvg qtrData={qtrData} R={R_CURRENT} />
+          </div>
+
+          {/* 利益率推移グラフ */}
+          <div style={S.card}>
+            <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:4 }}>四半期利益率推移</div>
+            <div style={{ color:"#475569", fontSize:R_CURRENT.sm, marginBottom:12 }}>四半期単体ベース。凡例をクリックで表示/非表示</div>
+            <ToggleLineChart
+              data={qtrData.map(({ label, f: fd }, i) => {
+                const qIdx = ["Q1","Q2","Q3","Q4"].indexOf(qtrData[i].key.split("-")[1]);
+                const curS = n(fd.sales), curO = n(fd.opProfit), curN = n(fd.netProfit);
+                const pqS = qIdx>0?n(qtrData[i-1].f.sales):null;
+                const pqO = qIdx>0?n(qtrData[i-1].f.opProfit):null;
+                const pqN = qIdx>0?n(qtrData[i-1].f.netProfit):null;
+                const sS = curS!=null?(qIdx>0&&pqS!=null?curS-pqS:curS):null;
+                const sO = curO!=null?(qIdx>0&&pqO!=null?curO-pqO:curO):null;
+                const sN = curN!=null?(qIdx>0&&pqN!=null?curN-pqN:curN):null;
+                const opM = sS!=null&&sO!=null&&sS!==0 ? parseFloat((sO/sS*100).toFixed(1)) : null;
+                const netM = sS!=null&&sN!=null&&sS!==0 ? parseFloat((sN/sS*100).toFixed(1)) : null;
+                return { name:label, 営業利益率:opM, 純利益率:netM };
+              })}
+              lines={[
+                { key:"営業利益率", color:"#4ade80" },
+                { key:"純利益率",   color:"#a78bfa" },
               ]}
               yFormatter={v => v+"%"}
               tooltipFormatter={v => v+"%"}
