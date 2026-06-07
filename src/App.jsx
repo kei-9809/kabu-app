@@ -1512,7 +1512,7 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
       {metricsView === "qtr" && (
         <div>
           <div style={{ ...S.card, overflowX:"auto", marginBottom:16 }}>
-            <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:4 }}>四半期単体（前年同期比付き）</div>
+            <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:4 }}>四半期単体（前年同期比・今期予想達成率付き）</div>
             <div style={{ color:"#475569", fontSize:R_CURRENT.sm, marginBottom:12 }}>累計値から四半期単体値を算出。Q1=Q1累計、Q2=Q2累計−Q1累計、Q3=Q3累計−Q2累計、Q4=通期−Q3累計。</div>
             <table style={{ width:"100%", borderCollapse:"collapse", fontSize:R_CURRENT.sm }}>
               <thead>
@@ -1525,39 +1525,52 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
               </thead>
               <tbody>
                 {[
-                  ["売上高",   d => n(d.f.sales),    v => fmtM(v)],
-                  ["営業利益", d => n(d.f.opProfit),  v => fmtM(v)],
-                  ["純利益",   d => n(d.f.netProfit), v => fmtM(v)],
-                ].map(([label, getter, formatter]) => (
+                  ["売上高",   d => n(d.f.sales),    v => fmtM(v), "sales"],
+                  ["営業利益", d => n(d.f.opProfit),  v => fmtM(v), "opProfit"],
+                  ["純利益",   d => n(d.f.netProfit), v => fmtM(v), "netProfit"],
+                ].map(([label, getter, formatter, fcKey]) => {
+                  // 今期予想値
+                  const fcVal = n(periods[FORECAST_KEY]?.[fcKey]);
+                  return (
                   <tr key={label} style={{ borderBottom:"1px solid #1e293b" }}>
                     <td style={{ padding:"6px 8px", color:"#64748b" }}>{label}</td>
                     {qtrData.map(({ key }, i) => {
                       const cumVal = getter(qtrData[i]);
-                      // 同年の前Qの累計値を取得（Q1は前Qなし）
                       const qIdx = ["Q1","Q2","Q3","Q4"].indexOf(key.split("-")[1]);
                       const prevQIdx = i - 1;
                       const prevQSameYear = qIdx > 0 ? getter(qtrData[prevQIdx]) : null;
-                      // 四半期単体値 = 累計 - 前Q累計
                       const singleVal = prevQSameYear != null && cumVal != null ? cumVal - prevQSameYear : cumVal;
-                      // 前年同期の単体値
                       const prevYrCum = i >= 4 ? getter(qtrData[i-4]) : null;
                       const prevYrPrevQCum = i >= 4 && qIdx > 0 ? getter(qtrData[i-5]) : null;
                       const prevYrSingle = prevYrCum != null ? (prevYrPrevQCum != null ? prevYrCum - prevYrPrevQCum : prevYrCum) : null;
                       const chg = calcChg(singleVal, prevYrSingle);
+                      // 最新年の累計達成率（今期予想に対して）
+                      const yr = key.split("-")[0];
+                      const isCurrentYr = yr === String(baseYear);
+                      const cumProgress = (isCurrentYr && fcVal && cumVal != null && fcVal > 0)
+                        ? (cumVal / fcVal * 100)
+                        : null;
                       return (
                         <td key={key} style={{ textAlign:"right", padding:"6px 8px" }}>
                           <div style={{ color:"#e2e8f0" }}>{singleVal != null ? formatter(singleVal) : "—"}</div>
                           {prevYrSingle != null && <div style={{ color:chgColor(chg), fontSize:R_CURRENT.sm }}>{chgStr(chg)}</div>}
+                          {cumProgress != null && (
+                            <div style={{ color: cumProgress >= 100 ? "#4ade80" : cumProgress >= 75 ? "#60a5fa" : cumProgress >= 50 ? "#fbbf24" : "#94a3b8", fontSize:R_CURRENT.sm, marginTop:1 }}>
+                              累計{cumProgress.toFixed(0)}%
+                            </div>
+                          )}
                         </td>
                       );
                     })}
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
+            {fc && <div style={{ marginTop:8, fontSize:R_CURRENT.sm, color:"#475569" }}>
+              ※ 達成率は今期予想（累計）に対する各四半期末時点の累計進捗率
+            </div>}
           </div>
-
-          {/* 四半期推移グラフ */}
           <div style={{ ...S.card, background:"#0a1628", border:"1px solid #1e3a5f", marginBottom:16 }}>
             <div style={{ color:"#60a5fa", fontSize:R_CURRENT.sm }}>
               📌 入力値は<strong>累計値</strong>です。Q1=第1四半期累計、Q2=上半期累計、Q3=第3四半期累計、Q4=通期。
@@ -1900,7 +1913,7 @@ function InputTab({ selected, periods, updatePeriod, baseYear, annualKeys, qtrKe
                   <div style={{ color:"#fbbf24", fontWeight:700, marginBottom:4 }}>{activeQtrYear}年 {q}</div>
                   <div style={{ color:"#475569", fontSize:R_CURRENT.sm, marginBottom:12 }}>{qLabel}</div>
                   <div style={{ display:"grid", gridTemplateColumns:"1fr", gap:10 }}>
-                    {PERIOD_FIELDS.filter(f2 => ["price","shares","sales","opProfit","netProfit","totalAssets","equity"].includes(f2.key)).map(({ label, key: fk }) => (
+                    {PERIOD_FIELDS.filter(f2 => ["sales","opProfit","netProfit"].includes(f2.key)).map(({ label, key: fk }) => (
                       <div key={fk} style={{ display:"flex", alignItems:"center", gap:8 }}>
                         <label style={{ color:"#64748b", fontSize:R_CURRENT.sm, minWidth:120, flexShrink:0 }}>{label}</label>
                         <input
