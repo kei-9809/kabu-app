@@ -33,6 +33,13 @@ function calcAll(f) {
   const depIntangible = n(f.depIntangible);
   const taxExp = n(f.taxExp); // 法人税等
   const intExp = n(f.intExp); // 支払利息
+  // 有利子負債 = 短期借入金 + 長期借入金 + 社債
+  const shortDebt = n(f.shortDebt);
+  const longDebt  = n(f.longDebt);
+  const bonds     = n(f.bonds);
+  const interestBearingDebt = (shortDebt != null || longDebt != null || bonds != null)
+    ? (shortDebt||0) + (longDebt||0) + (bonds||0)
+    : null; // 未入力時はnull（固定負債で近似）
 
   // EBITDA自動計算
   const ebitdaManual = n(f.ebitda);
@@ -45,10 +52,14 @@ function calcAll(f) {
     : 0.30;
   // NOPAT = 営業利益 × (1 - 実効税率)
   const nopat = op != null ? op * (1 - taxRate) : null;
-  const ic = ta != null && cl != null ? ta - cl : null;
 
-  // 借入金利自動計算 = 支払利息 ÷ 固定負債（有利子負債の近似）
-  const kdAuto = (intExp != null && fl != null && fl > 0) ? intExp / fl : null;
+  // 投下資本（IC）= 純資産 + 有利子負債（未入力時は固定負債で近似）
+  const icDebt = interestBearingDebt != null ? interestBearingDebt : fl;
+  const ic = eq != null && icDebt != null ? eq + icDebt : null;
+
+  // 借入金利自動計算 = 支払利息 ÷ 有利子負債（未入力時は固定負債で近似）
+  const debtForKd = interestBearingDebt != null ? interestBearingDebt : fl;
+  const kdAuto = (intExp != null && debtForKd != null && debtForKd > 0) ? intExp / debtForKd : null;
 
   const marketCap = price != null && shares != null ? price * shares * 1000 : null;
   const netDebt = ta != null && eq != null && ca != null ? (ta - eq) - ca : null;
@@ -57,11 +68,11 @@ function calcAll(f) {
   const bps = eq != null && shares > 0 ? eq / (shares * 1000) : null;
   return {
     marketCap, ev, eps, bps, ebitda, ebitdaCalc, depTangible, depIntangible,
-    taxRate, nopat, kdAuto,
+    taxRate, nopat, kdAuto, interestBearingDebt,
     grossMargin: safe(gp, sales), opMargin: safe(op, sales), ordMargin: safe(ord, sales),
     netMargin: safe(net, sales),
     roe: safe(net, eq), roa: safe(ord, ta),
-    roic: safe(nopat, ic), // NOPATベースに変更
+    roic: safe(nopat, ic),
     currentRatio: safe(ca, cl), fixedRatio: safe(fa, eq),
     fixedLTRatio: fa != null && eq != null && fl != null && (eq + fl) !== 0 ? fa / (eq + fl) : null,
     equityRatio: safe(eq, ta), debtRatio: ta != null && eq != null && eq !== 0 ? (ta - eq) / eq : null,
@@ -343,7 +354,7 @@ const DESC = {
   "EV/EBITDA":{ title:"EV/EBITDA倍率", formula:"EV / EBITDA", what:"企業買収コストを何年で回収できるか。国際比較に適した指標。", judge:"10倍未満:割安 / 20倍超:割高目安", note:"EV=時価総額+純有利子負債。" },
   "ROE":{ title:"ROE（自己資本利益率）", formula:"純利益 / 自己資本", what:"株主出資額でどれだけ利益を生んだか。", judge:"15%超:優良 / 5%未満:要注意", note:"ROE8%超がJPX指針の要求水準。" },
   "ROA":{ title:"ROA（総資産利益率）", formula:"経常利益 / 総資産", what:"全資産でどれだけ利益を生んだか。経営効率の総合指標。", judge:"5%超:優良 / 1%未満:要注意", note:"業種により水準が大きく異なる。" },
-  "ROIC":{ title:"ROIC（投下資本利益率）", formula:"NOPAT / (純資産 + 固定負債)\nNOPAT = 営業利益 × (1 - 実効税率)\n実効税率 = 法人税等 / 経常利益", what:"事業に投下した資本でどれだけ利益を生んだか。WACCと比較して価値創造を判断。", judge:"8%超:優良 / 5%未満:要注意", note:"固定負債≒有利子負債の近似。法人税等を入力するとより正確な値になります（未入力時は税率30%）。" },
+  "ROIC":{ title:"ROIC（投下資本利益率）", formula:"NOPAT / (純資産 + 有利子負債)\nNOPAT = 営業利益 × (1 - 実効税率)\n有利子負債 = 短期借入金 + 長期借入金 + 社債\n※未入力時は固定負債で近似", what:"事業に投下した資本でどれだけ利益を生んだか。WACCと比較して価値創造を判断。", judge:"8%超:優良 / 5%未満:要注意", note:"短期借入金・長期借入金・社債を入力するとより正確な値になります。" },
   "粗利率":{ title:"粗利率", formula:"売上総利益 / 売上高", what:"製品・サービスそのものの収益性。原価を除いた利益率。", judge:"40%超:高付加価値 / 20%未満:薄利多売", note:"IT・ソフト系は60〜80%、製造業は20〜40%が目安。" },
   "営業利益率":{ title:"営業利益率", formula:"営業利益 / 売上高", what:"本業で稼いだ利益率。販管費差引後の収益力。", judge:"10%超:優良 / 3%未満:要注意", note:"継続的な改善トレンドも重要。" },
   "経常利益率":{ title:"経常利益率", formula:"経常利益 / 売上高", what:"財務活動も含めた通常の経営活動の利益率。", judge:"営業利益率との乖離が大きい場合は財務構造を確認", note:"経常>営業なら財務健全。逆なら借入コスト大。" },
@@ -609,6 +620,9 @@ const PERIOD_FIELDS = [
   { label:"固定資産（円）",          key:"fixAssets" },
   { label:"流動負債（円）",          key:"curLiab" },
   { label:"固定負債（円）",          key:"fixLiab" },
+  { label:"短期借入金（円）",        key:"shortDebt",     hint:"流動負債のうち利息付き借入金" },
+  { label:"長期借入金（円）",        key:"longDebt",      hint:"固定負債のうち銀行借入" },
+  { label:"社債（円）",             key:"bonds",         hint:"固定負債のうち社債" },
   { label:"減価償却費（円）",        key:"depTangible",   hint:"有形固定資産の減価償却費" },
   { label:"償却費（円）",            key:"depIntangible", hint:"無形固定資産・のれん等" },
   { label:"法人税等（円）",           key:"taxExp",        hint:"P/Lの法人税・住民税・事業税 ※ROIC計算に使用" },
