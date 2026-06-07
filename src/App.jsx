@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import React from "react";
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line,
@@ -343,7 +343,7 @@ const DESC = {
   "EV/EBITDA":{ title:"EV/EBITDA倍率", formula:"EV / EBITDA", what:"企業買収コストを何年で回収できるか。国際比較に適した指標。", judge:"10倍未満:割安 / 20倍超:割高目安", note:"EV=時価総額+純有利子負債。" },
   "ROE":{ title:"ROE（自己資本利益率）", formula:"純利益 / 自己資本", what:"株主出資額でどれだけ利益を生んだか。", judge:"15%超:優良 / 5%未満:要注意", note:"ROE8%超がJPX指針の要求水準。" },
   "ROA":{ title:"ROA（総資産利益率）", formula:"経常利益 / 総資産", what:"全資産でどれだけ利益を生んだか。経営効率の総合指標。", judge:"5%超:優良 / 1%未満:要注意", note:"業種により水準が大きく異なる。" },
-  "ROIC":{ title:"ROIC（投下資本利益率）", formula:"【正確】NOPAT / (純資産 + 有利子負債)\n【概算・当アプリ】営業利益×(1-実効税率) / (純資産+固定負債)\n実効税率 = 法人税等 / 経常利益（未入力時は30%）", what:"事業に投下した資本でどれだけ利益を生んだか。", judge:"8%超:優良 / 5%未満:要注意", note:"法人税等を入力するとより正確な値になります。固定負債≒有利子負債の近似。" },
+  "ROIC":{ title:"ROIC（投下資本利益率）", formula:"NOPAT / (純資産 + 固定負債)\nNOPAT = 営業利益 × (1 - 実効税率)\n実効税率 = 法人税等 / 経常利益", what:"事業に投下した資本でどれだけ利益を生んだか。WACCと比較して価値創造を判断。", judge:"8%超:優良 / 5%未満:要注意", note:"固定負債≒有利子負債の近似。法人税等を入力するとより正確な値になります（未入力時は税率30%）。" },
   "粗利率":{ title:"粗利率", formula:"売上総利益 / 売上高", what:"製品・サービスそのものの収益性。原価を除いた利益率。", judge:"40%超:高付加価値 / 20%未満:薄利多売", note:"IT・ソフト系は60〜80%、製造業は20〜40%が目安。" },
   "営業利益率":{ title:"営業利益率", formula:"営業利益 / 売上高", what:"本業で稼いだ利益率。販管費差引後の収益力。", judge:"10%超:優良 / 3%未満:要注意", note:"継続的な改善トレンドも重要。" },
   "経常利益率":{ title:"経常利益率", formula:"経常利益 / 売上高", what:"財務活動も含めた通常の経営活動の利益率。", judge:"営業利益率との乖離が大きい場合は財務構造を確認", note:"経常>営業なら財務健全。逆なら借入コスト大。" },
@@ -429,14 +429,27 @@ const Delta = ({ val, fmt = v => v.toFixed(2) }) => (
   </span>
 );
 
-const MBox = ({ label, value, color="#94a3b8", hint="", badge="" }) => {
-  const [open, setOpen] = useState(false);
+const MBox = ({ label, value, color="#94a3b8", hint="", badge="", openId, setOpenId }) => {
   const desc = DESC[label];
+  const open = openId === label;
+  const toggle = () => desc && setOpenId(open ? null : label);
+
+  // 枠外クリックで閉じる
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpenId(null);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open, setOpenId]);
+
   return (
-    <div style={{ background:"#111827", borderRadius:8, padding:"14px 18px", position:"relative" }}>
+    <div ref={ref} style={{ background:"#111827", borderRadius:8, padding:"14px 18px", position:"relative" }}>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
         <span style={{ color:"#475569", fontSize:16, cursor:desc?"pointer":"default", display:"flex", alignItems:"center", gap:4 }}
-          onClick={() => desc && setOpen(v => !v)}>
+          onClick={toggle}>
           {label}
           {desc && <span style={{ color:"#334155", fontSize:16, background:"#1e293b", borderRadius:"50%", width:14, height:14, display:"inline-flex", alignItems:"center", justifyContent:"center" }}>?</span>}
         </span>
@@ -445,12 +458,12 @@ const MBox = ({ label, value, color="#94a3b8", hint="", badge="" }) => {
       <div style={{ color, fontWeight:700, fontSize:16, marginTop:3 }}>{value}</div>
       {hint && <div style={{ color:"#334155", fontSize:16, marginTop:2 }}>{hint}</div>}
       {open && desc && (
-        <div style={{ position:"absolute", zIndex:200, top:"100%", left:0, marginTop:4, width:280, background:"#0d1424", border:"1px solid #334155", borderRadius:10, padding:"14px 16px", boxShadow:"0 8px 32px rgba(0,0,0,0.8)" }}>
+        <div style={{ position:"absolute", zIndex:200, top:"100%", left:0, marginTop:4, width:300, background:"#0d1424", border:"1px solid #334155", borderRadius:10, padding:"14px 16px", boxShadow:"0 8px 32px rgba(0,0,0,0.8)" }}>
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
             <span style={{ color:"#f1f5f9", fontWeight:700, fontSize:16 }}>{desc.title}</span>
-            <button onClick={() => setOpen(false)} style={{ background:"none", border:"none", color:"#64748b", cursor:"pointer", fontSize:18, lineHeight:1 }}>x</button>
+            <button onClick={() => setOpenId(null)} style={{ background:"none", border:"none", color:"#64748b", cursor:"pointer", fontSize:18, lineHeight:1 }}>×</button>
           </div>
-          <div style={{ background:"#111827", borderRadius:6, padding:"6px 10px", marginBottom:8, fontSize:16, color:"#60a5fa", fontFamily:"monospace" }}>{desc.formula}</div>
+          <div style={{ background:"#111827", borderRadius:6, padding:"6px 10px", marginBottom:8, fontSize:16, color:"#60a5fa", fontFamily:"monospace", whiteSpace:"pre-wrap" }}>{desc.formula}</div>
           <div style={{ fontSize:16, color:"#cbd5e1", marginBottom:8, lineHeight:1.7 }}>{desc.what}</div>
           <div style={{ fontSize:16, color:"#94a3b8", marginBottom:6, padding:"6px 8px", background:"#111827", borderRadius:6, lineHeight:1.6 }}>{desc.judge}</div>
           {desc.note && <div style={{ fontSize:16, color:"#64748b", lineHeight:1.6 }}>{desc.note}</div>}
@@ -808,6 +821,7 @@ function ScoreCriteriaEditor({ selected, R, S, onModeChange }) {
 
 function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R, TS }) {
   const [metricsView, setMetricsView] = useState("current");
+  const [openId, setOpenId] = useState(null);
   const [waccParams, setWaccParams] = useState(() => {
     try {
       const d = localStorage.getItem("kabulens_wacc_"+(selected?.id||""));
@@ -1029,27 +1043,27 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
             </div>
           )}
           <Sec title="株価指標(実績)">
-            <MBox label="PER" value={cc.per?xfmt(cc.per):"—"} color={cc.per&&cc.per<15?"#4ade80":cc.per&&cc.per<25?"#fbbf24":"#f87171"} hint="15倍未満が割安" badge={cc.per&&cc.per<15?"割安":""} />
-            <MBox label="PBR" value={cc.pbr?xfmt(cc.pbr):"—"} color={cc.pbr&&cc.pbr<1.5?"#4ade80":"#94a3b8"} hint="1倍以下は解散価値割れ" />
-            <MBox label="PSR" value={cc.psr?xfmt(cc.psr):"—"} color={cc.psr&&cc.psr<2?"#4ade80":"#94a3b8"} />
+            <MBox label="PER" value={cc.per?xfmt(cc.per):"—"} color={cc.per&&cc.per<15?"#4ade80":cc.per&&cc.per<25?"#fbbf24":"#f87171"} hint="15倍未満が割安" badge={cc.per&&cc.per<15?"割安":""}  openId={openId} setOpenId={setOpenId}/>
+            <MBox label="PBR" value={cc.pbr?xfmt(cc.pbr):"—"} color={cc.pbr&&cc.pbr<1.5?"#4ade80":"#94a3b8"} hint="1倍以下は解散価値割れ"  openId={openId} setOpenId={setOpenId}/>
+            <MBox label="PSR" value={cc.psr?xfmt(cc.psr):"—"} color={cc.psr&&cc.psr<2?"#4ade80":"#94a3b8"}  openId={openId} setOpenId={setOpenId}/>
             <MBox label="信用倍率" value={ff.shinyoBairitu?ff.shinyoBairitu+"倍":"—"} color={n(ff.shinyoBairitu)>3?"#f87171":"#94a3b8"} hint="高いと将来売り圧力" />
             <MBox label="配当利回り" value={cc.dividendYield?pct(cc.dividendYield):"—"} color={cc.dividendYield&&cc.dividendYield>0.03?"#4ade80":"#94a3b8"} />
-            <MBox label="配当性向" value={cc.payoutRatio?pct(cc.payoutRatio):"—"} color="#94a3b8" hint="30〜50%が健全" />
-            <MBox label="時価総額" value={cc.marketCap?fmtM(cc.marketCap):"—"} color="#e2e8f0" />
+            <MBox label="配当性向" value={cc.payoutRatio?pct(cc.payoutRatio):"—"} color="#94a3b8" hint="30〜50%が健全"  openId={openId} setOpenId={setOpenId}/>
+            <MBox label="時価総額" value={cc.marketCap?fmtM(cc.marketCap):"—"} color="#e2e8f0"  openId={openId} setOpenId={setOpenId}/>
           </Sec>
           {fc && (
             <Sec title="株価指標(今期予想)">
-              <MBox label="予想PER" value={fc.per?xfmt(fc.per):"—"} color={fc.per&&fc.per<15?"#4ade80":fc.per&&fc.per<25?"#fbbf24":"#f87171"} hint="今期予想純利益ベース" badge={fc.per&&fc.per<15?"割安":""} />
-              <MBox label="予想PSR" value={fc.psr?xfmt(fc.psr):"—"} color={fc.psr&&fc.psr<2?"#4ade80":"#94a3b8"} hint="今期予想売上高ベース" />
+              <MBox label="予想PER" value={fc.per?xfmt(fc.per):"—"} color={fc.per&&fc.per<15?"#4ade80":fc.per&&fc.per<25?"#fbbf24":"#f87171"} hint="今期予想純利益ベース" badge={fc.per&&fc.per<15?"割安":""}  openId={openId} setOpenId={setOpenId}/>
+              <MBox label="予想PSR" value={fc.psr?xfmt(fc.psr):"—"} color={fc.psr&&fc.psr<2?"#4ade80":"#94a3b8"} hint="今期予想売上高ベース"  openId={openId} setOpenId={setOpenId}/>
               <MBox label="予想配当利回り" value={fc.dividendYield?pct(fc.dividendYield):"—"} color={fc.dividendYield&&fc.dividendYield>0.03?"#4ade80":"#94a3b8"} hint="今期予想配当ベース" />
               <MBox label="予想営業利益率" value={fc.opMargin?pct(fc.opMargin):"—"} color={fc.opMargin&&fc.opMargin>0.10?"#4ade80":"#94a3b8"} hint="今期予想営業利益ベース" />
             </Sec>
           )}
           <Sec title="キャッシュ指標">
-            <MBox label="EBITDA(実績)" value={cc.ebitda?fmtM(cc.ebitda):"—"} color="#60a5fa" hint="営業利益+減価償却費+償却費" />
-            <MBox label="EV/EBITDA(実績)" value={cc.evEbitda?xfmt(cc.evEbitda):"—"} color={cc.evEbitda&&cc.evEbitda<10?"#4ade80":"#94a3b8"} hint="10倍未満が割安" />
-            {cc.depTangible != null && <MBox label="減価償却費" value={fmtM(cc.depTangible)} color="#94a3b8" />}
-            {cc.depIntangible != null && <MBox label="償却費" value={fmtM(cc.depIntangible)} color="#94a3b8" />}
+            <MBox label="EBITDA(実績)" value={cc.ebitda?fmtM(cc.ebitda):"—"} color="#60a5fa" hint="営業利益+減価償却費+償却費"  openId={openId} setOpenId={setOpenId}/>
+            <MBox label="EV/EBITDA(実績)" value={cc.evEbitda?xfmt(cc.evEbitda):"—"} color={cc.evEbitda&&cc.evEbitda<10?"#4ade80":"#94a3b8"} hint="10倍未満が割安"  openId={openId} setOpenId={setOpenId}/>
+            {cc.depTangible != null && <MBox label="減価償却費" value={fmtM(cc.depTangible)} color="#94a3b8"  openId={openId} setOpenId={setOpenId}/>}
+            {cc.depIntangible != null && <MBox label="償却費" value={fmtM(cc.depIntangible)} color="#94a3b8"  openId={openId} setOpenId={setOpenId}/>}
           </Sec>
           <Sec title="収益性・資本効率">
             <MBox label="ROE" value={cc.roe?pct(cc.roe):"—"} color={cc.roe&&cc.roe>0.15?"#4ade80":"#94a3b8"} hint="15%超で優良" />
@@ -1057,7 +1071,7 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
             <MBox label="ROIC" value={cc.roic?pct(cc.roic):"—"} color={cc.roic&&cc.roic>0.08?"#4ade80":"#94a3b8"} hint={cc.taxRate!=null?"実効税率"+((cc.taxRate*100).toFixed(1))+"%で計算":"税率30%で計算（法人税等未入力）"} />
             <MBox label="粗利率" value={cc.grossMargin?pct(cc.grossMargin):"—"} color={cc.grossMargin&&cc.grossMargin>0.40?"#4ade80":"#94a3b8"} />
             <MBox label="営業利益率" value={cc.opMargin?pct(cc.opMargin):"—"} color={cc.opMargin&&cc.opMargin>0.10?"#4ade80":"#94a3b8"} hint="10%超で優良" />
-            <MBox label="経常利益率" value={cc.ordMargin?pct(cc.ordMargin):"—"} color="#94a3b8" />
+            <MBox label="経常利益率" value={cc.ordMargin?pct(cc.ordMargin):"—"} color="#94a3b8"  openId={openId} setOpenId={setOpenId}/>
           </Sec>
 
           {/* Rule of 40 セクション */}
@@ -1117,8 +1131,8 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
           <Sec title="安全性">
             <MBox label="自己資本比率" value={cc.equityRatio?pct(cc.equityRatio):"—"} color={cc.equityRatio&&cc.equityRatio>0.40?"#4ade80":"#94a3b8"} hint="40%超が安全" />
             <MBox label="流動比率" value={cc.currentRatio?pct(cc.currentRatio):"—"} color={cc.currentRatio&&cc.currentRatio>2?"#4ade80":cc.currentRatio&&cc.currentRatio>1?"#fbbf24":"#f87171"} hint="200%超が理想" />
-            <MBox label="固定比率" value={cc.fixedRatio?pct(cc.fixedRatio):"—"} color={cc.fixedRatio&&cc.fixedRatio<1?"#4ade80":"#94a3b8"} hint="100%以下が望ましい" />
-            <MBox label="固定長期適合率" value={cc.fixedLTRatio?pct(cc.fixedLTRatio):"—"} color={cc.fixedLTRatio&&cc.fixedLTRatio<1?"#4ade80":"#f87171"} hint="100%以下が望ましい" />
+            <MBox label="固定比率" value={cc.fixedRatio?pct(cc.fixedRatio):"—"} color={cc.fixedRatio&&cc.fixedRatio<1?"#4ade80":"#94a3b8"} hint="100%以下が望ましい"  openId={openId} setOpenId={setOpenId}/>
+            <MBox label="固定長期適合率" value={cc.fixedLTRatio?pct(cc.fixedLTRatio):"—"} color={cc.fixedLTRatio&&cc.fixedLTRatio<1?"#4ade80":"#f87171"} hint="100%以下が望ましい"  openId={openId} setOpenId={setOpenId}/>
           </Sec>
 
           {/* スコア評価基準カスタマイズ */}
