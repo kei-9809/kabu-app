@@ -883,9 +883,10 @@ function DonutProgress({ periods, qtrData, baseYear, fc, S, R }) {
     { label:"営業利益", fcKey:"opProfit",  color:"#4ade80" },
     { label:"純利益",   fcKey:"netProfit", color:"#a78bfa" },
   ];
-  // 最新本決算年の入力済み最後のQ累計値を取得
+  // 今期年（baseYear+1）の入力済み最後のQ累計値を取得
+  const currentYr = baseYear + 1;
   const latestQData = ["Q4","Q3","Q2","Q1"].map(q => {
-    return qtrData.find(d => d.key === String(baseYear)+"-"+q);
+    return qtrData.find(d => d.key === String(currentYr)+"-"+q);
   }).find(d => d && Object.values(d.f).some(v => v !== "" && v != null));
 
   if (!latestQData) return null;
@@ -900,7 +901,7 @@ function DonutProgress({ periods, qtrData, baseYear, fc, S, R }) {
 
   return (
     <div style={{ ...S.card, marginBottom:16 }}>
-      <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:4 }}>今期予想達成率（{baseYear}年 {qLabelFull}時点）</div>
+      <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:4 }}>今期予想達成率（{currentYr}年 {qLabelFull}時点）</div>
       <div style={{ color:"#475569", fontSize:R.sm, marginBottom:16 }}>今期予想に対する累計進捗</div>
       <div style={{ display:"flex", gap:24, flexWrap:"wrap", justifyContent:"center" }}>
         {metrics.map(({ label, fcKey, color }) => {
@@ -1647,9 +1648,9 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
                       const prevYrPrevQCum = i >= 4 && qIdx > 0 ? getter(qtrData[i-5]) : null;
                       const prevYrSingle = prevYrCum != null ? (prevYrPrevQCum != null ? prevYrCum - prevYrPrevQCum : prevYrCum) : null;
                       const chg = calcChg(singleVal, prevYrSingle);
-                      // 最新年の累計達成率（今期予想に対して）
+                      // 今期年（baseYear+1）の累計達成率（今期予想に対して）
                       const yr = key.split("-")[0];
-                      const isCurrentYr = yr === String(baseYear);
+                      const isCurrentYr = yr === String(baseYear + 1);
                       const cumProgress = (isCurrentYr && fcVal && cumVal != null && fcVal > 0)
                         ? (cumVal / fcVal * 100)
                         : null;
