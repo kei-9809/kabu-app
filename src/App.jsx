@@ -632,15 +632,27 @@ const FInput = ({ label, value, onChange, hint="", placeholder="", numOnly=false
     const v = e.target.value;
     if (numOnly) { if (v === "" || v === "-" || /^-?\d*\.?\d*$/.test(v)) onChange(v); return; }
     if (inputType === "ticker") { if (/^\d{0,5}$/.test(v)) onChange(v); return; }
-    if (inputType === "date") { if (/^[\d-]{0,10}$/.test(v)) onChange(v); return; }
+    if (inputType === "date") { onChange(v); return; }
     if (inputType === "url") { if (!/\s/.test(v)) onChange(v.slice(0, 300)); return; }
     onChange(v.slice(0, maxLen));
   };
+  // date は type="date" のネイティブinputを使用（カレンダーUI・日付以外入力不可）
+  if (inputType === "date") {
+    return (
+      <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
+        <label style={{ color:"#64748b", fontSize:16 }}>{label}</label>
+        <input type="date" value={value||""} onChange={handleChange}
+          style={{ ...S.input, colorScheme:"dark" }}
+        />
+        {hint && <span style={{ color:"#334155", fontSize:16 }}>{hint}</span>}
+      </div>
+    );
+  }
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
       <label style={{ color:"#64748b", fontSize:16 }}>{label}</label>
       <input value={value} onChange={handleChange} style={S.input}
-        placeholder={placeholder || (numOnly?"数値":inputType==="date"?"2025-05-08":inputType==="url"?"https://...":"")}
+        placeholder={placeholder || (numOnly?"数値":inputType==="url"?"https://...":"")}
         inputMode={numOnly||inputType==="ticker"?"decimal":"text"}
       />
       {hint && <span style={{ color:"#334155", fontSize:16 }}>{hint}</span>}
