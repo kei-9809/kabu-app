@@ -4006,8 +4006,8 @@ export default function App() {
                           <XAxis dataKey="year" tick={{ fill:"#94a3b8", fontSize:R.sm }} />
                           <YAxis tick={{ fill:"#64748b", fontSize:R.sm }} tickFormatter={v => v?.toLocaleString()} />
                           <Tooltip formatter={v => v?"¥"+v?.toLocaleString():"—"} contentStyle={TS} itemStyle={{ color:"#e2e8f0" }} />
-                          <ReferenceLine y={n(f.price)||selected.currentPrice} stroke="#f59e0b" strokeDasharray="4 4" label={{ value:"現在株価", fill:"#f59e0b", fontSize:16 }} />
-                          <ReferenceLine y={selected.avgCost} stroke="#a78bfa" strokeDasharray="4 4" label={{ value:"取得単価", fill:"#a78bfa", fontSize:16 }} />
+                          <ReferenceLine y={n(f.price)||(selected||watchSelected)?.currentPrice} stroke="#f59e0b" strokeDasharray="4 4" label={{ value:"現在株価", fill:"#f59e0b", fontSize:16 }} />
+                          {(selected||watchSelected)?.avgCost > 0 && <ReferenceLine y={(selected||watchSelected).avgCost} stroke="#a78bfa" strokeDasharray="4 4" label={{ value:"取得単価", fill:"#a78bfa", fontSize:16 }} />}
                           <Legend wrapperStyle={{ color:"#94a3b8", fontSize:R.sm }} />
                           <Area type="monotone" dataKey="bull" stroke="#4ade80" strokeWidth={2} fill="url(#gbull)" name="強気" />
                           <Area type="monotone" dataKey="base" stroke="#60a5fa" strokeWidth={2} fill="url(#gbase)" name="基本" />
@@ -4019,10 +4019,11 @@ export default function App() {
 
                     <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(min(200px,45vw),1fr))", gap:12, marginBottom:16 }}>
                       {[["bull","強気","#4ade80"],["base","基本","#60a5fa"],["bear","弱気","#f87171"]].map(([key, label, color]) => {
+                        const simTarget = selected || watchSelected;
                         const rows = simRowsData;
                         const last = rows[rows.length-1]?.[key];
-                        const breakY = rows.findIndex(r => r[key] && r[key] > selected.avgCost);
-                        const cagr = last && selected.currentPrice > 0 ? ((Math.pow(last/selected.currentPrice, 1/(+simParams.years||1))-1)*100).toFixed(1) : null;
+                        const breakY = rows.findIndex(r => r[key] && r[key] > (simTarget?.avgCost||0));
+                        const cagr = last && simTarget?.currentPrice > 0 ? ((Math.pow(last/simTarget.currentPrice, 1/(+simParams.years||1))-1)*100).toFixed(1) : null;
                         return (
                           <div key={key} style={{ background:"#111827", border:"1px solid "+(color)+"33", borderRadius:8, padding:"12px 16px" }}>
                             <div style={{ color, fontWeight:700, marginBottom:8 }}>{label}シナリオ</div>
