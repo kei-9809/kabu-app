@@ -284,10 +284,141 @@ function scoreFromPeriods(h, globalBaseYear) {
 
 const LS_KEY = "kabulens_v2";
 const LS_WATCH = "kabulens_watch_v1";
+const LS_TRADES = "kabulens_trades_v1";
+
+const loadTrades = () => { try { const d = localStorage.getItem(LS_TRADES); return d ? JSON.parse(d) : []; } catch { return []; } };
+const saveTrades = t => { try { localStorage.setItem(LS_TRADES, JSON.stringify(t)); } catch {} };
+
+// 銘柄の財務スナップショットを計算（売却時保存用・CRITERIA_METAの全指標）
+const calcSnapshot = (h, baseYear) => {
+  const sb = getStockBaseYear(h, baseYear);
+  const hPeriods = h.periods || {};
+  let fd = hPeriods[String(sb)] || {};
+  if (!Object.values(fd).some(v => v !== "" && v != null)) {
+    const prev = [String(sb-1), String(sb-2)].map(yr => hPeriods[yr]||{}).find(d => Object.values(d).some(v => v !== "" && v != null));
+    fd = prev || {};
+  }
+  const fMerged = { ...fd, price: String(h.currentPrice) };
+  const c = calcAll(fMerged);
+  const prevFd = hPeriods[String(sb-1)] || {};
+  const curSales = n(fd.sales), prevSales = n(prevFd.sales);
+  const curOp = n(fd.opProfit), prevOp = n(prevFd.opProfit);
+  const salesGrowth = curSales && prevSales && prevSales > 0
+    ? (curSales - prevSales) / prevSales * 100 : null;
+  const opGrowth = curOp != null && prevOp != null && prevOp > 0
+    ? (curOp - prevOp) / prevOp * 100 : null;
+  const opMarginPct = c.opMargin != null ? c.opMargin * 100 : null;
+  const rule40 = salesGrowth != null && opMarginPct != null ? salesGrowth + opMarginPct : null;
+  // スナップショットはCRITERIA_METAのscaleに合わせた値で保存
+  // scale:100の指標（ROE等）は%値で保存、scale:1（PER等）はそのまま
+  return {
+    per:          c.per,
+    pbr:          c.pbr,
+    psr:          c.psr,
+    roe:          c.roe != null ? c.roe * 100 : null,       // %
+    opMargin:     opMarginPct,                               // %
+    roa:          c.roa != null ? c.roa * 100 : null,       // %
+    rule40,
+    grossMargin:  c.grossMargin != null ? c.grossMargin * 100 : null, // %
+    spread:       h.waccSpread != null ? parseFloat(h.waccSpread) * 100 : null, // %
+    evEbitda:     c.evEbitda,
+    equityRatio:  c.equityRatio != null ? c.equityRatio * 100 : null, // %
+    currentRatio: c.currentRatio != null ? c.currentRatio * 100 : null, // %
+    salesGrowth,
+    opGrowth,
+  };
+};
 const LS_CUSTOM_CRITERIA = "kabulens_custom_criteria";
 const LS_SCORE_MODE = "kabulens_score_mode";
 
 const DEFAULT_SIM_PARAMS = { years:"5", growthRate:"15", targetMargin:"15", targetPer:"20", targetPsr:"5", targetEvEbitda:"", dividendRate:"2", reinvest:true };
+
+const MEMO_TEMPLATES = {
+  growth: `【ビジネスモデル】
+□ 何で稼いでいるか（SaaS/プロダクト/サービス）
+□ 収益モデルはストック型かフロー型か
+□ 顧客単価・解約率（チャーン）の傾向
+参照: IR資料・決算説明会資料
+
+【市場・成長性】
+□ TAM（市場規模）はどのくらいか
+□ 国内シェア・海外展開の可能性
+□ 市場成長率 vs 自社成長率の比較
+参照: 中期経営計画・業界レポート
+
+【競合優位性（モート）】
+□ ネットワーク効果はあるか
+□ スイッチングコストは高いか
+□ 特許・技術的差別化要因
+□ ブランド・顧客ロイヤルティ
+参照: 有価証券報告書（事業リスク）・競合他社比較
+
+【経営陣・組織】
+□ 創業者orプロ経営者か
+□ インサイダー保有比率は高いか
+□ 過去の言動と実績の一致度
+参照: コーポレートガバナンス報告書・役員一覧
+
+【リスク要因】
+□ 赤字継続リスク・資金調達の必要性
+□ 主要顧客集中リスク
+□ 競合の参入・価格競争リスク
+□ 規制・法律リスク
+参照: 有価証券報告書（リスク情報）
+
+【割安判断の根拠】
+□ PEGレシオ（目安1倍未満）:
+□ 過去PSRレンジとの比較:
+□ 同業他社PSR比較:
+□ 買いの条件（どのPSRまで許容するか）:
+
+【買い根拠・売り条件】
+買い根拠:
+売り条件（ストップロス・利確ライン）:
+次の決算確認ポイント:`,
+
+  value: `【ビジネスモデル】
+□ 主力事業とセグメント構成
+□ 収益の安定性・景気敏感度
+□ キャッシュフロー創出力
+参照: 有価証券報告書・決算短信
+
+【市場・業界環境】
+□ 業界の成熟度（成長期/成熟期/衰退期）
+□ セクターのカタリスト（金利・規制・需要サイクル）
+□ 同業他社との比較（シェア・収益性）
+参照: 業界団体レポート・競合他社IR
+
+【競合優位性（モート）】
+□ コスト優位性はあるか
+□ 規模の経済・参入障壁
+□ 顧客との長期関係・契約
+参照: 有価証券報告書（事業の概況）
+
+【経営陣・株主還元】
+□ ROE・ROICの改善トレンド
+□ 自社株買い・増配の実績
+□ 資本効率改善への意識
+参照: 株主還元方針・コーポレートガバナンス
+
+【リスク要因】
+□ 業績悪化トリガー（金利・為替・原材料）
+□ 構造的衰退リスク
+□ 財務レバレッジ・有利子負債水準
+参照: 有価証券報告書（リスク情報）
+
+【割安判断の根拠】
+□ 現在PER vs 過去5年レンジ:
+□ 現在PBR vs 過去5年レンジ:
+□ 同業他社PER比較:
+□ 株価下落の理由（一時的か構造的か）:
+□ 回復カタリスト:
+
+【買い根拠・売り条件】
+買い根拠:
+売り条件（ストップロス・利確ライン）:
+次の確認ポイント（決算・イベント）:`,
+};
 const loadSimParams = (id) => {
   try { const d = localStorage.getItem("kabulens_sim_"+id); return d ? JSON.parse(d) : null; } catch { return null; }
 };
@@ -354,6 +485,8 @@ const DESC = {
   "EV/EBITDA":{ title:"EV/EBITDA倍率", formula:"EV / EBITDA", what:"企業買収コストを何年で回収できるか。国際比較に適した指標。", judge:"10倍未満:割安 / 20倍超:割高目安", note:"EV=時価総額+純有利子負債。" },
   "ROE":{ title:"ROE（自己資本利益率）", formula:"純利益 / 自己資本", what:"株主出資額でどれだけ利益を生んだか。", judge:"15%超:優良 / 5%未満:要注意", note:"ROE8%超がJPX指針の要求水準。" },
   "ROA":{ title:"ROA（総資産利益率）", formula:"経常利益 / 総資産", what:"全資産でどれだけ利益を生んだか。経営効率の総合指標。", judge:"5%超:優良 / 1%未満:要注意", note:"業種により水準が大きく異なる。" },
+  "PEGレシオ":{ title:"PEGレシオ", formula:"PER ÷ 売上成長率(%)", what:"成長性を考慮した割安指標。PERだけでは高く見える成長株でも、成長率が高ければ割安と判断できる。GARPスタイルの投資家が重視。", judge:"1倍未満:割安 / 1〜2倍:適正 / 2倍超:割高", note:"一般に成長率は過去1年の売上成長率を使用。成長率が低い成熟企業には不向き。" },
+  "予想PEGレシオ":{ title:"予想PEGレシオ", formula:"予想PER ÷ 予想売上成長率(%)", what:"今期予想ベースのPEGレシオ。将来の成長を織り込んだ割安度の判断に使う。", judge:"1倍未満:割安 / 1〜2倍:適正 / 2倍超:割高", note:"予想売上高の入力が必要。" },
   "ROIC":{ title:"ROIC（投下資本利益率）", formula:"NOPAT / (純資産 + 有利子負債)\nNOPAT = 営業利益 × (1 - 実効税率)\n有利子負債 = 短期借入金 + 長期借入金 + 社債\n※未入力時は固定負債で近似", what:"事業に投下した資本でどれだけ利益を生んだか。WACCと比較して価値創造を判断。", judge:"8%超:優良 / 5%未満:要注意", note:"短期借入金・長期借入金・社債を入力するとより正確な値になります。" },
   "粗利率":{ title:"粗利率", formula:"売上総利益 / 売上高", what:"製品・サービスそのものの収益性。原価を除いた利益率。", judge:"40%超:高付加価値 / 20%未満:薄利多売", note:"IT・ソフト系は60〜80%、製造業は20〜40%が目安。" },
   "営業利益率":{ title:"営業利益率", formula:"営業利益 / 売上高", what:"本業で稼いだ利益率。販管費差引後の収益力。", judge:"10%超:優良 / 3%未満:要注意", note:"継続的な改善トレンドも重要。" },
@@ -710,6 +843,19 @@ function ScoreBadge({ sc, stockId, large }) {
   );
 }
 
+// 売買記録から生成した買い推奨・売り推奨基準の読み込みボタン
+function LoadSnapshotButtons({ setCustomCriteria, setUpdatedAt, S }) {
+  const loadCriteria = key => { try { const d = localStorage.getItem(key); return d ? JSON.parse(d) : null; } catch { return null; } };
+  const buyCriteria = loadCriteria("kabulens_snapshot_criteria_buy");
+  const sellCriteria = loadCriteria("kabulens_snapshot_criteria_sell");
+  return (
+    <>
+      {buyCriteria && <button style={{ ...S.miniBtn, color:"#4ade80", borderColor:"#4ade80" }} onClick={() => { setCustomCriteria(buyCriteria); setUpdatedAt(buyCriteria.updatedAt||""); }}>🟢 買い推奨基準</button>}
+      {sellCriteria && <button style={{ ...S.miniBtn, color:"#f87171", borderColor:"#f87171" }} onClick={() => { setCustomCriteria(sellCriteria); setUpdatedAt(sellCriteria.updatedAt||""); }}>🔴 売り推奨（警戒）基準</button>}
+    </>
+  );
+}
+
 // スコア評価基準カスタマイズコンポーネント
 function ScoreCriteriaEditor({ selected, R, S, onModeChange }) {
   const [show, setShow] = useState(false);
@@ -792,6 +938,7 @@ function ScoreCriteriaEditor({ selected, R, S, onModeChange }) {
             <button style={S.miniBtn} onClick={() => handlePreset("value")}>バリュー基準を読み込む</button>
             <button style={S.miniBtn} onClick={() => handlePreset("growth")}>グロース基準を読み込む</button>
             <button style={S.miniBtn} onClick={() => { setCustomCriteria(DEFAULT_CRITERIA); setUpdatedAt(DEFAULT_CRITERIA.updatedAt); }}>標準基準を読み込む</button>
+            <LoadSnapshotButtons setCustomCriteria={setCustomCriteria} setUpdatedAt={setUpdatedAt} S={S} />
           </div>
           {["割安性","収益性","成長性","資本効率","健全性"].map(cat => (
             <div key={cat} style={{ marginBottom:16 }}>
@@ -835,6 +982,27 @@ function ScoreCriteriaEditor({ selected, R, S, onModeChange }) {
 }
 
 
+
+// PEGレシオ表示用コンポーネント
+function PEGBox({ per, periods, baseYear, ff, isForecast, FORECAST_KEY }) {
+  const prevFd = periods[String(baseYear-1)] || {};
+  const prevSales = n(prevFd.sales);
+  const curSales = isForecast
+    ? (n(periods[FORECAST_KEY]?.sales) || n(ff.sales))
+    : n(ff.sales);
+  const sg = (curSales && prevSales && prevSales > 0)
+    ? (curSales - prevSales) / prevSales * 100 : null;
+  const peg = per && sg && sg > 0 ? parseFloat((per/sg).toFixed(2)) : null;
+  const label = isForecast ? "予想PEGレシオ" : "PEGレシオ";
+  const hintBase = isForecast ? "予想PER" : "PER";
+  return (
+    <MBox label={label} value={peg ? peg+"x" : "—"}
+      color={peg==null?"#94a3b8":peg<1?"#4ade80":peg<2?"#fbbf24":"#f87171"}
+      hint={peg!=null ? hintBase+"÷売上成長率("+sg.toFixed(1)+"%)" : "成長率データ不足"}
+      badge={peg&&peg<1?"割安":""}
+    />
+  );
+}
 
 // 四半期前年同期比の平均表示
 function QtrYoYAvg({ qtrData, R }) {
@@ -1167,6 +1335,7 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
             <MBox label="PER" value={cc.per?xfmt(cc.per):"—"} color={cc.per&&cc.per<15?"#4ade80":cc.per&&cc.per<25?"#fbbf24":"#f87171"} hint="15倍未満が割安" badge={cc.per&&cc.per<15?"割安":""}/>
             <MBox label="PBR" value={cc.pbr?xfmt(cc.pbr):"—"} color={cc.pbr&&cc.pbr<1.5?"#4ade80":"#94a3b8"} hint="1倍以下は解散価値割れ"/>
             <MBox label="PSR" value={cc.psr?xfmt(cc.psr):"—"} color={cc.psr&&cc.psr<2?"#4ade80":"#94a3b8"}/>
+            <PEGBox per={cc.per} periods={periods} baseYear={baseYear} ff={ff} isForecast={false} FORECAST_KEY={FORECAST_KEY} />
             <MBox label="信用倍率" value={ff.shinyoBairitu?ff.shinyoBairitu+"倍":"—"} color={n(ff.shinyoBairitu)>3?"#f87171":"#94a3b8"} hint="高いと将来売り圧力" />
             <MBox label="配当利回り" value={cc.dividendYield?pct(cc.dividendYield):"—"} color={cc.dividendYield&&cc.dividendYield>0.03?"#4ade80":"#94a3b8"} />
             <MBox label="配当性向" value={cc.payoutRatio?pct(cc.payoutRatio):"—"} color="#94a3b8" hint="30〜50%が健全"/>
@@ -1175,6 +1344,7 @@ function MetricsTab({ c, f, selected, periods, baseYear, annualKeys, qtrKeys, R,
           {fc && (
             <Sec title="株価指標(今期予想)">
               <MBox label="予想PER" value={fc.per?xfmt(fc.per):"—"} color={fc.per&&fc.per<15?"#4ade80":fc.per&&fc.per<25?"#fbbf24":"#f87171"} hint="今期予想純利益ベース" badge={fc.per&&fc.per<15?"割安":""}/>
+              <PEGBox per={fc.per} periods={periods} baseYear={baseYear} ff={ff} isForecast={true} FORECAST_KEY={FORECAST_KEY} />
               <MBox label="予想PSR" value={fc.psr?xfmt(fc.psr):"—"} color={fc.psr&&fc.psr<2?"#4ade80":"#94a3b8"} hint="今期予想売上高ベース"/>
               <MBox label="予想配当利回り" value={fc.dividendYield?pct(fc.dividendYield):"—"} color={fc.dividendYield&&fc.dividendYield>0.03?"#4ade80":"#94a3b8"} hint="今期予想配当ベース" />
               <MBox label="予想営業利益率" value={fc.opMargin?pct(fc.opMargin):"—"} color={fc.opMargin&&fc.opMargin>0.10?"#4ade80":"#94a3b8"} hint="今期予想営業利益ベース" />
@@ -2116,6 +2286,420 @@ function WatchDetail({ watchSelected, watchlist, baseYear, annualKeys, qtrKeys, 
   );
 }
 
+// 財務スナップショット分析・評価基準改善提案
+function SnapshotAnalysis({ closed, S, R }) {
+  const withSnap = closed.filter(t => t.snapshot);
+  const wins = withSnap.filter(t => t.efficiency >= 4.2);
+  const losses = withSnap.filter(t => t.efficiency < -4.2);
+  if (withSnap.length < 3) return null;
+
+  const avg = (arr, key) => {
+    const vals = arr.map(t => t.snapshot[key]).filter(v => v != null && !isNaN(v));
+    return vals.length > 0 ? vals.reduce((a,b) => a+b, 0) / vals.length : null;
+  };
+  const fmt = (v, unit) => v != null ? parseFloat(v.toFixed(1)) + unit : "—";
+
+  const METRICS = CRITERIA_META.map(m => ({ key:m.key, label:m.label, unit:m.unit, dir:m.dir }));
+
+  const analysis = METRICS.map(m => {
+    const wAvg = avg(wins, m.key);
+    const lAvg = avg(losses, m.key);
+    const meaningful = wAvg != null && lAvg != null && Math.abs(wAvg - lAvg) > 0.5;
+    const isGood = m.dir === "gt" ? (wAvg != null && wAvg > (lAvg||0)) : (wAvg != null && wAvg < (lAvg||Infinity));
+    return { ...m, wAvg, lAvg, meaningful, isGood };
+  }).filter(m => m.wAvg != null || m.lAvg != null);
+
+  const [applied, setApplied] = useState({ buy:false, sell:false });
+
+  const buildAndSave = (sourceAvgFn, role, key) => {
+    const newCriteria = { ...DEFAULT_CRITERIA, updatedAt: new Date().toISOString().slice(0,10) };
+    analysis.forEach(m => {
+      const srcVal = sourceAvgFn(m);
+      if (srcVal == null || !newCriteria[m.key]) return;
+      const def = DEFAULT_CRITERIA[m.key];
+      if (!def) return;
+      const meta = CRITERIA_META.find(cm => cm.key === m.key);
+      const scale = meta?.scale || 1;
+      const greatRaw = parseFloat((srcVal / scale).toFixed(4));
+      const goodRaw = role === "buy"
+        ? (m.dir === "gt" ? parseFloat((greatRaw * 0.8).toFixed(4)) : parseFloat((greatRaw * 1.2).toFixed(4)))
+        : (m.dir === "gt" ? parseFloat((greatRaw * 1.2).toFixed(4)) : parseFloat((greatRaw * 0.8).toFixed(4)));
+      newCriteria[m.key] = { ...def, great: greatRaw, good: goodRaw };
+    });
+    try { localStorage.setItem(key, JSON.stringify(newCriteria)); } catch {}
+  };
+
+  const applyBuy = () => {
+    if (wins.length < 2) { alert("成功・大成功の記録が2件以上必要です"); return; }
+    if (!window.confirm("成功・大成功(" + wins.length + "件)の平均指標を買い推奨カスタム基準として保存しますか？")) return;
+    buildAndSave(m => m.wAvg, "buy", "kabulens_snapshot_criteria_buy");
+    setApplied(p => ({ ...p, buy:true }));
+    alert("買い推奨カスタム基準を保存しました。\n各銘柄の評価基準でカスタムモードを選ぶと反映されます。");
+  };
+
+  const applySell = () => {
+    if (losses.length < 2) { alert("失敗・大失敗の記録が2件以上必要です"); return; }
+    if (!window.confirm("失敗・大失敗(" + losses.length + "件)の平均指標を売り推奨（警戒）カスタム基準として保存しますか？")) return;
+    buildAndSave(m => m.lAvg, "sell", "kabulens_snapshot_criteria_sell");
+    setApplied(p => ({ ...p, sell:true }));
+    alert("売り推奨（警戒）カスタム基準を保存しました。");
+  };
+
+  return (
+    <div style={{ ...S.card, marginTop:16 }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:8, marginBottom:4 }}>
+        <div style={{ color:"#94a3b8", fontWeight:700 }}>財務指標分析（成功vs失敗）</div>
+        <span style={{ color:"#334155", fontSize:R.sm }}>🟢+🔵成功: {wins.length}件 / 🟡+🔴失敗: {losses.length}件</span>
+      </div>
+      <div style={{ color:"#475569", fontSize:R.sm, marginBottom:12 }}>
+        売却時に保存した財務スナップショットの平均値。
+        <span style={{ color:"#4ade80" }}> 🟢成功平均</span>が買い推奨の目安、
+        <span style={{ color:"#f87171" }}> 🔴失敗平均</span>が警戒ラインの目安です。
+      </div>
+      <div style={{ overflowX:"auto", marginBottom:12 }}>
+        <table style={{ width:"100%", borderCollapse:"collapse", fontSize:R.sm }}>
+          <thead>
+            <tr style={{ borderBottom:"1px solid #1e293b" }}>
+              {["指標","🟢 成功平均","🔴 失敗平均","差","示唆"].map(h => (
+                <th key={h} style={{ textAlign:h==="指標"?"left":"right", padding:"6px 10px", color:"#475569" }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {analysis.map(m => {
+              const diff = m.wAvg != null && m.lAvg != null ? m.wAvg - m.lAvg : null;
+              const diffStr = diff != null ? (diff >= 0 ? "+" : "") + diff.toFixed(1) + m.unit : "—";
+              const diffColor = m.isGood ? "#4ade80" : "#f87171";
+              const hint = !m.meaningful ? "差が小さい"
+                : m.isGood ? (m.dir === "gt" ? "高いほど成功↑" : "低いほど成功↑")
+                : (m.dir === "gt" ? "低すぎると失敗↑" : "高いと失敗↑");
+              return (
+                <tr key={m.key} style={{ borderBottom:"1px solid #1e293b" }}>
+                  <td style={{ padding:"6px 10px", color:"#94a3b8" }}>{m.label}</td>
+                  <td style={{ textAlign:"right", padding:"6px 10px", color:"#4ade80", fontWeight:600 }}>{fmt(m.wAvg, m.unit)}</td>
+                  <td style={{ textAlign:"right", padding:"6px 10px", color:"#f87171" }}>{fmt(m.lAvg, m.unit)}</td>
+                  <td style={{ textAlign:"right", padding:"6px 10px", color:m.meaningful?diffColor:"#334155" }}>{diffStr}</td>
+                  <td style={{ textAlign:"right", padding:"6px 10px", color:m.meaningful?diffColor:"#334155", fontSize:R.sm }}>{hint}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+        <div style={{ background:"#0d1a0d", border:"1px solid #4ade8044", borderRadius:8, padding:"10px 14px" }}>
+          <div style={{ color:"#4ade80", fontWeight:700, marginBottom:4, fontSize:R.sm }}>🟢 買い推奨基準に反映</div>
+          <div style={{ color:"#475569", fontSize:R.sm, marginBottom:8 }}>成功・大成功の平均指標を「優良」基準に設定</div>
+          <button style={{ ...S.addBtn, width:"100%" }} onClick={applyBuy}>買い推奨カスタム基準を保存</button>
+          {applied.buy && <div style={{ color:"#4ade80", fontSize:R.sm, marginTop:4 }}>✓ 保存済み</div>}
+        </div>
+        <div style={{ background:"#1a0d0d", border:"1px solid #f8717144", borderRadius:8, padding:"10px 14px" }}>
+          <div style={{ color:"#f87171", fontWeight:700, marginBottom:4, fontSize:R.sm }}>🔴 売り推奨（警戒）基準に反映</div>
+          <div style={{ color:"#475569", fontSize:R.sm, marginBottom:8 }}>失敗・大失敗の平均指標を警戒ラインに設定</div>
+          <button style={{ ...S.miniBtn, color:"#f87171", borderColor:"#f87171", width:"100%" }} onClick={applySell}>売り推奨カスタム基準を保存</button>
+          {applied.sell && <div style={{ color:"#f87171", fontSize:R.sm, marginTop:4 }}>✓ 保存済み</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── 売買記録タブ ─────────────────────────────────────────────────────────────
+function TradesTab({ trades, saveTrades, portfolio, watchlist, S, R }) {
+  const emptyForm = { ticker:"", name:"", sector:"", style:"growth", firstBuyDate:"", buyDate:"", buyPrice:"", sellDate:"", sellPrice:"", qty:"", scoreAtBuy:"", memo:"" };
+  const [form, setForm] = useState(emptyForm);
+  const [showForm, setShowForm] = useState(false);
+  const [view, setView] = useState("dashboard"); // dashboard | list
+
+  const allStocks = [...portfolio, ...watchlist];
+
+  // 損益率・保有月数・時間効率スコア計算
+  const calcTrade = t => {
+    const pnlPct = t.buyPrice && t.sellPrice ? (t.sellPrice - t.buyPrice) / t.buyPrice * 100 : null;
+    const days = t.buyDate && t.sellDate
+      ? Math.max(1, Math.round((new Date(t.sellDate) - new Date(t.buyDate)) / 86400000))
+      : null;
+    const months = days ? Math.max(0.1, days / 30) : null;
+    // 時間効率スコア = 損益率 / 保有月数（月利換算）
+    const efficiency = pnlPct != null && months ? parseFloat((pnlPct / months).toFixed(2)) : null;
+    // 成功判定（月利ベース・目標: 1〜2年で2倍）
+    // 🟢大成功: 月利8.3%以上（1年で2倍ペース）
+    // 🔵成功:   月利4.2%以上8.3%未満（2年で2倍ペース）
+    // ⚪イーブン: 月利-4.2%以上4.2%未満
+    // 🟡失敗:   月利-8.3%以上-4.2%未満
+    // 🔴大失敗: 月利-8.3%未満
+    const result = efficiency == null ? null
+      : efficiency >= 8.3  ? "大成功"
+      : efficiency >= 4.2  ? "成功"
+      : efficiency >= -4.2 ? "イーブン"
+      : efficiency >= -8.3 ? "失敗"
+      : "大失敗";
+    return { ...t, pnlPct, days, months, efficiency, result };
+  };
+
+  const enriched = trades.map(calcTrade);
+
+  const addTrade = () => {
+    if (!form.ticker || !form.buyDate || !form.buyPrice) { alert("銘柄コード・買い日・買値は必須です"); return; }
+    const newTrade = { ...form, id: Date.now().toString(), buyPrice:+form.buyPrice, sellPrice:form.sellPrice?+form.sellPrice:null, qty:form.qty?+form.qty:null, scoreAtBuy:form.scoreAtBuy?+form.scoreAtBuy:null };
+    saveTrades([newTrade, ...trades]);
+    setForm(emptyForm);
+    setShowForm(false);
+  };
+
+  const deleteTrade = id => {
+    if (!window.confirm("削除しますか？")) return;
+    saveTrades(trades.filter(t => t.id !== id));
+  };
+
+  // ダッシュボード統計
+  const closed = enriched.filter(t => t.sellDate && t.pnlPct != null);
+  const wins = closed.filter(t => t.efficiency >= 4.2);
+  const winRate = closed.length > 0 ? (wins.length / closed.length * 100).toFixed(0) : null;  // 月利4.2%以上の達成率
+  const avgPnl = closed.length > 0 ? (closed.reduce((a,b) => a+b.pnlPct, 0) / closed.length).toFixed(1) : null;
+  const avgMonths = closed.filter(t=>t.months).length > 0 ? (closed.filter(t=>t.months).reduce((a,b)=>a+b.months,0)/closed.filter(t=>t.months).length).toFixed(1) : null;
+  const avgEff = closed.filter(t=>t.efficiency).length > 0 ? (closed.filter(t=>t.efficiency).reduce((a,b)=>a+b.efficiency,0)/closed.filter(t=>t.efficiency).length).toFixed(2) : null;
+
+  // セクター別集計
+  const bySector = {};
+  closed.forEach(t => {
+    if (!t.sector) return;
+    if (!bySector[t.sector]) bySector[t.sector] = { wins:0, total:0, pnlSum:0 };
+    bySector[t.sector].total++;
+    bySector[t.sector].pnlSum += t.pnlPct;
+    if (t.efficiency >= 4.2) bySector[t.sector].wins++;
+  });
+
+  // スタイル別集計
+  const byStyle = { growth:{ wins:0, total:0, pnlSum:0 }, value:{ wins:0, total:0, pnlSum:0 } };
+  closed.forEach(t => {
+    const s = t.style === "value" ? "value" : "growth";
+    byStyle[s].total++;
+    byStyle[s].pnlSum += t.pnlPct;
+    if (t.efficiency >= 4.2) byStyle[s].wins++;
+  });
+
+  const pnlColor = v => v > 0 ? "#4ade80" : v < 0 ? "#f87171" : "#94a3b8";
+
+  return (
+    <div>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16, flexWrap:"wrap", gap:8 }}>
+        <h2 style={S.h2}>売買記録</h2>
+        <div style={{ display:"flex", gap:8 }}>
+          <button style={{ ...S.navBtn, ...(view==="dashboard"?S.navOn:{}) }} onClick={() => setView("dashboard")}>📊 ダッシュボード</button>
+          <button style={{ ...S.navBtn, ...(view==="list"?S.navOn:{}) }} onClick={() => setView("list")}>📋 記録一覧</button>
+          <button style={{ ...S.addBtn }} onClick={() => setShowForm(v => !v)}>+ 記録追加</button>
+        </div>
+      </div>
+
+      {/* 追加フォーム */}
+      {showForm && (
+        <div style={{ ...S.card, marginBottom:16 }}>
+          <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:12 }}>売買記録を追加</div>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(min(160px,45vw),1fr))", gap:12, marginBottom:12 }}>
+            <div>
+              <label style={{ color:"#64748b", fontSize:R.sm, display:"block", marginBottom:3 }}>証券コード *</label>
+              <input value={form.ticker} onChange={e => {
+                const v = e.target.value;
+                setForm(p => ({ ...p, ticker:v }));
+                const match = allStocks.find(h => h.ticker === v);
+                if (match) setForm(p => ({ ...p, ticker:v, name:match.name, sector:match.sector||p.sector }));
+              }} style={S.input} placeholder="例: 3915" inputMode="numeric" />
+            </div>
+            <FInput label="銘柄名" value={form.name} onChange={v => setForm(p=>({...p,name:v}))} />
+            <FInput label="セクター" value={form.sector} onChange={v => setForm(p=>({...p,sector:v}))} />
+            <div>
+              <label style={{ color:"#64748b", fontSize:R.sm, display:"block", marginBottom:3 }}>スタイル</label>
+              <div style={{ display:"flex", gap:6 }}>
+                {[["growth","📈 グロース","#4ade80"],["value","💎 バリュー","#60a5fa"]].map(([k,label,color]) => (
+                  <button key={k} style={{ ...S.miniBtn, flex:1, ...(form.style===k?{color,borderColor:color,background:color+"22"}:{}) }} onClick={() => setForm(p=>({...p,style:k}))}>{label}</button>
+                ))}
+              </div>
+            </div>
+            <FInput label="初回取得日" value={form.firstBuyDate} onChange={v => setForm(p=>({...p,firstBuyDate:v}))} inputType="date" />
+            <FInput label="買い日 *" value={form.buyDate} onChange={v => setForm(p=>({...p,buyDate:v}))} inputType="date" />
+            <FInput label="買値（円）*" value={form.buyPrice} onChange={v => setForm(p=>({...p,buyPrice:v}))} numOnly={true} />
+            <FInput label="売り日" value={form.sellDate} onChange={v => setForm(p=>({...p,sellDate:v}))} inputType="date" />
+            <FInput label="売値（円）" value={form.sellPrice} onChange={v => setForm(p=>({...p,sellPrice:v}))} numOnly={true} />
+            <FInput label="株数" value={form.qty} onChange={v => setForm(p=>({...p,qty:v}))} numOnly={true} />
+            <FInput label="買時スコア(pt)" value={form.scoreAtBuy} onChange={v => setForm(p=>({...p,scoreAtBuy:v}))} numOnly={true} />
+          </div>
+          <div style={{ marginBottom:12 }}>
+            <label style={{ color:"#64748b", fontSize:R.sm, display:"block", marginBottom:3 }}>メモ（買い根拠・売り理由）</label>
+            <textarea value={form.memo} onChange={e => setForm(p=>({...p,memo:e.target.value.slice(0,200)}))}
+              style={{ ...S.input, height:60, resize:"vertical" }} placeholder="例: PEG0.8で割安と判断。決算後に売却。" />
+          </div>
+          <div style={{ display:"flex", gap:8 }}>
+            <button style={S.addBtn} onClick={addTrade}>保存</button>
+            <button style={S.miniBtn} onClick={() => { setShowForm(false); setForm(emptyForm); }}>キャンセル</button>
+          </div>
+        </div>
+      )}
+
+      {trades.length === 0 && (
+        <div style={S.card}><span style={{ color:"#475569" }}>売買記録がありません。「+ 記録追加」から追加してください。</span></div>
+      )}
+
+      {/* ダッシュボード */}
+      {view === "dashboard" && trades.length > 0 && (
+        <div>
+          {/* サマリーカード */}
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(min(160px,45vw),1fr))", gap:12, marginBottom:16 }}>
+            {[
+              ["総取引数", trades.length+"件", "#94a3b8"],
+              ["クローズ済", closed.length+"件", "#94a3b8"],
+              ["目標達成率（成功+大成功）", winRate!=null?winRate+"%":"—", +winRate>=60?"#4ade80":+winRate>=40?"#fbbf24":"#f87171"],
+              ["🟢大成功（月利8.3%+）", closed.filter(t=>t.result==="大成功").length+"件", "#4ade80"],
+              ["🔵成功（4.2〜8.3%）", closed.filter(t=>t.result==="成功").length+"件", "#60a5fa"],
+              ["⚪イーブン（±4.2%未満）", closed.filter(t=>t.result==="イーブン").length+"件", "#94a3b8"],
+              ["🟡失敗（-4.2〜-8.3%）", closed.filter(t=>t.result==="失敗").length+"件", "#fbbf24"],
+              ["🔴大失敗（-8.3%未満）", closed.filter(t=>t.result==="大失敗").length+"件", "#f87171"],
+              ["平均損益率", avgPnl!=null?(+avgPnl>=0?"+":"")+avgPnl+"%":"—", pnlColor(+avgPnl)],
+              ["平均保有月数", avgMonths!=null?avgMonths+"ヶ月":"—", "#94a3b8"],
+              ["平均月利", avgEff!=null?(+avgEff>=0?"+":"")+avgEff+"%/月":"—", pnlColor(+avgEff)],
+            ].map(([label, val, color]) => (
+              <div key={label} style={{ background:"#111827", borderRadius:8, padding:"12px 14px" }}>
+                <div style={{ color:"#475569", fontSize:R.sm, marginBottom:4 }}>{label}</div>
+                <div style={{ color, fontWeight:700, fontSize:R.lg }}>{val}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* スタイル別 */}
+          <div style={{ display:"grid", gridTemplateColumns:R.grid2, gap:12, marginBottom:16 }}>
+            {[["growth","📈 グロース","#4ade80"],["value","💎 バリュー","#60a5fa"]].map(([key,label,color]) => {
+              const d = byStyle[key];
+              return (
+                <div key={key} style={{ ...S.card, borderLeft:"3px solid "+color }}>
+                  <div style={{ color, fontWeight:700, marginBottom:8 }}>{label}</div>
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8 }}>
+                    {[
+                      ["取引数", d.total+"件"],
+                      ["勝率", d.total>0?(d.wins/d.total*100).toFixed(0)+"%":"—"],
+                      ["平均損益", d.total>0?(d.pnlSum/d.total>=0?"+":"")+(d.pnlSum/d.total).toFixed(1)+"%":"—"],
+                    ].map(([l,v]) => (
+                      <div key={l}>
+                        <div style={{ color:"#475569", fontSize:R.sm }}>{l}</div>
+                        <div style={{ color:"#e2e8f0", fontWeight:700 }}>{v}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* セクター別 */}
+          {Object.keys(bySector).length > 0 && (
+            <div style={S.card}>
+              <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:12 }}>セクター別成績</div>
+              <table style={{ width:"100%", borderCollapse:"collapse", fontSize:R.sm }}>
+                <thead>
+                  <tr style={{ borderBottom:"1px solid #1e293b" }}>
+                    {["セクター","取引数","勝率","平均損益率","平均月利"].map(h => (
+                      <th key={h} style={{ textAlign: h==="セクター"?"left":"right", padding:"6px 10px", color:"#475569" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(bySector).sort((a,b) => b[1].pnlSum/b[1].total - a[1].pnlSum/a[1].total).map(([sector, d]) => {
+                    const avgP = d.pnlSum/d.total;
+                    const sectorClosed = closed.filter(t => t.sector === sector);
+                    const avgE = sectorClosed.filter(t=>t.efficiency).length > 0
+                      ? sectorClosed.filter(t=>t.efficiency).reduce((a,b)=>a+b.efficiency,0)/sectorClosed.filter(t=>t.efficiency).length : null;
+                    return (
+                      <tr key={sector} style={{ borderBottom:"1px solid #1e293b" }}>
+                        <td style={{ padding:"6px 10px", color:"#94a3b8" }}>{sector}</td>
+                        <td style={{ textAlign:"right", padding:"6px 10px", color:"#e2e8f0" }}>{d.total}</td>
+                        <td style={{ textAlign:"right", padding:"6px 10px", color:(d.wins/d.total)>=0.6?"#4ade80":"#fbbf24" }}>{(d.wins/d.total*100).toFixed(0)}%</td>
+                        <td style={{ textAlign:"right", padding:"6px 10px", color:pnlColor(avgP) }}>{avgP>=0?"+":""}{avgP.toFixed(1)}%</td>
+                        <td style={{ textAlign:"right", padding:"6px 10px", color:avgE!=null?pnlColor(avgE):"#475569" }}>{avgE!=null?(avgE>=0?"+":"")+avgE.toFixed(2)+"%/月":"—"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* 買時スコアとの相関 */}
+          {closed.filter(t=>t.scoreAtBuy).length >= 3 && (
+            <div style={{ ...S.card, marginTop:16 }}>
+              <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:8 }}>買時スコアと結果の相関</div>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(min(200px,45vw),1fr))", gap:8 }}>
+                {[["高スコア（75pt以上）", t => t.scoreAtBuy>=75],["中スコア（55-74pt）", t => t.scoreAtBuy>=55&&t.scoreAtBuy<75],["低スコア（55pt未満）", t => t.scoreAtBuy<55]].map(([label, filter]) => {
+                  const group = closed.filter(t => t.scoreAtBuy && filter(t));
+                  if (group.length === 0) return null;
+                  const gWinRate = (group.filter(t=>t.efficiency>=4.2).length/group.length*100).toFixed(0);
+                  const gAvgPnl = (group.reduce((a,b)=>a+b.pnlPct,0)/group.length).toFixed(1);
+                  return (
+                    <div key={label} style={{ background:"#111827", borderRadius:8, padding:"10px 12px" }}>
+                      <div style={{ color:"#64748b", fontSize:R.sm, marginBottom:6 }}>{label}</div>
+                      <div style={{ display:"flex", justifyContent:"space-between" }}>
+                        <span style={{ color:"#475569", fontSize:R.sm }}>{group.length}件</span>
+                        <span style={{ color:+gWinRate>=60?"#4ade80":"#fbbf24", fontSize:R.sm }}>勝率{gWinRate}%</span>
+                        <span style={{ color:pnlColor(+gAvgPnl), fontSize:R.sm }}>{+gAvgPnl>=0?"+":""}{gAvgPnl}%</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* 財務指標分析・評価基準改善提案 */}
+          <SnapshotAnalysis closed={closed} S={S} R={R} saveTrades={saveTrades} trades={trades} />
+        </div>
+      )}
+
+      {/* 記録一覧 */}
+      {view === "list" && trades.length > 0 && (
+        <div style={{ ...S.card, overflowX:"auto" }}>
+          <table style={{ width:"100%", borderCollapse:"collapse", fontSize:R.sm }}>
+            <thead>
+              <tr style={{ borderBottom:"1px solid #1e293b" }}>
+                {["銘柄","スタイル","買い日","買値","売り日","売値","損益率","保有期間","月利","結果",""].map(h => (
+                  <th key={h} style={{ textAlign:h==="銘柄"||h===""?"left":"right", padding:"6px 8px", color:"#475569", whiteSpace:"nowrap" }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {enriched.map(t => (
+                <tr key={t.id} style={{ borderBottom:"1px solid #1e293b" }}>
+                  <td style={{ padding:"6px 8px" }}>
+                    <div style={{ color:"#e2e8f0", fontWeight:600 }}>{t.ticker}</div>
+                    <div style={{ color:"#475569", fontSize:R.sm }}>{t.name}</div>
+                  </td>
+                  <td style={{ padding:"6px 8px", textAlign:"right" }}>
+                    <span style={{ color:t.style==="value"?"#60a5fa":"#4ade80", fontSize:R.sm }}>{t.style==="value"?"バリュー":"グロース"}</span>
+                  </td>
+                  <td style={{ padding:"6px 8px", textAlign:"right", color:"#64748b", whiteSpace:"nowrap" }}>{t.buyDate}</td>
+                  <td style={{ padding:"6px 8px", textAlign:"right", color:"#e2e8f0" }}>¥{t.buyPrice?.toLocaleString()}</td>
+                  <td style={{ padding:"6px 8px", textAlign:"right", color:"#64748b", whiteSpace:"nowrap" }}>{t.sellDate||"保有中"}</td>
+                  <td style={{ padding:"6px 8px", textAlign:"right", color:t.sellPrice?"#e2e8f0":"#334155" }}>{t.sellPrice?"¥"+t.sellPrice.toLocaleString():"—"}</td>
+                  <td style={{ padding:"6px 8px", textAlign:"right", color:t.pnlPct!=null?pnlColor(t.pnlPct):"#334155", fontWeight:600 }}>
+                    {t.pnlPct!=null?(t.pnlPct>=0?"+":"")+t.pnlPct.toFixed(1)+"%":"—"}
+                  </td>
+                  <td style={{ padding:"6px 8px", textAlign:"right", color:"#64748b" }}>{t.days!=null?t.days+"日":"—"}</td>
+                  <td style={{ padding:"6px 8px", textAlign:"right", color:t.efficiency!=null?pnlColor(t.efficiency):"#334155" }}>
+                    {t.efficiency!=null?(t.efficiency>=0?"+":"")+t.efficiency+"%":"—"}
+                  </td>
+                  <td style={{ padding:"6px 8px", textAlign:"right", fontSize:16 }}>
+                    {t.result==="大成功"?"🟢":t.result==="成功"?"🔵":t.result==="イーブン"?"⚪":t.result==="失敗"?"🟡":t.result==="大失敗"?"🔴":"—"}
+                  </td>
+                  <td style={{ padding:"6px 8px" }}>
+                    <button style={{ ...S.miniBtn, color:"#f87171", borderColor:"#f87171", fontSize:R.sm }} onClick={() => deleteTrade(t.id)}>削除</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
   const [zoom, setZoom] = useState(100);
 
@@ -2123,6 +2707,10 @@ export default function App() {
   S = makeS(R);
   R_CURRENT = R;
   const [tab, setTab]             = useState("portfolio");
+  const [trades, setTrades]       = useState(() => loadTrades());
+  const saveTrades2 = t => { setTrades(t); saveTrades(t); };
+  const [sellTarget, setSellTarget] = useState(null);
+  const [sellForm, setSellForm]   = useState({ sellDate:"", sellPrice:"", memo:"" });
   const [portfolio, setPortfolio] = useState(() => loadData() || INIT);
   const [selected, setSelected]   = useState(() => (loadData() || INIT)[0]);
   const [detailTab, setDetailTab] = useState("metrics");
@@ -2149,7 +2737,7 @@ export default function App() {
   }, [selected?.id, watchSelected?.id]);
   const [irForm, setIrForm]       = useState({ date:"", title:"", url:"", type:"決算" });
   const [showIrForm, setShowIrForm] = useState(false);
-  const [addForm, setAddForm]     = useState({ ticker:"", name:"", sector:"", qty:"", avgCost:"", currentPrice:"" });
+  const [addForm, setAddForm]     = useState({ ticker:"", name:"", sector:"", qty:"", avgCost:"", currentPrice:"", firstBuyDate:"" });
   const [showAdd, setShowAdd]     = useState(false);
   const [showPriceUpdate, setShowPriceUpdate] = useState(false);
   const [priceInputs, setPriceInputs] = useState({});
@@ -2234,17 +2822,16 @@ export default function App() {
   }, [selected, baseYear, save]);
 
   const addStock = () => {
-    const { ticker, name, sector, qty, avgCost, currentPrice } = addForm;
+    const { ticker, name, sector, qty, avgCost, currentPrice, firstBuyDate } = addForm;
     if (!ticker||!name||!currentPrice) return;
-    const base = { id:Date.now(), ticker, name, sector:sector||"—", currentPrice:+currentPrice, financials:{ ...EMPTY_F, price:currentPrice }, memo:{ ...EMPTY_MEMO }, irList:[], periods:{} };
+    const base = { id:Date.now(), ticker, name, sector:sector||"—", currentPrice:+currentPrice, financials:{ ...EMPTY_F, price:currentPrice }, memo:{ ...EMPTY_MEMO, firstBuyDate:firstBuyDate||"" }, irList:[], periods:{} };
     if (portfolioMode === "watchlist") {
-      // 候補リストに追加（qty/avgCostは不要）
       saveWatch2(p => [...p, { ...base, qty:0, avgCost:0, isWatch:true }]);
     } else {
       if (!qty||!avgCost) return;
       save(p => [...p, { ...base, qty:+qty, avgCost:+avgCost }]);
     }
-    setAddForm({ ticker:"", name:"", sector:"", qty:"", avgCost:"", currentPrice:"" });
+    setAddForm({ ticker:"", name:"", sector:"", qty:"", avgCost:"", currentPrice:"", firstBuyDate:"" });
     setShowAdd(false);
   };
 
@@ -2629,7 +3216,7 @@ export default function App() {
           <span style={{ fontSize:16, color:"#334155" }}>日本株専用</span>
         </div>
         <nav style={{ display:"flex", gap:4, flexWrap:"wrap", alignItems:"center" }}>
-          {[["portfolio","ポートフォリオ"],["detail","銘柄詳細"],["compare","他社比較"],["simulation","シミュレーション"]].map(([k,v]) => (
+          {[["portfolio","ポートフォリオ"],["detail","銘柄詳細"],["compare","他社比較"],["simulation","シミュレーション"],["trades","売買記録"]].map(([k,v]) => (
             <button key={k} style={{ ...S.navBtn, ...(tab===k?S.navOn:{}) }} onClick={() => setTab(k)}>{v}</button>
           ))}
           <div style={{ display:"flex", alignItems:"center", gap:4, background:"#111827", border:"1px solid #334155", borderRadius:6, padding:"2px 6px" }}>
@@ -2815,6 +3402,7 @@ export default function App() {
                   <FInput label="銘柄名" value={addForm.name} onChange={v => setAddForm(p => ({ ...p, name:v }))} maxLen={30} />
                   <FInput label="セクター" value={addForm.sector} onChange={v => setAddForm(p => ({ ...p, sector:v }))} maxLen={20} />
                   {portfolioMode !== "watchlist" && <>
+                    <FInput label="初回取得日" value={addForm.firstBuyDate} onChange={v => setAddForm(p => ({ ...p, firstBuyDate:v }))} inputType="date" />
                     <FInput label="保有数量（株）" value={addForm.qty} onChange={v => setAddForm(p => ({ ...p, qty:v }))} numOnly={true} />
                     <FInput label="平均取得単価（円）" value={addForm.avgCost} onChange={v => setAddForm(p => ({ ...p, avgCost:v }))} numOnly={true} />
                   </>}
@@ -2856,21 +3444,22 @@ export default function App() {
                     </span>
                     <span style={{ color:"#e2e8f0" }}>¥{(h.qty*h.currentPrice).toLocaleString()}</span>
                     <span><Delta val={pnlPct} fmt={v => v.toFixed(2)+"%"} /></span>
-                    <div>
-                      {hsc != null && <div style={{ marginBottom:6 }}><ScoreBadge sc={hsc} stockId={h.id} /></div>}
-                      <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
-                        <button style={S.miniBtn} onClick={() => { setSelected(h); setTab("detail"); setDetailTab("memo"); }}>メモ</button>
-                        <button style={S.miniBtn} onClick={() => { setSelected(h); setTab("detail"); setDetailTab("metrics"); }}>詳細</button>
-                        <button style={{ ...S.miniBtn, ...(compareIds.includes(h.id)?{ color:"#4ade80", borderColor:"#4ade80" }:{}) }} onClick={() => toggleCompare(h.id)}>{compareIds.includes(h.id)?"比較中":"比較"}</button>
-                        <button style={{ ...S.miniBtn, color:"#f59e0b", borderColor:"#f59e0b" }} onClick={() => {
-                          if (!window.confirm(h.name+" を保有候補リストに移動します。データはそのまま保持されます。")) return;
-                          saveWatch2(p => [...p, { ...h, isWatch:true }]);
-                          save(p => p.filter(x => x.id !== h.id));
-                          if (selected?.id === h.id) setSelected(portfolio.find(x => x.id !== h.id) || null);
-                        }}>候補へ</button>
-                        <button style={{ ...S.miniBtn, color:"#f87171", borderColor:"#f87171" }} onClick={() => deleteStock(h.id)}>削除</button>
+                      <div>
+                        {hsc != null && <div style={{ marginBottom:6 }}><ScoreBadge sc={hsc} stockId={h.id} /></div>}
+                        <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
+                          <button style={S.miniBtn} onClick={() => { setSelected(h); setTab("detail"); setDetailTab("memo"); }}>メモ</button>
+                          <button style={S.miniBtn} onClick={() => { setSelected(h); setTab("detail"); setDetailTab("metrics"); }}>詳細</button>
+                          <button style={{ ...S.miniBtn, ...(compareIds.includes(h.id)?{ color:"#4ade80", borderColor:"#4ade80" }:{}) }} onClick={() => toggleCompare(h.id)}>{compareIds.includes(h.id)?"比較中":"比較"}</button>
+                          <button style={{ ...S.miniBtn, color:"#a78bfa", borderColor:"#a78bfa" }} onClick={() => setSellTarget(h)}>売却</button>
+                          <button style={{ ...S.miniBtn, color:"#f59e0b", borderColor:"#f59e0b" }} onClick={() => {
+                            if (!window.confirm(h.name+" を保有候補リストに移動します。データはそのまま保持されます。")) return;
+                            saveWatch2(p => [...p, { ...h, isWatch:true }]);
+                            save(p => p.filter(x => x.id !== h.id));
+                            if (selected?.id === h.id) setSelected(portfolio.find(x => x.id !== h.id) || null);
+                          }}>候補へ</button>
+                          <button style={{ ...S.miniBtn, color:"#f87171", borderColor:"#f87171" }} onClick={() => deleteStock(h.id)}>削除</button>
+                        </div>
                       </div>
-                    </div>
                   </div>
                 );
               })}
@@ -3006,6 +3595,7 @@ export default function App() {
                       <div style={S.card}>
                         <div style={{ color:"#a78bfa", fontWeight:700, marginBottom:12 }}>目標・判断</div>
                         <FInput label="目標株価（円）" value={selected.memo?.targetPrice||""} onChange={v => updateMemo(selected.id,"targetPrice",v)} numOnly={true} />
+                        <FInput label="初回取得日" value={selected.memo?.firstBuyDate||""} onChange={v => updateMemo(selected.id,"firstBuyDate",v)} inputType="date" />
                         {selected.memo?.targetPrice && n(selected.memo.targetPrice) && (
                           <div style={{ marginTop:12, background:"#111827", borderRadius:6, padding:"10px 12px" }}>
                             <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
@@ -3030,16 +3620,32 @@ export default function App() {
                       </div>
                       <div style={S.card}>
                         <div style={{ color:"#4ade80", fontWeight:700, marginBottom:12 }}>投資理由・メモ</div>
+                        <div style={{ display:"flex", gap:8, marginBottom:12, flexWrap:"wrap" }}>
+                          <span style={{ color:"#475569", fontSize:R.sm, alignSelf:"center" }}>テンプレ挿入：</span>
+                          <button style={{ ...S.miniBtn, color:"#4ade80", borderColor:"#4ade80" }}
+                            onClick={() => {
+                              if (selected.memo?.buyReason && !window.confirm("既存の内容を上書きしますか？")) return;
+                              updateMemo(selected.id, "buyReason", MEMO_TEMPLATES.growth);
+                            }}>📈 グロース株</button>
+                          <button style={{ ...S.miniBtn, color:"#60a5fa", borderColor:"#60a5fa" }}
+                            onClick={() => {
+                              if (selected.memo?.buyReason && !window.confirm("既存の内容を上書きしますか？")) return;
+                              updateMemo(selected.id, "buyReason", MEMO_TEMPLATES.value);
+                            }}>💎 バリュー株</button>
+                        </div>
+                        <div style={{ marginBottom:8, padding:"8px 12px", background:"#0d1424", borderRadius:6, fontSize:R.sm, color:"#334155", lineHeight:1.7 }}>
+                          📌 参照先：<span style={{ color:"#475569" }}>IRバンク・バフェットコード・各社IR・有価証券報告書（EDINET）</span>
+                        </div>
                         <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
                           <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
-                            <label style={{ color:"#64748b", fontSize:16 }}>投資理由・買った根拠</label>
-                            <textarea value={selected.memo?.buyReason||""} onChange={e => updateMemo(selected.id,"buyReason",e.target.value.slice(0,300))}
-                              style={{ ...S.input, height:80, resize:"vertical", lineHeight:1.6 }}
-                              placeholder="例: PERが割安で配当利回りも高い。業績回復トレンド。" />
+                            <label style={{ color:"#64748b", fontSize:16 }}>定性分析・投資根拠</label>
+                            <textarea value={selected.memo?.buyReason||""} onChange={e => updateMemo(selected.id,"buyReason",e.target.value.slice(0,2000))}
+                              style={{ ...S.input, height:320, resize:"vertical", lineHeight:1.7, fontSize:R.sm, fontFamily:"inherit" }}
+                              placeholder="テンプレを選んで入力してください" />
                           </div>
                           <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
                             <label style={{ color:"#64748b", fontSize:16 }}>メモ・注意事項</label>
-                            <textarea value={selected.memo?.memo||""} onChange={e => updateMemo(selected.id,"memo",e.target.value.slice(0,300))}
+                            <textarea value={selected.memo?.memo||""} onChange={e => updateMemo(selected.id,"memo",e.target.value.slice(0,500))}
                               style={{ ...S.input, height:80, resize:"vertical", lineHeight:1.6 }}
                               placeholder="例: 決算発表は8月。為替リスクに注意。" />
                           </div>
@@ -3591,6 +4197,76 @@ export default function App() {
             )}
           </div>
         )}
+
+        {tab === "trades" && (
+          <TradesTab trades={trades} saveTrades={saveTrades2} portfolio={portfolio} watchlist={watchlist} S={S} R={R} />
+        )}
+      {/* 売却モーダル */}
+      {sellTarget && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}
+          onClick={e => { if (e.target === e.currentTarget) setSellTarget(null); }}>
+          <div style={{ background:"#0d1424", border:"1px solid #334155", borderRadius:12, padding:24, width:"100%", maxWidth:420 }}>
+            <div style={{ color:"#a78bfa", fontWeight:700, fontSize:18, marginBottom:4 }}>売却記録</div>
+            <div style={{ color:"#64748b", marginBottom:16 }}>{sellTarget.name}（{sellTarget.ticker}）</div>
+            <div style={{ background:"#111827", borderRadius:8, padding:"10px 14px", marginBottom:16, fontSize:14 }}>
+              <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+                <span style={{ color:"#475569" }}>平均取得単価</span>
+                <span style={{ color:"#e2e8f0" }}>¥{sellTarget.avgCost?.toLocaleString()}</span>
+              </div>
+              <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+                <span style={{ color:"#475569" }}>保有株数</span>
+                <span style={{ color:"#e2e8f0" }}>{sellTarget.qty?.toLocaleString()}株</span>
+              </div>
+              <div style={{ display:"flex", justifyContent:"space-between" }}>
+                <span style={{ color:"#475569" }}>現在株価</span>
+                <span style={{ color:"#e2e8f0" }}>¥{sellTarget.currentPrice?.toLocaleString()}</span>
+              </div>
+            </div>
+            <div style={{ display:"flex", flexDirection:"column", gap:12, marginBottom:16 }}>
+              <FInput label="売却日 *" value={sellForm.sellDate} onChange={v => setSellForm(p=>({...p,sellDate:v}))} inputType="date" />
+              <FInput label="売却単価（円）*" value={sellForm.sellPrice} onChange={v => setSellForm(p=>({...p,sellPrice:v}))} numOnly={true} />
+              <div>
+                <label style={{ color:"#64748b", fontSize:14, display:"block", marginBottom:3 }}>売却理由・メモ</label>
+                <textarea value={sellForm.memo} onChange={e => setSellForm(p=>({...p,memo:e.target.value.slice(0,200)}))}
+                  style={{ ...S.input, height:60, resize:"vertical" }} placeholder="例: 目標株価到達。決算後に売却。" />
+              </div>
+            </div>
+            <div style={{ display:"flex", gap:8 }}>
+              <button style={{ ...S.addBtn, flex:1 }} onClick={() => {
+                if (!sellForm.sellDate || !sellForm.sellPrice) { alert("売却日と売却単価は必須です"); return; }
+                // 売買記録に保存
+                const h = sellTarget;
+                const sc = scoreFromPeriods(h, baseYear);
+                const buyDate = h.memo?.firstBuyDate || h.memo?.buyDate || "";
+                const newTrade = {
+                  id: Date.now().toString(),
+                  ticker: h.ticker,
+                  name: h.name,
+                  sector: h.sector || "",
+                  style: loadScoreMode(h.id) === "value" ? "value" : "growth",
+                  buyDate,
+                  buyPrice: h.avgCost,
+                  sellDate: sellForm.sellDate,
+                  sellPrice: +sellForm.sellPrice,
+                  qty: h.qty,
+                  scoreAtBuy: sc,
+                  memo: sellForm.memo,
+                  snapshot: calcSnapshot(h, baseYear),
+                };
+                saveTrades2([newTrade, ...trades]);
+                // ポートフォリオから削除
+                save(p => p.filter(x => x.id !== h.id));
+                if (selected?.id === h.id) setSelected(null);
+                setSellTarget(null);
+                setSellForm({ sellDate:"", sellPrice:"", memo:"" });
+                alert("売却記録を保存しました。売買記録タブで確認できます。");
+              }}>売却して記録保存</button>
+              <button style={S.miniBtn} onClick={() => { setSellTarget(null); setSellForm({ sellDate:"", sellPrice:"", memo:"" }); }}>キャンセル</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       </main>
     </div>
   );
