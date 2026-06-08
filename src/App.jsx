@@ -2765,7 +2765,7 @@ export default function App() {
     });
   }, []);
 
-  const tc = portfolio.reduce((s, h) => s + h.qty * h.avgCost, 0);
+  const tc = portfolio.filter(h => !h.sold).reduce((s, h) => s + h.qty * h.avgCost, 0);
   const tv = portfolio.reduce((s, h) => s + h.qty * h.currentPrice, 0);
   const tPnL = tv - tc;
   const tPnLPct = tc > 0 ? (tPnL / tc) * 100 : 0;
@@ -3439,11 +3439,16 @@ export default function App() {
                 const hsc = scoreFromPeriods(h, baseYear);
                 const tp = n(h.memo?.targetPrice);
                 const tpPct = tp ? ((h.currentPrice-tp)/tp*100) : null;
+                const isSold = h.sold === true;
                 return (
-                  <div key={h.id} style={{ display:"grid", gridTemplateColumns:"2fr 0.6fr 0.7fr 0.9fr 0.9fr 0.9fr 1.1fr 1fr 2fr", padding:"14px 20px", gap:10, borderTop:"1px solid #1e293b", alignItems:"start", ...(selected?.id===h.id?{ background:"#0f2a1a" }:{}) }}>
-                    <span style={{ fontWeight:700, color:"#e2e8f0" }}>{h.name}<br/><span style={{ color:"#475569", fontSize:R.sm }}>{h.sector}</span></span>
+                  <div key={h.id} style={{ display:"grid", gridTemplateColumns:"2fr 0.6fr 0.7fr 0.9fr 0.9fr 0.9fr 1.1fr 1fr 2fr", padding:"14px 20px", gap:10, borderTop:"1px solid #1e293b", alignItems:"start", opacity: isSold ? 0.5 : 1, ...(selected?.id===h.id?{ background:"#0f2a1a" }:{}) }}>
+                    <span style={{ fontWeight:700, color: isSold ? "#475569" : "#e2e8f0" }}>
+                      {h.name}
+                      {isSold && <span style={{ marginLeft:6, fontSize:R.sm, color:"#f87171", background:"#1a0d0d", padding:"1px 6px", borderRadius:4 }}>売却済</span>}
+                      <br/><span style={{ color:"#475569", fontSize:R.sm }}>{h.sector}</span>
+                    </span>
                     <span><Tag color="#60a5fa">{h.ticker}</Tag></span>
-                    <span style={{ color:"#94a3b8" }}>{h.qty.toLocaleString()}</span>
+                    <span style={{ color:"#94a3b8" }}>{isSold ? "0" : h.qty.toLocaleString()}</span>
                     <span style={{ color:"#94a3b8" }}>¥{h.avgCost.toLocaleString()}</span>
                     <span style={{ fontWeight:700, color:"#e2e8f0" }}>¥{h.currentPrice.toLocaleString()}</span>
                     <span>
@@ -3454,22 +3459,43 @@ export default function App() {
                         </div>
                       ) : <span style={{ color:"#334155", fontSize:R.sm }}>未設定</span>}
                     </span>
-                    <span style={{ color:"#e2e8f0" }}>¥{(h.qty*h.currentPrice).toLocaleString()}</span>
-                    <span><Delta val={pnlPct} fmt={v => v.toFixed(2)+"%"} /></span>
+                    <span style={{ color:"#e2e8f0" }}>{isSold ? <span style={{ color:"#334155" }}>—</span> : "¥"+(h.qty*h.currentPrice).toLocaleString()}</span>
+                    <span>{isSold ? <span style={{ color:"#f87171", fontSize:R.sm }}>売却日: {h.soldDate}</span> : <Delta val={pnlPct} fmt={v => v.toFixed(2)+"%"} />}</span>
                       <div>
                         {hsc != null && <div style={{ marginBottom:6 }}><ScoreBadge sc={hsc} stockId={h.id} /></div>}
                         <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
-                          <button style={S.miniBtn} onClick={() => { setSelected(h); setTab("detail"); setDetailTab("memo"); }}>メモ</button>
                           <button style={S.miniBtn} onClick={() => { setSelected(h); setTab("detail"); setDetailTab("metrics"); }}>詳細</button>
-                          <button style={{ ...S.miniBtn, ...(compareIds.includes(h.id)?{ color:"#4ade80", borderColor:"#4ade80" }:{}) }} onClick={() => toggleCompare(h.id)}>{compareIds.includes(h.id)?"比較中":"比較"}</button>
-                          <button style={{ ...S.miniBtn, color:"#a78bfa", borderColor:"#a78bfa" }} onClick={() => setSellTarget(h)}>売却</button>
-                          <button style={{ ...S.miniBtn, color:"#f59e0b", borderColor:"#f59e0b" }} onClick={() => {
-                            if (!window.confirm(h.name+" を保有候補リストに移動します。データはそのまま保持されます。")) return;
-                            saveWatch2(p => [...p, { ...h, isWatch:true }]);
-                            save(p => p.filter(x => x.id !== h.id));
-                            if (selected?.id === h.id) setSelected(portfolio.find(x => x.id !== h.id) || null);
-                          }}>候補へ</button>
-                          <button style={{ ...S.miniBtn, color:"#f87171", borderColor:"#f87171" }} onClick={() => deleteStock(h.id)}>削除</button>
+                          {isSold ? (
+                            <>
+                              <button style={{ ...S.miniBtn, color:"#4ade80", borderColor:"#4ade80" }} onClick={() => {
+                                const qty = prompt("再購入株数を入力してください");
+                                if (!qty || isNaN(+qty)) return;
+                                const price = prompt("取得単価を入力してください");
+                                if (!price || isNaN(+price)) return;
+                                save(p => p.map(x => x.id !== h.id ? x : { ...x, sold:false, soldDate:null, soldPrice:null, qty:+qty, avgCost:+price }));
+                              }}>再購入</button>
+                              <button style={{ ...S.miniBtn, color:"#f59e0b", borderColor:"#f59e0b" }} onClick={() => {
+                                if (!window.confirm(h.name+" を保有候補リストに移動します。")) return;
+                                saveWatch2(p => [...p, { ...h, sold:false, soldDate:null, soldPrice:null, qty:0, avgCost:0, isWatch:true }]);
+                                save(p => p.filter(x => x.id !== h.id));
+                                if (selected?.id === h.id) setSelected(null);
+                              }}>候補へ</button>
+                              <button style={{ ...S.miniBtn, color:"#f87171", borderColor:"#f87171" }} onClick={() => deleteStock(h.id)}>削除</button>
+                            </>
+                          ) : (
+                            <>
+                              <button style={S.miniBtn} onClick={() => { setSelected(h); setTab("detail"); setDetailTab("memo"); }}>メモ</button>
+                              <button style={{ ...S.miniBtn, ...(compareIds.includes(h.id)?{ color:"#4ade80", borderColor:"#4ade80" }:{}) }} onClick={() => toggleCompare(h.id)}>{compareIds.includes(h.id)?"比較中":"比較"}</button>
+                              <button style={{ ...S.miniBtn, color:"#a78bfa", borderColor:"#a78bfa" }} onClick={() => setSellTarget(h)}>売却</button>
+                              <button style={{ ...S.miniBtn, color:"#f59e0b", borderColor:"#f59e0b" }} onClick={() => {
+                                if (!window.confirm(h.name+" を保有候補リストに移動します。データはそのまま保持されます。")) return;
+                                saveWatch2(p => [...p, { ...h, isWatch:true }]);
+                                save(p => p.filter(x => x.id !== h.id));
+                                if (selected?.id === h.id) setSelected(portfolio.find(x => x.id !== h.id) || null);
+                              }}>候補へ</button>
+                              <button style={{ ...S.miniBtn, color:"#f87171", borderColor:"#f87171" }} onClick={() => deleteStock(h.id)}>削除</button>
+                            </>
+                          )}
                         </div>
                       </div>
                   </div>
@@ -4266,12 +4292,17 @@ export default function App() {
                   snapshot: calcSnapshot(h, baseYear),
                 };
                 saveTrades2([newTrade, ...trades]);
-                // ポートフォリオから削除
-                save(p => p.filter(x => x.id !== h.id));
-                if (selected?.id === h.id) setSelected(null);
+                // ポートフォリオに売却済みフラグを立てて残す（データは保持）
+                save(p => p.map(x => x.id !== h.id ? x : {
+                  ...x,
+                  sold: true,
+                  soldDate: sellForm.sellDate,
+                  soldPrice: +sellForm.sellPrice,
+                  qty: 0,
+                }));
                 setSellTarget(null);
                 setSellForm({ sellDate:"", sellPrice:"", memo:"" });
-                alert("売却記録を保存しました。売買記録タブで確認できます。");
+                alert("売却記録を保存しました。\n銘柄データはポートフォリオに保持されています（売却済み表示）。\n再購入時はそのまま使えます。");
               }}>売却して記録保存</button>
               <button style={S.miniBtn} onClick={() => { setSellTarget(null); setSellForm({ sellDate:"", sellPrice:"", memo:"" }); }}>キャンセル</button>
             </div>
