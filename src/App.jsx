@@ -3566,7 +3566,7 @@ export default function App() {
             <h2 style={S.h2}>銘柄詳細</h2>
             {/* 保有銘柄チップ */}
             <div style={S.chips}>
-              {portfolio.map(h => (
+              {portfolio.filter(h => !h.sold).map(h => (
                 <button key={h.id} style={{ ...S.chip, ...(selected?.id===h.id&&!watchSelected?S.chipOn:{}) }}
                   onClick={() => { setSelected(h); setWatchSelected(null); }}>{h.ticker} {h.name}</button>
               ))}
@@ -3762,7 +3762,7 @@ export default function App() {
             <h2 style={S.h2}>他社比較</h2>
             <div style={{ marginBottom:8, color:"#64748b", fontSize:16 }}>比較したい銘柄を選択してください（最大4社）</div>
             <div style={S.chips}>
-              {portfolio.map(h => (
+              {portfolio.filter(h => !h.sold).map(h => (
                 <button key={h.id} style={{ ...S.chip, ...(compareIds.includes(h.id)?S.chipOn:{}) }} onClick={() => toggleCompare(h.id)}>{h.ticker} {h.name}</button>
               ))}
               {watchlist.length > 0 && <span style={{ color:"#475569", fontSize:R.sm, alignSelf:"center" }}>｜候補:</span>}
@@ -3898,7 +3898,7 @@ export default function App() {
           <div>
             <h2 style={S.h2}>シミュレーション</h2>
             <div style={S.chips}>
-              {portfolio.map(h => (
+              {portfolio.filter(h => !h.sold).map(h => (
                 <button key={h.id} style={{ ...S.chip, ...(selected?.id===h.id?S.chipOn:{}) }} onClick={() => { setSelected(h); setWatchSelected(null); }}>{h.ticker} {h.name}</button>
               ))}
               {watchlist.length > 0 && <span style={{ color:"#475569", fontSize:R.sm, alignSelf:"center" }}>｜候補:</span>}
