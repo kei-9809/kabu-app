@@ -2719,6 +2719,11 @@ export default function App() {
   S = makeS(R);
   R_CURRENT = R;
   const [tab, setTab]             = useState("portfolio");
+  // タブ切り替え時に売却済みselectedをクリア
+  const setTabSafe = (t) => {
+    if (selected?.sold) setSelected(null);
+    setTab(t);
+  };
   const [trades, setTrades]       = useState(() => loadTrades());
   const saveTrades2 = t => { setTrades(t); saveTrades(t); };
   const [sellTarget, setSellTarget] = useState(null);
@@ -3024,6 +3029,7 @@ export default function App() {
   const simRows = useCallback(() => {
     const target = selected || watchSelected;
     if (!target) return [];
+    if (target.sold) return [];  // 売却済み銘柄はスキップ
     const allH = [...portfolio, ...watchlist];
     const h = allH.find(x => x.id === target.id) || target;
     const sb = getStockBaseYear(h, baseYear);
@@ -3229,7 +3235,7 @@ export default function App() {
         </div>
         <nav style={{ display:"flex", gap:4, flexWrap:"wrap", alignItems:"center" }}>
           {[["portfolio","ポートフォリオ"],["detail","銘柄詳細"],["compare","他社比較"],["simulation","シミュレーション"],["trades","売買記録"]].map(([k,v]) => (
-            <button key={k} style={{ ...S.navBtn, ...(tab===k?S.navOn:{}) }} onClick={() => setTab(k)}>{v}</button>
+            <button key={k} style={{ ...S.navBtn, ...(tab===k?S.navOn:{}) }} onClick={() => setTabSafe(k)}>{v}</button>
           ))}
           <div style={{ display:"flex", alignItems:"center", gap:4, background:"#111827", border:"1px solid #334155", borderRadius:6, padding:"2px 6px" }}>
             <button style={{ background:"none", border:"none", color:"#94a3b8", cursor:"pointer", fontSize:16, padding:"0 4px", fontFamily:"inherit" }} onClick={() => setZoom(z => Math.max(50, z-10))}>−</button>
