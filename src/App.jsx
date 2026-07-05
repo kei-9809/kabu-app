@@ -2418,10 +2418,10 @@ function SnapshotAnalysis({ closed, S, R }) {
 
 // 売却済み累計損益サマリー
 function SoldSummary({ portfolio, TAX, S, R }) {
-  const soldList = portfolio.filter(h => h.sold && h.soldPrice && h.avgCost && h.qty != null);
+  const soldList = portfolio.filter(h => h.sold && h.soldPrice && h.avgCost);
   if (soldList.length === 0) return null;
-  const totalPnl = soldList.reduce((s, h) => s + (h.soldPrice - h.avgCost) * (h.qty || 0), 0);
-  const totalCost = soldList.reduce((s, h) => s + h.avgCost * (h.qty || 0), 0);
+  const totalPnl = soldList.reduce((s, h) => s + (h.soldPrice - h.avgCost) * (h.soldQty || h.qty || 0), 0);
+  const totalCost = soldList.reduce((s, h) => s + h.avgCost * (h.soldQty || h.qty || 0), 0);
   const totalPnlPct = totalCost > 0 ? totalPnl / totalCost * 100 : null;
   const afterTax = totalPnl > 0 ? totalPnl * (1 - TAX) : totalPnl;
   return (
@@ -3397,8 +3397,9 @@ export default function App() {
                         </thead>
                         <tbody>
                           {portfolio.filter(h=>h.sold).map(h => {
+                            const qty = h.soldQty || h.qty || 0;
                             const pnlPct = h.soldPrice && h.avgCost ? (h.soldPrice-h.avgCost)/h.avgCost*100 : null;
-                            const pnlYen = h.soldPrice && h.avgCost && h.qty ? (h.soldPrice-h.avgCost)*h.qty : null;
+                            const pnlYen = h.soldPrice && h.avgCost && qty ? (h.soldPrice-h.avgCost)*qty : null;
                             const hsc = scoreFromPeriods(h, baseYear);
                             return (
                               <tr key={h.id} style={{ borderBottom:"1px solid #1e293b" }}>
@@ -3408,7 +3409,7 @@ export default function App() {
                                   {hsc!=null && <div style={{ fontSize:R.sm, color:"#64748b" }}>{hsc}pt</div>}
                                 </td>
                                 <td style={{ padding:"10px 12px", textAlign:"right" }}><Tag color="#475569">{h.ticker}</Tag></td>
-                                <td style={{ padding:"10px 12px", textAlign:"right", color:"#64748b" }}>{h.qty?.toLocaleString()||"—"}</td>
+                                <td style={{ padding:"10px 12px", textAlign:"right", color:"#64748b" }}>{qty.toLocaleString()}</td>
                                 <td style={{ padding:"10px 12px", textAlign:"right", color:"#64748b" }}>¥{h.avgCost?.toLocaleString()}</td>
                                 <td style={{ padding:"10px 12px", textAlign:"right", color:"#e2e8f0", fontWeight:600 }}>¥{h.soldPrice?.toLocaleString()||"—"}</td>
                                 <td style={{ padding:"10px 12px", textAlign:"right" }}>
@@ -3419,15 +3420,18 @@ export default function App() {
                                 </td>
                                 <td style={{ padding:"10px 12px", textAlign:"right", color:"#475569", fontSize:R.sm }}>{h.memo?.firstBuyDate||"—"}</td>
                                 <td style={{ padding:"10px 12px", textAlign:"right", color:"#475569", fontSize:R.sm }}>{h.soldDate||"—"}</td>
-                                <td style={{ padding:"10px 12px", maxWidth:200 }}>
-                                  {h.memo?.buyReason ? (
-                                    <div style={{ color:"#475569", fontSize:R.sm, whiteSpace:"pre-wrap", maxHeight:60, overflow:"hidden", cursor:"pointer" }}
-                                      title={h.memo.buyReason}
-                                      onClick={() => alert(h.memo.buyReason)}>
-                                      {h.memo.buyReason.slice(0,40)}{h.memo.buyReason.length>40?"…":""}
+                                <td style={{ padding:"10px 12px", maxWidth:180 }}>
+                                  {h.memo?.sellMemo ? (
+                                    <div style={{ color:"#fbbf24", fontSize:R.sm, whiteSpace:"pre-wrap", cursor:"pointer" }}
+                                      onClick={() => alert("【売却メモ】\n"+h.memo.sellMemo+(h.memo?.buyReason?"\n\n【投資根拠】\n"+h.memo.buyReason:""))}>
+                                      📝 {h.memo.sellMemo.slice(0,30)}{h.memo.sellMemo.length>30?"…":""}
+                                    </div>
+                                  ) : h.memo?.buyReason ? (
+                                    <div style={{ color:"#475569", fontSize:R.sm, cursor:"pointer" }}
+                                      onClick={() => alert("【投資根拠】\n"+h.memo.buyReason)}>
+                                      {h.memo.buyReason.slice(0,30)}{h.memo.buyReason.length>30?"…":""}
                                     </div>
                                   ) : <span style={{ color:"#334155", fontSize:R.sm }}>—</span>}
-                                  {h.memo?.memo && <div style={{ color:"#334155", fontSize:R.sm, marginTop:2 }}>{h.memo.memo.slice(0,30)}</div>}
                                 </td>
                                 <td style={{ padding:"10px 12px" }}>
                                   <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
@@ -4397,7 +4401,9 @@ export default function App() {
                   sold: true,
                   soldDate: sellForm.sellDate,
                   soldPrice: +sellForm.sellPrice,
+                  soldQty: h.qty,
                   qty: 0,
+                  memo: { ...(x.memo||{}), sellMemo: sellForm.memo },
                 }));
                 setSellTarget(null);
                 setSellForm({ sellDate:"", sellPrice:"", memo:"" });
