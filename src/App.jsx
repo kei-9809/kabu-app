@@ -2771,7 +2771,7 @@ export default function App() {
   }, []);
 
   const tc = portfolio.filter(h => !h.sold).reduce((s, h) => s + h.qty * h.avgCost, 0);
-  const tv = portfolio.reduce((s, h) => s + h.qty * h.currentPrice, 0);
+  const tv = portfolio.filter(h => !h.sold).reduce((s, h) => s + h.qty * h.currentPrice, 0);
   const tPnL = tv - tc;
   const tPnLPct = tc > 0 ? (tPnL / tc) * 100 : 0;
 
@@ -3152,7 +3152,7 @@ export default function App() {
     const avgPer = pers.length > 0 ? (pers.reduce((a,b) => a+b, 0)/pers.length).toFixed(1) : null;
     const sortedPnl = [...active].sort((a,b) => ((b.currentPrice-b.avgCost)/b.avgCost)-((a.currentPrice-a.avgCost)/a.avgCost));
     return { sectorData, avgPer, sortedPnl, afterTax: tPnL > 0 ? tPnL*(1-TAX) : tPnL };
-  }, [portfolio, tPnL]);
+  }, [portfolio, tPnL, tc, tv]);
 
   const safetyMargin = useMemo(() => {
     const target = selected || watchSelected;
@@ -3594,7 +3594,7 @@ export default function App() {
                     <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:12 }}>損益率ランキング</div>
                     <ResponsiveContainer width="100%" height={R.chartMd}>
                       <BarChart layout="vertical" margin={{ left:10, right:20 }}
-                        data={summary.sortedPnl.map(h => ({ name:h.name.length>8?h.name.slice(0,8)+"…":h.name, v:parseFloat(((h.currentPrice-h.avgCost)/h.avgCost*100).toFixed(2)) }))}>
+                        data={portfolio.filter(h => !h.sold).sort((a,b) => ((b.currentPrice-b.avgCost)/b.avgCost)-((a.currentPrice-a.avgCost)/a.avgCost)).map(h => ({ name:h.name.length>8?h.name.slice(0,8)+"…":h.name, v:parseFloat(((h.currentPrice-h.avgCost)/h.avgCost*100).toFixed(2)) }))}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                         <XAxis type="number" tick={{ fill:"#64748b", fontSize:R.sm }} tickFormatter={v => v+"%"} />
                         <YAxis dataKey="name" type="category" tick={{ fill:"#94a3b8", fontSize:R.sm }} width={90} />
