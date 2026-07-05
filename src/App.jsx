@@ -2755,7 +2755,7 @@ export default function App() {
   const [trades, setTrades]       = useState(() => loadTrades());
   const saveTrades2 = t => { setTrades(t); saveTrades(t); };
   const [sellTarget, setSellTarget] = useState(null);
-  const [sellForm, setSellForm]   = useState({ sellDate:"", sellPrice:"", memo:"" });
+  const [sellForm, setSellForm]   = useState({ sellDate:"", sellPrice:"", soldQty:"", memo:"" });
   const [portfolio, setPortfolio] = useState(() => loadData() || INIT);
   const [selected, setSelected]   = useState(() => (loadData() || INIT)[0]);
   const [detailTab, setDetailTab] = useState("metrics");
@@ -3409,7 +3409,13 @@ export default function App() {
                                   {hsc!=null && <div style={{ fontSize:R.sm, color:"#64748b" }}>{hsc}pt</div>}
                                 </td>
                                 <td style={{ padding:"10px 12px", textAlign:"right" }}><Tag color="#475569">{h.ticker}</Tag></td>
-                                <td style={{ padding:"10px 12px", textAlign:"right", color:"#64748b" }}>{qty.toLocaleString()}</td>
+                                <td style={{ padding:"10px 12px", textAlign:"right", color:"#64748b" }}>
+                                  <input type="number" defaultValue={qty||""} style={{ ...S.input, width:70, padding:"2px 6px", textAlign:"right", fontSize:R.sm }}
+                                    onBlur={e => {
+                                      const v = +e.target.value;
+                                      if (v > 0) save(p => p.map(x => x.id!==h.id ? x : { ...x, soldQty:v }));
+                                    }} placeholder="株数" />
+                                </td>
                                 <td style={{ padding:"10px 12px", textAlign:"right", color:"#64748b" }}>¥{h.avgCost?.toLocaleString()}</td>
                                 <td style={{ padding:"10px 12px", textAlign:"right", color:"#e2e8f0", fontWeight:600 }}>¥{h.soldPrice?.toLocaleString()||"—"}</td>
                                 <td style={{ padding:"10px 12px", textAlign:"right" }}>
@@ -4366,6 +4372,7 @@ export default function App() {
             <div style={{ display:"flex", flexDirection:"column", gap:12, marginBottom:16 }}>
               <FInput label="売却日 *" value={sellForm.sellDate} onChange={v => setSellForm(p=>({...p,sellDate:v}))} inputType="date" />
               <FInput label="売却単価（円）*" value={sellForm.sellPrice} onChange={v => setSellForm(p=>({...p,sellPrice:v}))} numOnly={true} />
+              <FInput label="売却株数（株）" value={sellForm.soldQty} onChange={v => setSellForm(p=>({...p,soldQty:v}))} numOnly={true} placeholder={sellTarget?.qty ? String(sellTarget.qty) : "株数"} />
               <div>
                 <label style={{ color:"#64748b", fontSize:14, display:"block", marginBottom:3 }}>売却理由・メモ</label>
                 <textarea value={sellForm.memo} onChange={e => setSellForm(p=>({...p,memo:e.target.value.slice(0,200)}))}
@@ -4401,15 +4408,15 @@ export default function App() {
                   sold: true,
                   soldDate: sellForm.sellDate,
                   soldPrice: +sellForm.sellPrice,
-                  soldQty: h.qty,
+                  soldQty: sellForm.soldQty ? +sellForm.soldQty : h.qty,
                   qty: 0,
                   memo: { ...(x.memo||{}), sellMemo: sellForm.memo },
                 }));
                 setSellTarget(null);
-                setSellForm({ sellDate:"", sellPrice:"", memo:"" });
+                setSellForm({ sellDate:"", sellPrice:"", soldQty:"", memo:"" });
                 alert("売却記録を保存しました。\n銘柄データはポートフォリオに保持されています（売却済み表示）。\n再購入時はそのまま使えます。");
               }}>売却して記録保存</button>
-              <button style={S.miniBtn} onClick={() => { setSellTarget(null); setSellForm({ sellDate:"", sellPrice:"", memo:"" }); }}>キャンセル</button>
+              <button style={S.miniBtn} onClick={() => { setSellTarget(null); setSellForm({ sellDate:"", sellPrice:"", soldQty:"", memo:"" }); }}>キャンセル</button>
             </div>
           </div>
         </div>
