@@ -2420,26 +2420,41 @@ function SnapshotAnalysis({ closed, S, R }) {
 function SoldSummary({ portfolio, TAX, S, R }) {
   const soldList = portfolio.filter(h => h.sold && h.soldPrice && h.avgCost);
   if (soldList.length === 0) return null;
-  const totalPnl = soldList.reduce((s, h) => s + (h.soldPrice - h.avgCost) * (h.soldQty || h.qty || 0), 0);
-  const totalCost = soldList.reduce((s, h) => s + h.avgCost * (h.soldQty || h.qty || 0), 0);
-  const totalPnlPct = totalCost > 0 ? totalPnl / totalCost * 100 : null;
-  const afterTax = totalPnl > 0 ? totalPnl * (1 - TAX) : totalPnl;
+
+  const soldQty = h => h.soldQty || h.qty || 0;
+  const hasQty = soldList.some(h => soldQty(h) > 0);
+
+  // 株数あり: 損益額計算、株数なし: 損益率の単純平均
+  const totalPnl = hasQty ? soldList.reduce((s, h) => s + (h.soldPrice - h.avgCost) * soldQty(h), 0) : null;
+  const totalCost = hasQty ? soldList.reduce((s, h) => s + h.avgCost * soldQty(h), 0) : null;
+  const totalPnlPct = totalCost > 0 ? totalPnl / totalCost * 100
+    : soldList.reduce((s, h) => s + (h.soldPrice - h.avgCost) / h.avgCost * 100, 0) / soldList.length;
+  const afterTax = totalPnl != null ? (totalPnl > 0 ? totalPnl * (1 - TAX) : totalPnl) : null;
+
+  const wins = soldList.filter(h => h.soldPrice > h.avgCost).length;
+
   return (
     <div style={{ ...S.card, marginBottom:16, background:"#0d1424", border:"1px solid #1e293b" }}>
       <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:12 }}>📊 売却累計損益</div>
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(min(160px,45vw),1fr))", gap:12 }}>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(min(150px,45vw),1fr))", gap:12 }}>
         {[
           ["売却銘柄数", soldList.length+"銘柄", "#94a3b8"],
-          ["累計損益（税引前）", (totalPnl>=0?"▲":"▼")+"¥"+Math.abs(Math.round(totalPnl)).toLocaleString(), totalPnl>=0?"#4ade80":"#f87171"],
-          ["累計損益率", totalPnlPct!=null?(totalPnlPct>=0?"+":"")+totalPnlPct.toFixed(2)+"%":"—", totalPnlPct!=null&&totalPnlPct>=0?"#4ade80":"#f87171"],
-          ["累計損益（税引後）", (afterTax>=0?"▲":"▼")+"¥"+Math.abs(Math.round(afterTax)).toLocaleString(), afterTax>=0?"#4ade80":"#f87171"],
+          ["勝率", (wins/soldList.length*100).toFixed(0)+"%", wins/soldList.length>=0.5?"#4ade80":"#f87171"],
+          ["平均損益率", (totalPnlPct>=0?"+":"")+totalPnlPct.toFixed(2)+"%", totalPnlPct>=0?"#4ade80":"#f87171"],
+          ...(totalPnl!=null ? [
+            ["累計損益（税引前）", (totalPnl>=0?"▲":"▼")+"¥"+Math.abs(Math.round(totalPnl)).toLocaleString(), totalPnl>=0?"#4ade80":"#f87171"],
+            ["累計損益（税引後）", afterTax!=null?(afterTax>=0?"▲":"▼")+"¥"+Math.abs(Math.round(afterTax)).toLocaleString():"—", afterTax!=null&&afterTax>=0?"#4ade80":"#f87171"],
+          ] : [
+            ["累計損益額", "株数を入力すると計算されます", "#334155"],
+          ]),
         ].map(([label, val, color]) => (
           <div key={label} style={{ background:"#111827", borderRadius:8, padding:"10px 14px" }}>
             <div style={{ color:"#475569", fontSize:R.sm, marginBottom:4 }}>{label}</div>
-            <div style={{ color, fontWeight:700 }}>{val}</div>
+            <div style={{ color, fontWeight:700, fontSize:R.sm }}>{val}</div>
           </div>
         ))}
       </div>
+      {!hasQty && <div style={{ color:"#475569", fontSize:R.sm, marginTop:8 }}>※ 株数列に売却株数を入力すると累計損益額も計算されます</div>}
     </div>
   );
 }
@@ -3397,9 +3412,9 @@ export default function App() {
                         </thead>
                         <tbody>
                           {portfolio.filter(h=>h.sold).map(h => {
-                            const qty = h.soldQty || h.qty || 0;
+                            const qty = h.soldQty || 0;
                             const pnlPct = h.soldPrice && h.avgCost ? (h.soldPrice-h.avgCost)/h.avgCost*100 : null;
-                            const pnlYen = h.soldPrice && h.avgCost && qty ? (h.soldPrice-h.avgCost)*qty : null;
+                            const pnlYen = h.soldPrice && h.avgCost && qty > 0 ? (h.soldPrice-h.avgCost)*qty : null;
                             const hsc = scoreFromPeriods(h, baseYear);
                             return (
                               <tr key={h.id} style={{ borderBottom:"1px solid #1e293b" }}>
@@ -3596,7 +3611,7 @@ export default function App() {
                         <button style={S.miniBtn} onClick={() => { setSelected(h); setTab("detail"); setDetailTab("memo"); }}>メモ</button>
                         <button style={S.miniBtn} onClick={() => { setSelected(h); setTab("detail"); setDetailTab("metrics"); }}>詳細</button>
                         <button style={{ ...S.miniBtn, ...(compareIds.includes(h.id)?{ color:"#4ade80", borderColor:"#4ade80" }:{}) }} onClick={() => toggleCompare(h.id)}>{compareIds.includes(h.id)?"比較中":"比較"}</button>
-                        <button style={{ ...S.miniBtn, color:"#a78bfa", borderColor:"#a78bfa" }} onClick={() => setSellTarget(h)}>売却</button>
+                        <button style={{ ...S.miniBtn, color:"#a78bfa", borderColor:"#a78bfa" }} onClick={() => { setSellTarget(h); setSellForm(p => ({ ...p, soldQty: String(h.qty||'') })); }}>売却</button>
                         <button style={{ ...S.miniBtn, color:"#f59e0b", borderColor:"#f59e0b" }} onClick={() => {
                           if (!window.confirm(h.name+" を保有候補リストに移動します。")) return;
                           saveWatch2(p => [...p, { ...h, isWatch:true }]);
@@ -4372,7 +4387,7 @@ export default function App() {
             <div style={{ display:"flex", flexDirection:"column", gap:12, marginBottom:16 }}>
               <FInput label="売却日 *" value={sellForm.sellDate} onChange={v => setSellForm(p=>({...p,sellDate:v}))} inputType="date" />
               <FInput label="売却単価（円）*" value={sellForm.sellPrice} onChange={v => setSellForm(p=>({...p,sellPrice:v}))} numOnly={true} />
-              <FInput label="売却株数（株）" value={sellForm.soldQty} onChange={v => setSellForm(p=>({...p,soldQty:v}))} numOnly={true} placeholder={sellTarget?.qty ? String(sellTarget.qty) : "株数"} />
+              <FInput label="売却株数（株）" value={sellForm.soldQty} onChange={v => setSellForm(p=>({...p,soldQty:v}))} numOnly={true} placeholder={sellTarget?.qty ? String(sellTarget.qty) : "株数を入力"} />
               <div>
                 <label style={{ color:"#64748b", fontSize:14, display:"block", marginBottom:3 }}>売却理由・メモ</label>
                 <textarea value={sellForm.memo} onChange={e => setSellForm(p=>({...p,memo:e.target.value.slice(0,200)}))}
@@ -4408,7 +4423,8 @@ export default function App() {
                   sold: true,
                   soldDate: sellForm.sellDate,
                   soldPrice: +sellForm.sellPrice,
-                  soldQty: sellForm.soldQty ? +sellForm.soldQty : h.qty,
+                  // 追加売却の場合は株数を足し算、avgCostは加重平均
+                  soldQty: (x.soldQty || 0) + (sellForm.soldQty ? +sellForm.soldQty : h.qty),
                   qty: 0,
                   memo: { ...(x.memo||{}), sellMemo: sellForm.memo },
                 }));
