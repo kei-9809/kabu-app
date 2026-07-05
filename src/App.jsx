@@ -2416,6 +2416,34 @@ function SnapshotAnalysis({ closed, S, R }) {
   );
 }
 
+// 売却済み累計損益サマリー
+function SoldSummary({ portfolio, TAX, S, R }) {
+  const soldList = portfolio.filter(h => h.sold && h.soldPrice && h.avgCost && h.qty != null);
+  if (soldList.length === 0) return null;
+  const totalPnl = soldList.reduce((s, h) => s + (h.soldPrice - h.avgCost) * (h.qty || 0), 0);
+  const totalCost = soldList.reduce((s, h) => s + h.avgCost * (h.qty || 0), 0);
+  const totalPnlPct = totalCost > 0 ? totalPnl / totalCost * 100 : null;
+  const afterTax = totalPnl > 0 ? totalPnl * (1 - TAX) : totalPnl;
+  return (
+    <div style={{ ...S.card, marginBottom:16, background:"#0d1424", border:"1px solid #1e293b" }}>
+      <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:12 }}>📊 売却累計損益</div>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(min(160px,45vw),1fr))", gap:12 }}>
+        {[
+          ["売却銘柄数", soldList.length+"銘柄", "#94a3b8"],
+          ["累計損益（税引前）", (totalPnl>=0?"▲":"▼")+"¥"+Math.abs(Math.round(totalPnl)).toLocaleString(), totalPnl>=0?"#4ade80":"#f87171"],
+          ["累計損益率", totalPnlPct!=null?(totalPnlPct>=0?"+":"")+totalPnlPct.toFixed(2)+"%":"—", totalPnlPct!=null&&totalPnlPct>=0?"#4ade80":"#f87171"],
+          ["累計損益（税引後）", (afterTax>=0?"▲":"▼")+"¥"+Math.abs(Math.round(afterTax)).toLocaleString(), afterTax>=0?"#4ade80":"#f87171"],
+        ].map(([label, val, color]) => (
+          <div key={label} style={{ background:"#111827", borderRadius:8, padding:"10px 14px" }}>
+            <div style={{ color:"#475569", fontSize:R.sm, marginBottom:4 }}>{label}</div>
+            <div style={{ color, fontWeight:700 }}>{val}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── 売買記録タブ ─────────────────────────────────────────────────────────────
 function TradesTab({ trades, saveTrades, portfolio, watchlist, S, R }) {
   const emptyForm = { ticker:"", name:"", sector:"", style:"growth", firstBuyDate:"", buyDate:"", buyPrice:"", sellDate:"", sellPrice:"", qty:"", scoreAtBuy:"", memo:"" };
@@ -3353,57 +3381,79 @@ export default function App() {
                 {portfolio.filter(h=>h.sold).length === 0 ? (
                   <div style={S.card}><span style={{ color:"#475569" }}>売却済み銘柄はありません。</span></div>
                 ) : (
-                  <div style={{ overflowX:"auto" }}>
-                    <table style={{ width:"100%", borderCollapse:"collapse" }}>
-                      <thead>
-                        <tr style={{ borderBottom:"2px solid #1e293b" }}>
-                          {["銘柄","コード","取得単価","売却単価","損益率","売却日","操作"].map(h => (
-                            <th key={h} style={{ textAlign:h==="銘柄"||h==="操作"?"left":"right", padding:"10px 12px", color:"#475569", fontSize:R.sm, fontWeight:600 }}>{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {portfolio.filter(h=>h.sold).map(h => {
-                          const pnlPct = h.soldPrice && h.avgCost ? (h.soldPrice-h.avgCost)/h.avgCost*100 : null;
-                          const hsc = scoreFromPeriods(h, baseYear);
-                          return (
-                            <tr key={h.id} style={{ borderBottom:"1px solid #1e293b" }}>
-                              <td style={{ padding:"12px 12px" }}>
-                                <div style={{ color:"#94a3b8", fontWeight:600 }}>{h.name}</div>
-                                <div style={{ color:"#475569", fontSize:R.sm }}>{h.sector}</div>
-                                {hsc!=null && <div style={{ fontSize:R.sm, color:"#64748b", marginTop:2 }}>{hsc}pt</div>}
-                              </td>
-                              <td style={{ padding:"12px 12px", textAlign:"right" }}><Tag color="#475569">{h.ticker}</Tag></td>
-                              <td style={{ padding:"12px 12px", textAlign:"right", color:"#64748b" }}>¥{h.avgCost?.toLocaleString()}</td>
-                              <td style={{ padding:"12px 12px", textAlign:"right", color:"#e2e8f0", fontWeight:600 }}>¥{h.soldPrice?.toLocaleString()||"—"}</td>
-                              <td style={{ padding:"12px 12px", textAlign:"right" }}>
-                                {pnlPct!=null ? <Delta val={pnlPct} fmt={v=>v.toFixed(2)+"%"} /> : <span style={{ color:"#334155" }}>—</span>}
-                              </td>
-                              <td style={{ padding:"12px 12px", textAlign:"right", color:"#475569", fontSize:R.sm }}>{h.soldDate||"—"}</td>
-                              <td style={{ padding:"12px 12px" }}>
-                                <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
-                                  <button style={S.miniBtn} onClick={() => { setSelected(h); setTab("detail"); setDetailTab("metrics"); }}>詳細</button>
-                                  <button style={{ ...S.miniBtn, color:"#4ade80", borderColor:"#4ade80" }} onClick={() => {
-                                    const qty = prompt("再購入株数を入力してください");
-                                    if (!qty||isNaN(+qty)) return;
-                                    const price = prompt("取得単価を入力してください");
-                                    if (!price||isNaN(+price)) return;
-                                    save(p => p.map(x => x.id!==h.id ? x : { ...x, sold:false, soldDate:null, soldPrice:null, qty:+qty, avgCost:+price }));
-                                    setPortfolioMode("portfolio");
-                                  }}>再購入</button>
-                                  <button style={{ ...S.miniBtn, color:"#f59e0b", borderColor:"#f59e0b" }} onClick={() => {
-                                    if (!window.confirm(h.name+" を保有候補リストに移動します。")) return;
-                                    saveWatch2(p => [...p, { ...h, sold:false, soldDate:null, soldPrice:null, qty:0, avgCost:0, isWatch:true }]);
-                                    save(p => p.filter(x => x.id!==h.id));
-                                  }}>候補へ</button>
-                                  <button style={{ ...S.miniBtn, color:"#f87171", borderColor:"#f87171" }} onClick={() => deleteStock(h.id)}>削除</button>
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                  <div>
+                    {/* 累計損益サマリー */}
+                    <SoldSummary portfolio={portfolio} TAX={TAX} S={S} R={R} />
+
+                    {/* 個別銘柄テーブル */}
+                    <div style={{ overflowX:"auto" }}>
+                      <table style={{ width:"100%", borderCollapse:"collapse" }}>
+                        <thead>
+                          <tr style={{ borderBottom:"2px solid #1e293b" }}>
+                            {["銘柄","コード","株数","取得単価","売却単価","損益（税前）","損益率","初回取得日","売却日","メモ","操作"].map(h => (
+                              <th key={h} style={{ textAlign:h==="銘柄"||h==="メモ"||h==="操作"?"left":"right", padding:"10px 12px", color:"#475569", fontSize:R.sm, fontWeight:600, whiteSpace:"nowrap" }}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {portfolio.filter(h=>h.sold).map(h => {
+                            const pnlPct = h.soldPrice && h.avgCost ? (h.soldPrice-h.avgCost)/h.avgCost*100 : null;
+                            const pnlYen = h.soldPrice && h.avgCost && h.qty ? (h.soldPrice-h.avgCost)*h.qty : null;
+                            const hsc = scoreFromPeriods(h, baseYear);
+                            return (
+                              <tr key={h.id} style={{ borderBottom:"1px solid #1e293b" }}>
+                                <td style={{ padding:"10px 12px" }}>
+                                  <div style={{ color:"#94a3b8", fontWeight:600 }}>{h.name}</div>
+                                  <div style={{ color:"#475569", fontSize:R.sm }}>{h.sector}</div>
+                                  {hsc!=null && <div style={{ fontSize:R.sm, color:"#64748b" }}>{hsc}pt</div>}
+                                </td>
+                                <td style={{ padding:"10px 12px", textAlign:"right" }}><Tag color="#475569">{h.ticker}</Tag></td>
+                                <td style={{ padding:"10px 12px", textAlign:"right", color:"#64748b" }}>{h.qty?.toLocaleString()||"—"}</td>
+                                <td style={{ padding:"10px 12px", textAlign:"right", color:"#64748b" }}>¥{h.avgCost?.toLocaleString()}</td>
+                                <td style={{ padding:"10px 12px", textAlign:"right", color:"#e2e8f0", fontWeight:600 }}>¥{h.soldPrice?.toLocaleString()||"—"}</td>
+                                <td style={{ padding:"10px 12px", textAlign:"right" }}>
+                                  {pnlYen!=null ? <span style={{ color:pnlYen>=0?"#4ade80":"#f87171", fontWeight:600 }}>{pnlYen>=0?"▲":"▼"}¥{Math.abs(Math.round(pnlYen)).toLocaleString()}</span> : <span style={{ color:"#334155" }}>—</span>}
+                                </td>
+                                <td style={{ padding:"10px 12px", textAlign:"right" }}>
+                                  {pnlPct!=null ? <Delta val={pnlPct} fmt={v=>v.toFixed(2)+"%"} /> : <span style={{ color:"#334155" }}>—</span>}
+                                </td>
+                                <td style={{ padding:"10px 12px", textAlign:"right", color:"#475569", fontSize:R.sm }}>{h.memo?.firstBuyDate||"—"}</td>
+                                <td style={{ padding:"10px 12px", textAlign:"right", color:"#475569", fontSize:R.sm }}>{h.soldDate||"—"}</td>
+                                <td style={{ padding:"10px 12px", maxWidth:200 }}>
+                                  {h.memo?.buyReason ? (
+                                    <div style={{ color:"#475569", fontSize:R.sm, whiteSpace:"pre-wrap", maxHeight:60, overflow:"hidden", cursor:"pointer" }}
+                                      title={h.memo.buyReason}
+                                      onClick={() => alert(h.memo.buyReason)}>
+                                      {h.memo.buyReason.slice(0,40)}{h.memo.buyReason.length>40?"…":""}
+                                    </div>
+                                  ) : <span style={{ color:"#334155", fontSize:R.sm }}>—</span>}
+                                  {h.memo?.memo && <div style={{ color:"#334155", fontSize:R.sm, marginTop:2 }}>{h.memo.memo.slice(0,30)}</div>}
+                                </td>
+                                <td style={{ padding:"10px 12px" }}>
+                                  <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
+                                    <button style={S.miniBtn} onClick={() => { setSelected(h); setTab("detail"); setDetailTab("metrics"); }}>詳細</button>
+                                    <button style={{ ...S.miniBtn, color:"#4ade80", borderColor:"#4ade80" }} onClick={() => {
+                                      const qty = prompt("再購入株数を入力してください");
+                                      if (!qty||isNaN(+qty)) return;
+                                      const price = prompt("取得単価を入力してください");
+                                      if (!price||isNaN(+price)) return;
+                                      save(p => p.map(x => x.id!==h.id ? x : { ...x, sold:false, soldDate:null, soldPrice:null, qty:+qty, avgCost:+price }));
+                                      setPortfolioMode("portfolio");
+                                    }}>再購入</button>
+                                    <button style={{ ...S.miniBtn, color:"#f59e0b", borderColor:"#f59e0b" }} onClick={() => {
+                                      if (!window.confirm(h.name+" を保有候補リストに移動します。")) return;
+                                      saveWatch2(p => [...p, { ...h, sold:false, soldDate:null, soldPrice:null, qty:0, avgCost:0, isWatch:true }]);
+                                      save(p => p.filter(x => x.id!==h.id));
+                                    }}>候補へ</button>
+                                    <button style={{ ...S.miniBtn, color:"#f87171", borderColor:"#f87171" }} onClick={() => deleteStock(h.id)}>削除</button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 )}
               </div>
