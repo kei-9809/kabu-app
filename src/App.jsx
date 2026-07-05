@@ -3142,17 +3142,14 @@ export default function App() {
     ];
   }, [cmpStocks]);
 
-  const summary = useMemo(() => {
-    const active = portfolio.filter(h => !h.sold);
-    if (!active.length) return null;
-    const sm = {};
-    active.forEach(h => { sm[h.sector] = (sm[h.sector]||0) + h.qty*h.currentPrice; });
-    const sectorData = Object.entries(sm).map(([name, value]) => ({ name, value:Math.round(value) })).sort((a,b) => b.value-a.value);
-    const pers = active.map(h => calcAll(h.financials).per).filter(v => v && v > 0 && v < 200);
-    const avgPer = pers.length > 0 ? (pers.reduce((a,b) => a+b, 0)/pers.length).toFixed(1) : null;
-    const sortedPnl = [...active].sort((a,b) => ((b.currentPrice-b.avgCost)/b.avgCost)-((a.currentPrice-a.avgCost)/a.avgCost));
-    return { sectorData, avgPer, sortedPnl, afterTax: tPnL > 0 ? tPnL*(1-TAX) : tPnL };
-  }, [portfolio, tPnL, tc, tv]);
+  const active = portfolio.filter(h => !h.sold);
+  const sm = {};
+  active.forEach(h => { sm[h.sector] = (sm[h.sector]||0) + h.qty*h.currentPrice; });
+  const sectorData = Object.entries(sm).map(([name, value]) => ({ name, value:Math.round(value) })).sort((a,b) => b.value-a.value);
+  const pers = active.map(h => calcAll(h.financials).per).filter(v => v && v > 0 && v < 200);
+  const avgPer = pers.length > 0 ? (pers.reduce((a,b) => a+b, 0)/pers.length).toFixed(1) : null;
+  const sortedPnl = [...active].sort((a,b) => ((b.currentPrice-b.avgCost)/b.avgCost)-((a.currentPrice-a.avgCost)/a.avgCost));
+  const summary = active.length > 0 ? { sectorData, avgPer, sortedPnl, afterTax: tPnL > 0 ? tPnL*(1-TAX) : tPnL } : null;
 
   const safetyMargin = useMemo(() => {
     const target = selected || watchSelected;
