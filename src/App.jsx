@@ -3515,7 +3515,7 @@ export default function App() {
                 <div style={{ color:"#fbbf24", fontWeight:700, marginBottom:8 }}>📊 株価・保有情報の一括更新</div>
                 <div style={{ color:"#64748b", fontSize:R.sm, marginBottom:12 }}>空欄の場合は現在の値を維持します。</div>
                 <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(min(280px,90vw),1fr))", gap:12, marginBottom:12 }}>
-                  {portfolio.map(h => (
+                  {portfolio.filter(h => !h.sold).map(h => (
                     <div key={h.id} style={{ background:"#111827", borderRadius:8, padding:"12px 14px" }}>
                       <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:10, fontSize:R.md }}>{h.name}（{h.ticker}）</div>
                       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
