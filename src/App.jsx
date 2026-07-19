@@ -331,7 +331,7 @@ const calcSnapshot = (h, baseYear) => {
 const LS_CUSTOM_CRITERIA = "kabulens_custom_criteria";
 const LS_SCORE_MODE = "kabulens_score_mode";
 
-const DEFAULT_SIM_PARAMS = { years:"5", growthRate:"15", targetMargin:"15", targetPer:"20", targetPsr:"5", targetEvEbitda:"", dividendRate:"2", reinvest:true };
+const DEFAULT_SIM_PARAMS = { years:"5", growthRate:"15", targetMargin:"15", targetPer:"20", targetPsr:"5", targetEvEbitda:"", dividendRate:"2", reinvest:true, baseDate:"" };
 
 const MEMO_TEMPLATES = {
   growth: `【ビジネスモデル】
@@ -2416,6 +2416,24 @@ function SnapshotAnalysis({ closed, S, R }) {
   );
 }
 
+// 基準日から各年のラベルを計算するヘルパー
+function BaseDateInfo({ baseDate, R }) {
+  const base = new Date(baseDate);
+  const now = new Date();
+  const diffMonths = (base.getFullYear()-now.getFullYear())*12 + (base.getMonth()-now.getMonth());
+  return (
+    <span style={{ color:"#60a5fa", fontSize:R.sm }}>
+      現在から約{diffMonths}ヶ月後が1年目 —
+      {[1,2,3,4,5].slice(0, 3).map(y => {
+        const d = new Date(base);
+        d.setFullYear(d.getFullYear() + y - 1);
+        return " "+y+"年後="+d.getFullYear()+"/"+String(d.getMonth()+1).padStart(2,"0");
+      }).join("、")}
+    </span>
+  );
+}
+
+
 // 売却済み累計損益サマリー
 function SoldSummary({ portfolio, TAX, S, R }) {
   const soldList = portfolio.filter(h => h.sold && h.soldPrice && h.avgCost);
@@ -3101,6 +3119,17 @@ export default function App() {
     // PERマイナス（赤字）or PER100倍以上（低収益）or EPS≤0 → PSR法
     const currentPer = price > 0 && curEps > 0 ? price / curEps : null;
     const usePsr = curEps <= 0 || (currentPer !== null && currentPer >= 100);
+    // 年ラベルを決算期ベースで生成
+    const makeYearLabel = (y) => {
+      if (y === 0) return "現在";
+      if (simParams.baseDate) {
+        const d = new Date(simParams.baseDate);
+        d.setFullYear(d.getFullYear() + y - 1);
+        return `${y}年後\n(${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,"0")})`;
+      }
+      return y+"年後";
+    };
+
     return Array.from({ length:yr+1 }, (_, y) => {
       const gf = Math.pow(1+g, y);
       const bearG = g >= 0 ? g*0.4 : g*1.6;
@@ -3139,7 +3168,7 @@ export default function App() {
             ? Math.round(actualDividend * ((Math.pow(1+actualDividend/price, y) - 1) / (actualDividend/price) || y))
             : Math.round(actualDividend * y))
         : 0;
-      return { year:y===0?"現在":y+"年後", base, bear, bull, evp, dc, ps:Math.round(ps), po:Math.round(po), pe:parseFloat(pe.toFixed(2)), usePsr };
+      return { year:makeYearLabel(y), base, bear, bull, evp, dc, ps:Math.round(ps), po:Math.round(po), pe:parseFloat(pe.toFixed(2)), usePsr };
     });
   }, [selected, watchSelected, portfolio, watchlist, baseYear, simParams]);
   const simRowsData = useMemo(() => simRows(), [simRows]);
@@ -4034,6 +4063,15 @@ export default function App() {
               <>
                 <div style={{ ...S.card, marginBottom:16 }}>
                   <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:12 }}>設定 — {(selected || watchSelected).name}（{(selected || watchSelected).ticker}）</div>
+                  {/* 基準日設定 */}
+                  <div style={{ background:"#111827", borderRadius:8, padding:"10px 14px", marginBottom:12 }}>
+                    <div style={{ color:"#60a5fa", fontSize:R.sm, fontWeight:700, marginBottom:6 }}>📅 基準日（次の本決算日）</div>
+                    <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
+                      <FInput label="" value={simEdit.baseDate} onChange={v => setSimEdit(p=>({...p, baseDate:v}))} inputType="date" />
+                      {simEdit.baseDate && <BaseDateInfo baseDate={simEdit.baseDate} R={R} />}
+                      {!simEdit.baseDate && <span style={{ color:"#334155", fontSize:R.sm }}>未設定の場合は予測年数をそのまま使用します</span>}
+                    </div>
+                  </div>
                   <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(min(180px,45vw),1fr))", gap:12 }}>
                     <FInput label="予測年数（年）" value={simEdit.years} onChange={v => setSimEdit(p => ({ ...p, years:v }))} numOnly={true} />
                     <FInput label="売上成長率（基本）%" value={simEdit.growthRate} onChange={v => setSimEdit(p => ({ ...p, growthRate:v }))} numOnly={true} />
@@ -4050,16 +4088,11 @@ export default function App() {
                     </div>
                   </div>
                   <div style={{ marginTop:12, display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
-                    <button
-                      style={{ ...S.addBtn, padding:"8px 20px" }}
-                      onClick={() => {
+                    <button style={{ ...S.addBtn, padding:"8px 20px" }} onClick={() => {
                         setSimParams(simEdit);
                         const target = selected || watchSelected;
                         if (target) saveSimParams(target.id, simEdit);
-                      }}
-                    >
-                      ▶ 再計算
-                    </button>
+                      }}>▶ 再計算</button>
                     <span style={{ color:"#334155", fontSize:16 }}>強気: 成長率×1.6 / 弱気: 成長率×0.4（自動計算）</span>
                   </div>
                 </div>
