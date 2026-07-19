@@ -3083,7 +3083,7 @@ export default function App() {
       fd = prev || {};
     }
     const fBase = h.financials || {};
-    const price = h.currentPrice || n(fBase.price) || 0;
+    const price = h.avgCost || h.currentPrice || n(fBase.price) || 0;  // 取得単価ベース
     const sales = n(fd.sales) || n(fBase.sales) || 0;
     const sh = n(fd.shares) || n(fBase.shares) || 1;
     const curOp = n(fd.opProfit) || n(fBase.opProfit) || 0;
@@ -3209,7 +3209,7 @@ export default function App() {
     const fMerged = { ...fd, price: String(h.currentPrice) };
     const cMerged = calcAll(fMerged);
     if (!cMerged.eps || cMerged.eps <= 0) return null;
-    const price = h.currentPrice;
+    const price = h.avgCost || h.currentPrice;  // 取得単価ベース
     const fair = cMerged.eps * +simParams.targetPer;
     return { fair:Math.round(fair), price, margin:(fair-price)/price*100 };
   }, [selected, watchSelected, portfolio, watchlist, baseYear, simParams.targetPer]);
@@ -3229,7 +3229,7 @@ export default function App() {
     const fMerged = { ...fd, price: String(h.currentPrice) };
     const cMerged = calcAll(fMerged);
     if (!cMerged.eps || cMerged.eps <= 0) return null;
-    const price = h.currentPrice;
+    const price = h.avgCost || h.currentPrice;  // 取得単価ベース
     const g = +simParams.growthRate/100, tPer = +simParams.targetPer;
     const finals = [];
     for (let t = 0; t < 1000; t++) {
@@ -3246,7 +3246,7 @@ export default function App() {
       const lo = finals[0]+i*rng/20, hi = lo+rng/20;
       return { range:Math.round((lo+hi)/2).toLocaleString(), count:finals.filter(v => v>=lo&&v<hi).length };
     });
-    return { bins, p10:p(0.10), p25:p(0.25), p50:p(0.50), p75:p(0.75), p90:p(0.90), mean:Math.round(finals.reduce((a,b)=>a+b,0)/1000), probUp:finals.filter(v=>v>price).length/10, price };
+    return { bins, p10:p(0.10), p25:p(0.25), p50:p(0.50), p75:p(0.75), p90:p(0.90), mean:Math.round(finals.reduce((a,b)=>a+b,0)/1000), probUp:finals.filter(v=>v>price).length/10, price, label:"取得単価" };
   }, [selected, watchSelected, portfolio, watchlist, baseYear, simParams]);
 
   const pnlSummary = useMemo(() => {
@@ -4123,7 +4123,7 @@ export default function App() {
                           <XAxis dataKey="year" tick={{ fill:"#94a3b8", fontSize:R.sm }} />
                           <YAxis tick={{ fill:"#64748b", fontSize:R.sm }} tickFormatter={v => v?.toLocaleString()} />
                           <Tooltip formatter={v => v?"¥"+v?.toLocaleString():"—"} contentStyle={TS} itemStyle={{ color:"#e2e8f0" }} />
-                          <ReferenceLine y={n(f.price)||(selected||watchSelected)?.currentPrice} stroke="#f59e0b" strokeDasharray="4 4" label={{ value:"現在株価", fill:"#f59e0b", fontSize:16 }} />
+                          <ReferenceLine y={n(f.price)||(selected||watchSelected)?.avgCost||(selected||watchSelected)?.currentPrice} stroke="#f59e0b" strokeDasharray="4 4" label={{ value:"取得単価", fill:"#f59e0b", fontSize:16 }} />
                           {(selected||watchSelected)?.avgCost > 0 && <ReferenceLine y={(selected||watchSelected).avgCost} stroke="#a78bfa" strokeDasharray="4 4" label={{ value:"取得単価", fill:"#a78bfa", fontSize:16 }} />}
                           <Legend wrapperStyle={{ color:"#94a3b8", fontSize:R.sm }} />
                           <Area type="monotone" dataKey="bull" stroke="#4ade80" strokeWidth={2} fill="url(#gbull)" name="強気" />
@@ -4308,7 +4308,7 @@ export default function App() {
                               </div>
                               <div style={{ background:"#0d1424", borderRadius:6, padding:"8px 12px" }}>
                                 <div style={{ color:"#94a3b8", marginBottom:4 }}>④ 1,000回繰り返して分布を表示</div>
-                                <div style={{ color:"#e2e8f0" }}>現在株価¥{monteData.price?.toLocaleString()}を上回る確率: <span style={{ color: monteData.probUp >= 50 ? "#4ade80" : "#f87171", fontWeight:700 }}>{monteData.probUp.toFixed(1)}%</span></div>
+                                <div style={{ color:"#e2e8f0" }}>取得単価¥{monteData.price?.toLocaleString()}を上回る確率: <span style={{ color: monteData.probUp >= 50 ? "#4ade80" : "#f87171", fontWeight:700 }}>{monteData.probUp.toFixed(1)}%</span></div>
                               </div>
                             </div>
                           </div>
