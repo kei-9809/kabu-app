@@ -2468,9 +2468,66 @@ function ValuationAnalysis({ h, portfolio, watchlist, baseYear, simParams, S, R,
     <div>
       <div style={{ ...S.card, marginBottom:16 }}>
         <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:4 }}>過去PER/PBR/PSRのσ分析（ボリンジャーバンド的判断）</div>
-        <div style={{ color:"#475569", fontSize:R.sm, marginBottom:16 }}>
+        <div style={{ color:"#475569", fontSize:R.sm, marginBottom:12 }}>
           過去{histData.length}年分から平均・σを算出。現在値が±2σの範囲内かを判断します。
           基準株価: <span style={{ color:"#fbbf24" }}>取得単価 ¥{price.toLocaleString()}</span>
+        </div>
+
+        {/* 説明ボックス */}
+        <div style={{ background:"#0a1628", border:"1px solid #1e3a5f", borderRadius:8, padding:"12px 14px", marginBottom:16, fontSize:R.sm, lineHeight:1.8 }}>
+          <div style={{ color:"#60a5fa", fontWeight:700, marginBottom:8 }}>📐 算出方法と見方</div>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(min(260px,100%),1fr))", gap:10 }}>
+            <div style={{ background:"#0d1424", borderRadius:6, padding:"8px 12px" }}>
+              <div style={{ color:"#94a3b8", marginBottom:4, fontWeight:600 }}>算出方法</div>
+              <div style={{ color:"#64748b" }}>
+                過去{histData.length}年分のPER・PBR・PSRの<span style={{ color:"#e2e8f0" }}>平均（μ）</span>と<span style={{ color:"#e2e8f0" }}>標準偏差（σ）</span>を計算。
+                現在値がμからσ何個分離れているか（Zスコア）を算出します。
+              </div>
+            </div>
+            <div style={{ background:"#0d1424", borderRadius:6, padding:"8px 12px" }}>
+              <div style={{ color:"#94a3b8", marginBottom:4, fontWeight:600 }}>何を見るか</div>
+              <div style={{ color:"#64748b" }}>
+                その銘柄の<span style={{ color:"#e2e8f0" }}>過去の自分自身と比較した割安・割高</span>を判断します。
+                市場全体や同業他社との比較ではなく「この銘柄の歴史的な評価水準」に対して今の株価が高いか低いかを示します。
+              </div>
+            </div>
+            <div style={{ background:"#0d1424", borderRadius:6, padding:"8px 12px" }}>
+              <div style={{ color:"#94a3b8", marginBottom:4, fontWeight:600 }}>判定基準（±2σ）</div>
+              <div style={{ color:"#64748b" }}>
+                正規分布では全データの約95%が±2σ内に収まります。
+                <span style={{ color:"#f87171" }}>+2σ超＝過去に比べ割高</span>、
+                <span style={{ color:"#4ade80" }}>-2σ超＝過去に比べ割安</span>の目安。
+                ただし業績が大幅改善した場合はPER上昇が正当化されることもあります。
+              </div>
+            </div>
+            <div style={{ background:"#0d1424", borderRadius:6, padding:"8px 12px" }}>
+              <div style={{ color:"#94a3b8", marginBottom:4, fontWeight:600 }}>限界・注意点</div>
+              <div style={{ color:"#64748b" }}>
+                過去データが<span style={{ color:"#fbbf24" }}>3年以上</span>あるほど精度が上がります。
+                赤字期を含む場合はPERが計算できないため除外されます。
+                成長フェーズの変化（赤字→黒字転換等）では過去比較の意味が薄れます。
+              </div>
+            </div>
+          </div>
+
+          {/* 判定レンジ早見表 */}
+          <div style={{ marginTop:10 }}>
+            <div style={{ color:"#94a3b8", marginBottom:6, fontWeight:600 }}>判定レンジ早見表</div>
+            <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+              {[
+                ["🟢 割安", "-2σ超（下位2.5%）", "#4ade80"],
+                ["🔵 やや割安", "-1σ〜-2σ", "#60a5fa"],
+                ["⚪ 適正範囲", "±1σ以内（約68%）", "#94a3b8"],
+                ["🟡 やや割高", "+1σ〜+2σ", "#fbbf24"],
+                ["🔴 割高", "+2σ超（上位2.5%）", "#f87171"],
+              ].map(([label, range, color]) => (
+                <div key={label} style={{ background:"#111827", borderRadius:4, padding:"4px 10px", border:"1px solid "+color+"44" }}>
+                  <span style={{ color, fontSize:R.sm, fontWeight:700 }}>{label}</span>
+                  <span style={{ color:"#334155", fontSize:R.sm }}> {range}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
         {analyses.map(a => (
           <div key={a.label} style={{ background:"#111827", borderRadius:10, padding:"16px", marginBottom:12 }}>
