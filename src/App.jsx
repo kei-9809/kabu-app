@@ -2600,34 +2600,41 @@ function BaseDateInfo({ baseDate, R }) {
 
 // 売却済み累計損益サマリー
 function SoldSummary({ portfolio, TAX, S, R }) {
-  const soldList = portfolio.filter(h => h.sold && h.soldPrice && h.avgCost);
-  if (soldList.length === 0) return null;
+  // 現在sold:trueの銘柄 + soldHistoryに記録された過去売却分を全て集計
+  const allSoldItems = [];
+  portfolio.forEach(h => {
+    // 過去の売却履歴
+    (h.soldHistory||[]).forEach(s => allSoldItems.push({ ...s, name:h.name }));
+    // 現在の売却済み状態
+    if (h.sold && h.soldPrice && h.avgCost) {
+      allSoldItems.push({ soldDate:h.soldDate, soldPrice:h.soldPrice, soldQty:h.soldQty||0, avgCost:h.avgCost, name:h.name });
+    }
+  });
+  if (allSoldItems.length === 0) return null;
 
-  const soldQty = h => h.soldQty || h.qty || 0;
-  const hasQty = soldList.some(h => soldQty(h) > 0);
-
-  // 株数あり: 損益額計算、株数なし: 損益率の単純平均
-  const totalPnl = hasQty ? soldList.reduce((s, h) => s + (h.soldPrice - h.avgCost) * soldQty(h), 0) : null;
-  const totalCost = hasQty ? soldList.reduce((s, h) => s + h.avgCost * soldQty(h), 0) : null;
+  const hasQty = allSoldItems.some(s => (s.soldQty||0) > 0);
+  const totalPnl = hasQty ? allSoldItems.reduce((s, x) => s + (x.soldPrice - x.avgCost) * (x.soldQty||0), 0) : null;
+  const totalCost = hasQty ? allSoldItems.reduce((s, x) => s + x.avgCost * (x.soldQty||0), 0) : null;
   const totalPnlPct = totalCost > 0 ? totalPnl / totalCost * 100
-    : soldList.reduce((s, h) => s + (h.soldPrice - h.avgCost) / h.avgCost * 100, 0) / soldList.length;
-  const afterTax = totalPnl != null ? (totalPnl > 0 ? totalPnl * (1 - TAX) : totalPnl) : null;
-
-  const wins = soldList.filter(h => h.soldPrice > h.avgCost).length;
+    : allSoldItems.filter(x=>x.soldPrice&&x.avgCost).reduce((s,x) => s+(x.soldPrice-x.avgCost)/x.avgCost*100, 0) / allSoldItems.length;
+  const afterTax = totalPnl != null ? (totalPnl > 0 ? totalPnl*(1-TAX) : totalPnl) : null;
+  const wins = allSoldItems.filter(x => x.soldPrice > x.avgCost).length;
+  const soldStocks = portfolio.filter(h=>h.sold).length;
+  const historyCount = portfolio.reduce((s,h)=>(h.soldHistory||[]).length+s, 0);
 
   return (
     <div style={{ ...S.card, marginBottom:16, background:"#0d1424", border:"1px solid #1e293b" }}>
-      <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:12 }}>📊 売却累計損益</div>
+      <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:12 }}>📊 売却累計損益（現在の売却済み {soldStocks}銘柄 + 過去売却履歴 {historyCount}件）</div>
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(min(150px,45vw),1fr))", gap:12 }}>
         {[
-          ["売却銘柄数", soldList.length+"銘柄", "#94a3b8"],
-          ["勝率", (wins/soldList.length*100).toFixed(0)+"%", wins/soldList.length>=0.5?"#4ade80":"#f87171"],
+          ["売却総件数", allSoldItems.length+"件", "#94a3b8"],
+          ["勝率", (wins/allSoldItems.length*100).toFixed(0)+"%", wins/allSoldItems.length>=0.5?"#4ade80":"#f87171"],
           ["平均損益率", (totalPnlPct>=0?"+":"")+totalPnlPct.toFixed(2)+"%", totalPnlPct>=0?"#4ade80":"#f87171"],
           ...(totalPnl!=null ? [
             ["累計損益（税引前）", (totalPnl>=0?"▲":"▼")+"¥"+Math.abs(Math.round(totalPnl)).toLocaleString(), totalPnl>=0?"#4ade80":"#f87171"],
             ["累計損益（税引後）", afterTax!=null?(afterTax>=0?"▲":"▼")+"¥"+Math.abs(Math.round(afterTax)).toLocaleString():"—", afterTax!=null&&afterTax>=0?"#4ade80":"#f87171"],
           ] : [
-            ["累計損益額", "株数を入力すると計算されます", "#334155"],
+            ["累計損益額", "株数を入力すると計算", "#334155"],
           ]),
         ].map(([label, val, color]) => (
           <div key={label} style={{ background:"#111827", borderRadius:8, padding:"10px 14px" }}>
@@ -3066,12 +3073,44 @@ export default function App() {
   const addStock = () => {
     const { ticker, name, sector, qty, avgCost, currentPrice, firstBuyDate } = addForm;
     if (!ticker||!name||!currentPrice) return;
-    const base = { id:Date.now(), ticker, name, sector:sector||"—", currentPrice:+currentPrice, financials:{ ...EMPTY_F, price:currentPrice }, memo:{ ...EMPTY_MEMO, firstBuyDate:firstBuyDate||"" }, irList:[], periods:{} };
-    if (portfolioMode === "watchlist") {
-      saveWatch2(p => [...p, { ...base, qty:0, avgCost:0, isWatch:true }]);
+
+    // 同じtickerの売却済み銘柄を探す
+    const soldMatch = portfolio.find(h => h.ticker === ticker && h.sold);
+
+    if (soldMatch) {
+      // 売却済みデータを引き継いで再購入扱いにする
+      const hist = [...(soldMatch.soldHistory||[])];
+      if (soldMatch.soldDate) hist.push({ soldDate:soldMatch.soldDate, soldPrice:soldMatch.soldPrice, soldQty:soldMatch.soldQty, avgCost:soldMatch.avgCost });
+      if (portfolioMode === "watchlist") {
+        // 売却済みを候補リストに移動
+        save(p => p.map(h => h.id !== soldMatch.id ? h : {
+          ...h, sold:false, soldDate:null, soldPrice:null, soldQty:null,
+          qty:0, avgCost:0, isWatch:true, currentPrice:+currentPrice,
+          soldHistory:hist,
+          memo:{ ...(h.memo||{}), firstBuyDate: firstBuyDate||h.memo?.firstBuyDate||"" },
+        }));
+        alert(`「${soldMatch.name}」の過去データを引き継ぎました。\n売却履歴: ${hist.length}件`);
+      } else {
+        if (!qty||!avgCost) return;
+        // 売却済みを保有銘柄に戻す
+        save(p => p.map(h => h.id !== soldMatch.id ? h : {
+          ...h, sold:false, soldDate:null, soldPrice:null, soldQty:null,
+          qty:+qty, avgCost:+avgCost, currentPrice:+currentPrice,
+          soldHistory:hist,
+          memo:{ ...(h.memo||{}), firstBuyDate: firstBuyDate||h.memo?.firstBuyDate||"" },
+        }));
+        setPortfolioMode("portfolio");
+        alert(`「${soldMatch.name}」の過去データを引き継ぎました。\n数値入力・メモ・売却履歴はそのまま使えます。`);
+      }
     } else {
-      if (!qty||!avgCost) return;
-      save(p => [...p, { ...base, qty:+qty, avgCost:+avgCost }]);
+      // 新規追加
+      const base = { id:Date.now(), ticker, name, sector:sector||"—", currentPrice:+currentPrice, financials:{ ...EMPTY_F, price:currentPrice }, memo:{ ...EMPTY_MEMO, firstBuyDate:firstBuyDate||"" }, irList:[], periods:{} };
+      if (portfolioMode === "watchlist") {
+        saveWatch2(p => [...p, { ...base, qty:0, avgCost:0, isWatch:true }]);
+      } else {
+        if (!qty||!avgCost) return;
+        save(p => [...p, { ...base, qty:+qty, avgCost:+avgCost }]);
+      }
     }
     setAddForm({ ticker:"", name:"", sector:"", qty:"", avgCost:"", currentPrice:"", firstBuyDate:"" });
     setShowAdd(false);
@@ -3579,7 +3618,18 @@ export default function App() {
                                   {pnlPct!=null ? <Delta val={pnlPct} fmt={v=>v.toFixed(2)+"%"} /> : <span style={{ color:"#334155" }}>—</span>}
                                 </td>
                                 <td style={{ padding:"10px 12px", textAlign:"right", color:"#475569", fontSize:R.sm }}>{h.memo?.firstBuyDate||"—"}</td>
-                                <td style={{ padding:"10px 12px", textAlign:"right", color:"#475569", fontSize:R.sm }}>{h.soldDate||"—"}</td>
+                                <td style={{ padding:"10px 12px", textAlign:"right", color:"#475569", fontSize:R.sm }}>
+                                  {h.soldDate||"—"}
+                                  {(h.soldHistory||[]).length > 0 && (
+                                    <div style={{ marginTop:4, borderTop:"1px solid #1e293b", paddingTop:4 }}>
+                                      {(h.soldHistory||[]).map((s,i) => (
+                                        <div key={i} style={{ color:"#334155", fontSize:12 }}>
+                                          過去: {s.soldDate} ¥{s.soldPrice?.toLocaleString()}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </td>
                                 <td style={{ padding:"10px 12px", maxWidth:180 }}>
                                   {h.memo?.sellMemo ? (
                                     <div style={{ color:"#fbbf24", fontSize:R.sm, whiteSpace:"pre-wrap", cursor:"pointer" }}
@@ -3601,12 +3651,20 @@ export default function App() {
                                       if (!qty||isNaN(+qty)) return;
                                       const price = prompt("取得単価を入力してください");
                                       if (!price||isNaN(+price)) return;
-                                      save(p => p.map(x => x.id!==h.id ? x : { ...x, sold:false, soldDate:null, soldPrice:null, qty:+qty, avgCost:+price }));
+                                      save(p => p.map(x => {
+                                        if (x.id !== h.id) return x;
+                                        // 売却履歴を保持しつつ再購入状態に戻す
+                                        const history = x.soldHistory || [];
+                                        if (x.soldDate) history.push({ soldDate:x.soldDate, soldPrice:x.soldPrice, soldQty:x.soldQty, avgCost:x.avgCost });
+                                        return { ...x, sold:false, soldDate:null, soldPrice:null, soldQty:null, qty:+qty, avgCost:+price, soldHistory:history };
+                                      }));
                                       setPortfolioMode("portfolio");
                                     }}>再購入</button>
                                     <button style={{ ...S.miniBtn, color:"#f59e0b", borderColor:"#f59e0b" }} onClick={() => {
                                       if (!window.confirm(h.name+" を保有候補リストに移動します。")) return;
-                                      saveWatch2(p => [...p, { ...h, sold:false, soldDate:null, soldPrice:null, qty:0, avgCost:0, isWatch:true }]);
+                                      const hist2 = [...(h.soldHistory||[])];
+                                      if (h.soldDate) hist2.push({ soldDate:h.soldDate, soldPrice:h.soldPrice, soldQty:h.soldQty, avgCost:h.avgCost });
+                                      saveWatch2(p => [...p, { ...h, sold:false, soldDate:null, soldPrice:null, soldQty:null, qty:0, avgCost:0, isWatch:true, soldHistory:hist2 }]);
                                       save(p => p.filter(x => x.id!==h.id));
                                     }}>候補へ</button>
                                     <button style={{ ...S.miniBtn, color:"#f87171", borderColor:"#f87171" }} onClick={() => deleteStock(h.id)}>削除</button>
@@ -3705,6 +3763,13 @@ export default function App() {
                   </>}
                   <FInput label="現在株価（円）" value={addForm.currentPrice} onChange={v => setAddForm(p => ({ ...p, currentPrice:v }))} numOnly={true} />
                 </div>
+                {/* 売却済み銘柄が見つかった場合の通知 */}
+                {addForm.ticker && portfolio.find(h => h.ticker === addForm.ticker && h.sold) && (
+                  <div style={{ marginTop:8, background:"#0d2a1a", border:"1px solid #4ade8044", borderRadius:6, padding:"8px 12px", fontSize:R.sm }}>
+                    <span style={{ color:"#4ade80", fontWeight:700 }}>✓ 売却済みデータが見つかりました（{portfolio.find(h=>h.ticker===addForm.ticker&&h.sold)?.name}）</span>
+                    <span style={{ color:"#64748b" }}>　追加すると数値入力・メモ・売却履歴を引き継ぎます。</span>
+                  </div>
+                )}
                 <div style={{ marginTop:12, display:"flex", gap:8 }}>
                   <button style={{ ...S.addBtn, ...(portfolioMode==="watchlist"?{ borderColor:"#f59e0b", color:"#f59e0b", background:"#1a1200" }:{}) }} onClick={addStock}>追加する</button>
                   <button style={S.miniBtn} onClick={() => setShowAdd(false)}>キャンセル</button>
