@@ -3441,7 +3441,7 @@ export default function App() {
         </div>
         <div style={{ ...S.sbItem, minWidth:R.isMobile?"50%":"120px" }}>
           <div style={S.sbLabel}>保有銘柄数</div>
-          <div style={S.sbVal}>{portfolio.length}銘柄</div>
+          <div style={S.sbVal}>{portfolio.filter(h=>!h.sold).length}銘柄</div>
         </div>
       </div>
 
@@ -3776,7 +3776,7 @@ export default function App() {
                   <div style={S.kpi}><div style={S.kpiL}>含み損益（税引前）</div><div style={{ ...S.kpiV, color:tPnL>=0?"#4ade80":"#f87171" }}>{tPnL>=0?"▲":"▼"}¥{Math.round(Math.abs(tPnL)).toLocaleString()}</div></div>
                   <div style={S.kpi}><div style={S.kpiL}>含み損益（税引後）</div><div style={{ ...S.kpiV, color:summary.afterTax>=0?"#4ade80":"#f87171" }}>{summary.afterTax>=0?"▲":"▼"}¥{Math.round(Math.abs(summary.afterTax)).toLocaleString()}</div></div>
                   <div style={S.kpi}><div style={S.kpiL}>平均PER</div><div style={{ ...S.kpiV, color:"#60a5fa" }}>{summary.avgPer?summary.avgPer+"倍":"—"}</div></div>
-                  <div style={S.kpi}><div style={S.kpiL}>保有銘柄数</div><div style={{ ...S.kpiV, color:"#a78bfa" }}>{portfolio.length}銘柄</div></div>
+                  <div style={S.kpi}><div style={S.kpiL}>保有銘柄数</div><div style={{ ...S.kpiV, color:"#a78bfa" }}>{portfolio.filter(h=>!h.sold).length}銘柄</div></div>
                 </div>
                 <div style={{ display:"grid", gridTemplateColumns:R.grid2, gap:16 }}>
                   <div style={S.card}>
