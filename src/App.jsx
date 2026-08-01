@@ -3487,7 +3487,7 @@ export default function App() {
           <span style={{ fontSize:16, color:"#334155" }}>日本株専用</span>
         </div>
         <nav style={{ display:"flex", gap:4, flexWrap:"wrap", alignItems:"center" }}>
-          {[["portfolio","ポートフォリオ"],["detail","銘柄詳細"],["compare","他社比較"],["simulation","シミュレーション"],["trades","売買記録"]].map(([k,v]) => (
+          {[["portfolio","ポートフォリオ"],["detail","銘柄詳細"],["simulation","シミュレーション"]].map(([k,v]) => (
             <button key={k} style={{ ...S.navBtn, ...(tab===k?S.navOn:{}) }} onClick={() => setTabSafe(k)}>{v}</button>
           ))}
           <div style={{ display:"flex", alignItems:"center", gap:4, background:"#111827", border:"1px solid #334155", borderRadius:6, padding:"2px 6px" }}>
@@ -3522,7 +3522,73 @@ export default function App() {
 
         {tab === "portfolio" && (
           <div>
-            {/* 保有/候補/売却済み切り替え */}
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16, flexWrap:"wrap", gap:8 }}>
+              <h2 style={S.h2}>銘柄一覧</h2>
+              <div style={{ display:"flex", gap:8 }}>
+                <button style={{ ...S.addBtn, background:"none", border:"1px solid #334155", color:"#fbbf24" }} onClick={() => setShowPriceUpdate(v=>!v)}>📊 株価を更新</button>
+                <button style={S.addBtn} onClick={() => setShowAdd(v=>!v)}>+ 銘柄追加</button>
+              </div>
+            </div>
+
+            {/* 株価更新フォーム */}
+            {showPriceUpdate && (
+              <div style={{ ...S.card, marginBottom:16 }}>
+                <div style={{ color:"#fbbf24", fontWeight:700, marginBottom:8 }}>📊 株価・保有情報の一括更新</div>
+                <div style={{ color:"#475569", fontSize:R.sm, marginBottom:12 }}>空欄の場合は現在の値を維持します。</div>
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(min(280px,90vw),1fr))", gap:12, marginBottom:12 }}>
+                  {portfolio.filter(h => !h.sold).map(h => (
+                    <div key={h.id} style={{ background:"#111827", borderRadius:8, padding:"12px 14px" }}>
+                      <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:10, fontSize:R.md }}>{h.name}（{h.ticker}）</div>
+                      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                        <div>
+                          <label style={{ color:"#64748b", fontSize:R.sm, display:"block", marginBottom:3 }}>現在株価（円）</label>
+                          <input value={priceInputs[h.id]||""} onChange={e => setPriceInputs(p=>({...p,[h.id]:e.target.value}))} style={S.input} inputMode="decimal" placeholder={"前回: ¥"+h.currentPrice} />
+                        </div>
+                        <div>
+                          <label style={{ color:"#64748b", fontSize:R.sm, display:"block", marginBottom:3 }}>信用倍率（倍）</label>
+                          <input value={shinInputs[h.id]||""} onChange={e => setShinInputs(p=>({...p,[h.id]:e.target.value}))} style={S.input} inputMode="decimal" placeholder={"前回: "+(h.financials?.shinyoBairitu||"一")} />
+                        </div>
+                        <div>
+                          <label style={{ color:"#64748b", fontSize:R.sm, display:"block", marginBottom:3 }}>保有数（株）</label>
+                          <input value={qtyInputs[h.id]||""} onChange={e => setQtyInputs(p=>({...p,[h.id]:e.target.value}))} style={S.input} inputMode="decimal" placeholder={"前回: "+h.qty+"株"} />
+                        </div>
+                        <div>
+                          <label style={{ color:"#64748b", fontSize:R.sm, display:"block", marginBottom:3 }}>平均取得単価（円）</label>
+                          <input value={costInputs[h.id]||""} onChange={e => setCostInputs(p=>({...p,[h.id]:e.target.value}))} style={S.input} inputMode="decimal" placeholder={"前回: ¥"+h.avgCost} />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display:"flex", gap:8 }}>
+                  <button style={S.addBtn} onClick={applyPriceUpdate}>更新を適用</button>
+                  <button style={S.miniBtn} onClick={() => setShowPriceUpdate(false)}>キャンセル</button>
+                </div>
+              </div>
+            )}
+
+            {/* 銘柄追加フォーム */}
+            {showAdd && (
+              <div style={{ ...S.card, marginBottom:16 }}>
+                <div style={{ color:"#4ade80", fontWeight:700, marginBottom:12 }}>{portfolioMode==="watchlist" ? "👀 候補銘柄を追加" : "新規銘柄追加"}</div>
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:12 }}>
+                  <FInput label="証券コード" placeholder="例: 7203" value={addForm.ticker} onChange={v => setAddForm(p => ({ ...p, ticker:v }))} inputType="ticker" />
+                  <FInput label="銘柄名" value={addForm.name} onChange={v => setAddForm(p => ({ ...p, name:v }))} maxLen={30} />
+                  <FInput label="セクター" value={addForm.sector} onChange={v => setAddForm(p => ({ ...p, sector:v }))} maxLen={20} />
+                  <FInput label="初回取得日" value={addForm.firstBuyDate} onChange={v => setAddForm(p => ({ ...p, firstBuyDate:v }))} inputType="date" />
+                  <FInput label="保有数量（株）" value={addForm.qty} onChange={v => setAddForm(p => ({ ...p, qty:v }))} numOnly={true} />
+                  <FInput label="平均取得単価（円）" value={addForm.avgCost} onChange={v => setAddForm(p => ({ ...p, avgCost:v }))} numOnly={true} />
+                  <FInput label="現在株価（円）" value={addForm.currentPrice} onChange={v => setAddForm(p => ({ ...p, currentPrice:v }))} numOnly={true} />
+                </div>
+                {addForm.ticker && <ExistingDataNotice ticker={addForm.ticker} portfolio={portfolio} watchlist={watchlist} R={R} />}
+                <div style={{ display:"flex", gap:8, marginTop:12 }}>
+                  <button style={S.addBtn} onClick={addStock}>追加する</button>
+                  <button style={S.miniBtn} onClick={() => { setShowAdd(false); setAddForm({ ticker:"", name:"", sector:"", qty:"", avgCost:"", currentPrice:"", firstBuyDate:"" }); }}>キャンセル</button>
+                </div>
+              </div>
+            )}
+
+            {/* タブ切り替え */}
             <div style={{ display:"flex", gap:8, marginBottom:16 }}>
               <button style={{ ...S.navBtn, ...(portfolioMode==="portfolio"?S.navOn:{}) }} onClick={() => setPortfolioMode("portfolio")}>
                 📈 保有銘柄（{portfolio.filter(h=>!h.sold).length}）
@@ -3537,399 +3603,105 @@ export default function App() {
               )}
             </div>
 
-            {portfolioMode === "watchlist" && (
-              <div>
-                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16, flexWrap:"wrap", gap:8 }}>
-                  <h2 style={{ ...S.h2, color:"#f59e0b" }}>保有候補リスト</h2>
-                  <button style={{ ...S.addBtn, borderColor:"#f59e0b", color:"#f59e0b", background:"#1a1200" }} onClick={() => setShowAdd(v => !v)}>+ 候補追加</button>
-                </div>
-                <div style={{ color:"#475569", fontSize:R.sm, marginBottom:12 }}>
-                  売却済み・検討中の銘柄を保存。財務指標・数値入力は「銘柄詳細」から確認できます。保有に移行する場合は「保有へ」ボタンを押してください。
-                </div>
-                {/* 保有移行フォーム */}
-                {moveForm.id && (
-                  <div style={{ ...S.card, border:"1px solid #4ade8044", marginBottom:16 }}>
-                    <div style={{ color:"#4ade80", fontWeight:700, marginBottom:12 }}>保有銘柄に追加</div>
-                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:12 }}>
-                      <div>
-                        <label style={{ color:"#64748b", fontSize:R.sm, display:"block", marginBottom:4 }}>保有数量（株）</label>
-                        <input value={moveForm.qty} onChange={e => setMoveForm(p=>({...p,qty:e.target.value}))} style={S.input} inputMode="decimal" />
-                      </div>
-                      <div>
-                        <label style={{ color:"#64748b", fontSize:R.sm, display:"block", marginBottom:4 }}>平均取得単価（円）</label>
-                        <input value={moveForm.avgCost} onChange={e => setMoveForm(p=>({...p,avgCost:e.target.value}))} style={S.input} inputMode="decimal" />
-                      </div>
-                    </div>
-                    <div style={{ display:"flex", gap:8 }}>
-                      <button style={S.addBtn} onClick={applyMove}>保有に追加する</button>
-                      <button style={S.miniBtn} onClick={() => setMoveForm({qty:"",avgCost:"",id:null})}>キャンセル</button>
-                    </div>
-                  </div>
-                )}
-
-                {watchlist.length === 0 ? (
-                  <div style={{ ...S.card, color:"#475569", textAlign:"center", padding:32 }}>
-                    候補銘柄がありません。「+ 候補追加」から追加してください。
-                  </div>
-                ) : (
-                  <div style={{ ...S.table, overflowX:"auto" }}>
-                    <div style={{ minWidth:700 }}>
-                      <div style={{ display:"grid", gridTemplateColumns:"2fr 0.6fr 1fr 1fr 0.6fr 1.4fr", padding:"12px 20px", background:"#111827", gap:10 }}>
-                        {["銘柄","コード","現在値","スコア","","操作"].map(h => (
-                          <span key={h} style={{ fontSize:R.sm, color:"#475569" }}>{h}</span>
-                        ))}
-                      </div>
-                      {watchlist.map(h => {
-                        const wsc = scoreFromPeriods(h, baseYear);
-                        return (
-                          <div key={h.id} style={{ display:"grid", gridTemplateColumns:"2fr 0.6fr 1fr 1fr 0.6fr 1.4fr", padding:"12px 20px", gap:10, borderTop:"1px solid #1e293b", alignItems:"center", ...(watchSelected?.id===h.id?{ background:"#1a1200" }:{}) }}>
-                            <span style={{ fontWeight:700, color:"#e2e8f0" }}>{h.name}<br/><span style={{ color:"#475569", fontSize:R.sm }}>{h.sector}</span></span>
-                            <span><Tag color="#f59e0b">{h.ticker}</Tag></span>
-                            <span style={{ fontWeight:700, color:"#e2e8f0" }}>¥{h.currentPrice.toLocaleString()}</span>
-                            <span style={{ color:wsc!=null?scoreColor(wsc):"#475569", fontWeight:700 }}>{wsc!=null?wsc+"pt":"—"}</span>
-                            <span></span>
-                            <span style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
-                              <button style={S.miniBtn} onClick={() => { setWatchSelected(h); setTab("detail"); setDetailTab("metrics"); }}>詳細</button>
-                              <button style={{ ...S.miniBtn, color:"#4ade80", borderColor:"#4ade80" }} onClick={() => moveToPortfolio(h)}>保有へ</button>
-                              <button style={{ ...S.miniBtn, color:"#f87171", borderColor:"#f87171" }} onClick={() => deleteWatch(h.id)}>削除</button>
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {portfolioMode === "sold" && (
-              <div>
-                <h2 style={{ ...S.h2, color:"#64748b", marginBottom:16 }}>📁 売却済み銘柄</h2>
-                {portfolio.filter(h=>h.sold).length === 0 ? (
-                  <div style={S.card}><span style={{ color:"#475569" }}>売却済み銘柄はありません。</span></div>
-                ) : (
-                  <div>
-                    {/* 累計損益サマリー */}
-                    <SoldSummary portfolio={portfolio} TAX={TAX} S={S} R={R} />
-
-                    {/* 個別銘柄テーブル */}
-                    <div style={{ overflowX:"auto" }}>
-                      <table style={{ width:"100%", borderCollapse:"collapse" }}>
-                        <thead>
-                          <tr style={{ borderBottom:"2px solid #1e293b" }}>
-                            {["銘柄","コード","株数","取得単価","売却単価","損益（税前）","損益率","初回取得日","売却日","メモ","操作"].map(h => (
-                              <th key={h} style={{ textAlign:h==="銘柄"||h==="メモ"||h==="操作"?"left":"right", padding:"10px 12px", color:"#475569", fontSize:R.sm, fontWeight:600, whiteSpace:"nowrap" }}>{h}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {portfolio.filter(h=>h.sold).map(h => {
-                            const qty = h.soldQty || 0;
-                            const pnlPct = h.soldPrice && h.avgCost ? (h.soldPrice-h.avgCost)/h.avgCost*100 : null;
-                            const pnlYen = h.soldPrice && h.avgCost && qty > 0 ? (h.soldPrice-h.avgCost)*qty : null;
-                            const hsc = scoreFromPeriods(h, baseYear);
-                            return (
-                              <tr key={h.id} style={{ borderBottom:"1px solid #1e293b" }}>
-                                <td style={{ padding:"10px 12px" }}>
-                                  <div style={{ color:"#94a3b8", fontWeight:600 }}>{h.name}</div>
-                                  <div style={{ color:"#475569", fontSize:R.sm }}>{h.sector}</div>
-                                  {hsc!=null && <div style={{ fontSize:R.sm, color:"#64748b" }}>{hsc}pt</div>}
-                                </td>
-                                <td style={{ padding:"10px 12px", textAlign:"right" }}><Tag color="#475569">{h.ticker}</Tag></td>
-                                <td style={{ padding:"10px 12px", textAlign:"right", color:"#64748b" }}>
-                                  <input type="number" defaultValue={qty||""} style={{ ...S.input, width:70, padding:"2px 6px", textAlign:"right", fontSize:R.sm }}
-                                    onBlur={e => {
-                                      const v = +e.target.value;
-                                      if (v > 0) save(p => p.map(x => x.id!==h.id ? x : { ...x, soldQty:v }));
-                                    }} placeholder="株数" />
-                                </td>
-                                <td style={{ padding:"10px 12px", textAlign:"right", color:"#64748b" }}>¥{h.avgCost?.toLocaleString()}</td>
-                                <td style={{ padding:"10px 12px", textAlign:"right", color:"#e2e8f0", fontWeight:600 }}>¥{h.soldPrice?.toLocaleString()||"—"}</td>
-                                <td style={{ padding:"10px 12px", textAlign:"right" }}>
-                                  {pnlYen!=null ? <span style={{ color:pnlYen>=0?"#4ade80":"#f87171", fontWeight:600 }}>{pnlYen>=0?"▲":"▼"}¥{Math.abs(Math.round(pnlYen)).toLocaleString()}</span> : <span style={{ color:"#334155" }}>—</span>}
-                                </td>
-                                <td style={{ padding:"10px 12px", textAlign:"right" }}>
-                                  {pnlPct!=null ? <Delta val={pnlPct} fmt={v=>v.toFixed(2)+"%"} /> : <span style={{ color:"#334155" }}>—</span>}
-                                </td>
-                                <td style={{ padding:"10px 12px", textAlign:"right", color:"#475569", fontSize:R.sm }}>{h.memo?.firstBuyDate||"—"}</td>
-                                <td style={{ padding:"10px 12px", textAlign:"right", color:"#475569", fontSize:R.sm }}>
-                                  {h.soldDate||"—"}
-                                  {(h.soldHistory||[]).length > 0 && (
-                                    <div style={{ marginTop:4, borderTop:"1px solid #1e293b", paddingTop:4 }}>
-                                      {(h.soldHistory||[]).map((s,i) => (
-                                        <div key={i} style={{ color:"#334155", fontSize:12 }}>
-                                          過去: {s.soldDate} ¥{s.soldPrice?.toLocaleString()}
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
-                                </td>
-                                <td style={{ padding:"10px 12px", maxWidth:180 }}>
-                                  {h.memo?.sellMemo ? (
-                                    <div style={{ color:"#fbbf24", fontSize:R.sm, whiteSpace:"pre-wrap", cursor:"pointer" }}
-                                      onClick={() => alert("【売却メモ】\n"+h.memo.sellMemo+(h.memo?.buyReason?"\n\n【投資根拠】\n"+h.memo.buyReason:""))}>
-                                      📝 {h.memo.sellMemo.slice(0,30)}{h.memo.sellMemo.length>30?"…":""}
-                                    </div>
-                                  ) : h.memo?.buyReason ? (
-                                    <div style={{ color:"#475569", fontSize:R.sm, cursor:"pointer" }}
-                                      onClick={() => alert("【投資根拠】\n"+h.memo.buyReason)}>
-                                      {h.memo.buyReason.slice(0,30)}{h.memo.buyReason.length>30?"…":""}
-                                    </div>
-                                  ) : <span style={{ color:"#334155", fontSize:R.sm }}>—</span>}
-                                </td>
-                                <td style={{ padding:"10px 12px" }}>
-                                  <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
-                                    <button style={S.miniBtn} onClick={() => { setSelected(h); setTab("detail"); setDetailTab("metrics"); }}>詳細</button>
-                                    {portfolio.find(x => x.ticker === h.ticker && !x.sold) && (
-                                      <button style={{ ...S.miniBtn, color:"#a78bfa", borderColor:"#a78bfa" }} onClick={() => {
-                                        const active = portfolio.find(x => x.ticker === h.ticker && !x.sold);
-                                        if (!window.confirm("売却済み「"+h.name+"」の履歴を保有中の「"+active.name+"」に紐づけます。\n売却済みデータは削除されます。よろしいですか？")) return;
-                                        const hist = [...(h.soldHistory||[])];
-                                        if (h.soldDate) hist.push({ soldDate:h.soldDate, soldPrice:h.soldPrice, soldQty:h.soldQty, avgCost:h.avgCost });
-                                        hist.push(...(active.soldHistory||[]));
-                                        const mergedPeriods = { ...(h.periods||{}), ...(active.periods||{}) };
-                                        const mergedMemo = { ...(h.memo||{}), ...(active.memo||{}) };
-                                        const mergedIr = [...(h.irList||[]), ...(active.irList||[])];
-                                        save(p => p
-                                          .filter(x => x.id !== h.id)
-                                          .map(x => x.id !== active.id ? x : { ...x, soldHistory:hist, periods:mergedPeriods, memo:mergedMemo, irList:mergedIr })
-                                        );
-                                        alert("紐づけ完了。売却履歴"+hist.length+"件が引き継がれました。");
-                                      }}>🔗 保有中と紐づけ</button>
-                                    )}
-                                    <button style={{ ...S.miniBtn, color:"#4ade80", borderColor:"#4ade80" }} onClick={() => {
-                                      const qty = prompt("再購入株数を入力してください");
-                                      if (!qty||isNaN(+qty)) return;
-                                      const price = prompt("取得単価を入力してください");
-                                      if (!price||isNaN(+price)) return;
-                                      save(p => p.map(x => {
-                                        if (x.id !== h.id) return x;
-                                        const history = [...(x.soldHistory||[])];
-                                        if (x.soldDate) history.push({ soldDate:x.soldDate, soldPrice:x.soldPrice, soldQty:x.soldQty, avgCost:x.avgCost });
-                                        return { ...x, sold:false, soldDate:null, soldPrice:null, soldQty:null, qty:+qty, avgCost:+price, soldHistory:history };
-                                      }));
-                                      setPortfolioMode("portfolio");
-                                    }}>再購入</button>
-                                    <button style={{ ...S.miniBtn, color:"#f59e0b", borderColor:"#f59e0b" }} onClick={() => {
-                                      if (!window.confirm(h.name+" を保有候補リストに移動します。")) return;
-                                      const hist2 = [...(h.soldHistory||[])];
-                                      if (h.soldDate) hist2.push({ soldDate:h.soldDate, soldPrice:h.soldPrice, soldQty:h.soldQty, avgCost:h.avgCost });
-                                      saveWatch2(p => [...p, { ...h, sold:false, soldDate:null, soldPrice:null, soldQty:null, qty:0, avgCost:0, isWatch:true, soldHistory:hist2 }]);
-                                      save(p => p.filter(x => x.id!==h.id));
-                                    }}>候補へ</button>
-                                    <button style={{ ...S.miniBtn, color:"#f87171", borderColor:"#f87171" }} onClick={() => deleteStock(h.id)}>削除</button>
-                                  </div>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
+            {/* 保有銘柄一覧（シンプル） */}
             {portfolioMode === "portfolio" && (
-            <div>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16, flexWrap:"wrap", gap:8 }}>
-              <h2 style={S.h2}>保有銘柄一覧</h2>
-              <div style={{ display:"flex", gap:8 }}>
-                <button style={{ ...S.miniBtn, color:"#fbbf24", borderColor:"#fbbf24" }} onClick={() => {
-                  const inp = {};
-                  const shin = {};
-                  const qty = {};
-                  const cost = {};
-                  portfolio.forEach(h => {
-                    inp[h.id] = String(h.currentPrice);
-                    shin[h.id] = h.financials?.shinyoBairitu || "";
-                    qty[h.id] = String(h.qty);
-                    cost[h.id] = String(h.avgCost);
-                  });
-                  setPriceInputs(inp);
-                  setShinInputs(shin);
-                  setQtyInputs(qty);
-                  setCostInputs(cost);
-                  setShowPriceUpdate(v => !v);
-                }}>📊 株価を更新</button>
-                <button style={S.addBtn} onClick={() => setShowAdd(v => !v)}>+ 銘柄追加</button>
-              </div>
-            </div>
-
-            {showPriceUpdate && (
-              <div style={{ ...S.card, marginBottom:16, border:"1px solid #fbbf2444" }}>
-                <div style={{ color:"#fbbf24", fontWeight:700, marginBottom:8 }}>📊 株価・保有情報の一括更新</div>
-                <div style={{ color:"#64748b", fontSize:R.sm, marginBottom:12 }}>空欄の場合は現在の値を維持します。</div>
-                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(min(280px,90vw),1fr))", gap:12, marginBottom:12 }}>
-                  {portfolio.filter(h => !h.sold).map(h => (
-                    <div key={h.id} style={{ background:"#111827", borderRadius:8, padding:"12px 14px" }}>
-                      <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:10, fontSize:R.md }}>{h.name}（{h.ticker}）</div>
-                      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
-                        <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
-                          <label style={{ color:"#64748b", fontSize:R.sm }}>現在株価（円）</label>
-                          <input value={priceInputs[h.id] ?? String(h.currentPrice)} onChange={e => { const v=e.target.value; if(v===""||/^\d*\.?\d*$/.test(v)) setPriceInputs(p=>({...p,[h.id]:v})); }} style={S.input} inputMode="decimal" />
-                          <span style={{ fontSize:R.sm, color:"#334155" }}>前回: ¥{h.currentPrice.toLocaleString()}</span>
-                        </div>
-                        <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
-                          <label style={{ color:"#64748b", fontSize:R.sm }}>信用倍率（倍）</label>
-                          <input value={shinInputs[h.id] ?? (h.financials?.shinyoBairitu || "")} onChange={e => { const v=e.target.value; if(v===""||/^\d*\.?\d*$/.test(v)) setShinInputs(p=>({...p,[h.id]:v})); }} style={S.input} inputMode="decimal" placeholder="例: 2.5" />
-                          <span style={{ fontSize:R.sm, color:"#334155" }}>前回: {h.financials?.shinyoBairitu || "—"}倍</span>
-                        </div>
-                        <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
-                          <label style={{ color:"#64748b", fontSize:R.sm }}>保有数（株）</label>
-                          <input value={qtyInputs[h.id] ?? String(h.qty)} onChange={e => { const v=e.target.value; if(v===""||/^\d*$/.test(v)) setQtyInputs(p=>({...p,[h.id]:v})); }} style={S.input} inputMode="numeric" />
-                          <span style={{ fontSize:R.sm, color:"#334155" }}>前回: {h.qty.toLocaleString()}株</span>
-                        </div>
-                        <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
-                          <label style={{ color:"#64748b", fontSize:R.sm }}>平均取得単価（円）</label>
-                          <input value={costInputs[h.id] ?? String(h.avgCost)} onChange={e => { const v=e.target.value; if(v===""||/^\d*\.?\d*$/.test(v)) setCostInputs(p=>({...p,[h.id]:v})); }} style={S.input} inputMode="decimal" />
-                          <span style={{ fontSize:R.sm, color:"#334155" }}>前回: ¥{h.avgCost.toLocaleString()}</span>
-                        </div>
+              <div style={{ ...S.card, padding:0, overflow:"hidden" }}>
+                {portfolio.filter(h=>!h.sold).length === 0 && (
+                  <div style={{ padding:32, textAlign:"center", color:"#475569" }}>「+ 銘柄追加」から追加してください。</div>
+                )}
+                {portfolio.filter(h=>!h.sold).map(h => {
+                  const pnlPct = ((h.currentPrice-h.avgCost)/h.avgCost)*100;
+                  return (
+                    <div key={h.id} style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 16px", borderBottom:"1px solid #1e293b", flexWrap:"wrap", ...(selected?.id===h.id?{ background:"#0f2a1a" }:{}) }}>
+                      <div style={{ flex:"1 1 160px" }}>
+                        <div style={{ fontWeight:700, color:"#e2e8f0" }}>{h.name}</div>
+                        <div style={{ color:"#475569", fontSize:R.sm }}>{h.ticker} · {h.sector}</div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-                <div style={{ display:"flex", gap:8 }}>
-                  <button style={S.addBtn} onClick={applyPrices}>更新を適用</button>
-                  <button style={S.miniBtn} onClick={() => setShowPriceUpdate(false)}>キャンセル</button>
-                </div>
-              </div>
-            )}
-
-            {showAdd && (
-              <div style={{ ...S.card, marginBottom:16, border:"1px solid "+(portfolioMode==="watchlist"?"#f59e0b44":"#334155")+"" }}>
-                <div style={{ color: portfolioMode==="watchlist"?"#f59e0b":"#94a3b8", fontWeight:700, marginBottom:12 }}>
-                  {portfolioMode==="watchlist" ? "👀 候補銘柄を追加" : "新規銘柄追加"}
-                </div>
-                <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:12 }}>
-                  <FInput label="証券コード" placeholder="例: 7203" value={addForm.ticker} onChange={v => setAddForm(p => ({ ...p, ticker:v }))} inputType="ticker" />
-                  <FInput label="銘柄名" value={addForm.name} onChange={v => setAddForm(p => ({ ...p, name:v }))} maxLen={30} />
-                  <FInput label="セクター" value={addForm.sector} onChange={v => setAddForm(p => ({ ...p, sector:v }))} maxLen={20} />
-                  {portfolioMode !== "watchlist" && <>
-                    <FInput label="初回取得日" value={addForm.firstBuyDate} onChange={v => setAddForm(p => ({ ...p, firstBuyDate:v }))} inputType="date" />
-                    <FInput label="保有数量（株）" value={addForm.qty} onChange={v => setAddForm(p => ({ ...p, qty:v }))} numOnly={true} />
-                    <FInput label="平均取得単価（円）" value={addForm.avgCost} onChange={v => setAddForm(p => ({ ...p, avgCost:v }))} numOnly={true} />
-                  </>}
-                  <FInput label="現在株価（円）" value={addForm.currentPrice} onChange={v => setAddForm(p => ({ ...p, currentPrice:v }))} numOnly={true} />
-                </div>
-                {/* 既存データが見つかった場合の通知 */}
-                {addForm.ticker && <ExistingDataNotice ticker={addForm.ticker} portfolio={portfolio} watchlist={watchlist} R={R} />}
-                <div style={{ marginTop:12, display:"flex", gap:8 }}>
-                  <button style={{ ...S.addBtn, ...(portfolioMode==="watchlist"?{ borderColor:"#f59e0b", color:"#f59e0b", background:"#1a1200" }:{}) }} onClick={addStock}>追加する</button>
-                  <button style={S.miniBtn} onClick={() => setShowAdd(false)}>キャンセル</button>
-                </div>
-              </div>
-            )}
-
-            <div style={{ ...S.table, overflowX:"auto" }}>
-              <div style={{ minWidth:800 }}>
-              <div style={{ display:"grid", gridTemplateColumns:"2fr 0.6fr 0.7fr 0.9fr 0.9fr 0.9fr 1.1fr 1fr 2fr", padding:"12px 20px", background:"#111827", gap:10 }}>
-                {["銘柄","コード","保有数","取得単価","現在値","目標株価","評価額","損益率","スコア・操作"].map(h => (
-                  <span key={h} style={{ fontSize:R.sm, color:"#475569", textTransform:"uppercase" }}>{h}</span>
-                ))}
-              </div>
-              {portfolio.filter(h => !h.sold).map(h => {
-                const pnlPct = ((h.currentPrice-h.avgCost)/h.avgCost)*100;
-                const hsc = scoreFromPeriods(h, baseYear);
-                const tp = n(h.memo?.targetPrice);
-                const tpPct = tp ? ((h.currentPrice-tp)/tp*100) : null;
-                return (
-                  <div key={h.id} style={{ display:"grid", gridTemplateColumns:"2fr 0.6fr 0.7fr 0.9fr 0.9fr 0.9fr 1.1fr 1fr 2fr", padding:"14px 20px", gap:10, borderTop:"1px solid #1e293b", alignItems:"start", ...(selected?.id===h.id?{ background:"#0f2a1a" }:{}) }}>
-                    <span style={{ fontWeight:700, color:"#e2e8f0" }}>
-                      {h.name}
-                      <br/><span style={{ color:"#475569", fontSize:R.sm }}>{h.sector}</span>
-                    </span>
-                    <span><Tag color="#60a5fa">{h.ticker}</Tag></span>
-                    <span style={{ color:"#94a3b8" }}>{h.qty.toLocaleString()}</span>
-                    <span style={{ color:"#94a3b8" }}>¥{h.avgCost.toLocaleString()}</span>
-                    <span style={{ fontWeight:700, color:"#e2e8f0" }}>¥{h.currentPrice.toLocaleString()}</span>
-                    <span>
-                      {tp ? (
-                        <div>
-                          <div style={{ color:"#a78bfa", fontWeight:700, fontSize:R.sm }}>¥{tp.toLocaleString()}</div>
-                          {tpPct != null && <div style={{ fontSize:R.sm, color:tpPct>=0?"#4ade80":"#f87171" }}>{tpPct>=0?"▲":"▼"}{Math.abs(tpPct).toFixed(1)}%</div>}
-                        </div>
-                      ) : <span style={{ color:"#334155", fontSize:R.sm }}>未設定</span>}
-                    </span>
-                    <span style={{ color:"#e2e8f0" }}>¥{(h.qty*h.currentPrice).toLocaleString()}</span>
-                    <span><Delta val={pnlPct} fmt={v => v.toFixed(2)+"%"} /></span>
-                    <div>
-                      {hsc != null && <div style={{ marginBottom:6 }}><ScoreBadge sc={hsc} stockId={h.id} /></div>}
+                      <div style={{ color:"#e2e8f0", fontWeight:700 }}>¥{h.currentPrice.toLocaleString()}</div>
+                      <Delta val={pnlPct} fmt={v=>v.toFixed(2)+"%"} />
+                      <div style={{ color:"#64748b", fontSize:R.sm }}>¥{h.avgCost.toLocaleString()} × {h.qty.toLocaleString()}株</div>
                       <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
-                        <button style={S.miniBtn} onClick={() => { setSelected(h); setTab("detail"); setDetailTab("memo"); }}>メモ</button>
                         <button style={S.miniBtn} onClick={() => { setSelected(h); setTab("detail"); setDetailTab("metrics"); }}>詳細</button>
-                        <button style={{ ...S.miniBtn, ...(compareIds.includes(h.id)?{ color:"#4ade80", borderColor:"#4ade80" }:{}) }} onClick={() => toggleCompare(h.id)}>{compareIds.includes(h.id)?"比較中":"比較"}</button>
-                        <button style={{ ...S.miniBtn, color:"#a78bfa", borderColor:"#a78bfa" }} onClick={() => { setSellTarget(h); setSellForm(p => ({ ...p, soldQty: String(h.qty||'') })); }}>売却</button>
-                        <button style={{ ...S.miniBtn, color:"#f59e0b", borderColor:"#f59e0b" }} onClick={() => {
-                          if (!window.confirm(h.name+" を保有候補リストに移動します。")) return;
-                          saveWatch2(p => [...p, { ...h, isWatch:true }]);
-                          save(p => p.filter(x => x.id !== h.id));
-                          if (selected?.id === h.id) setSelected(portfolio.find(x => x.id !== h.id) || null);
-                        }}>候補へ</button>
+                        <button style={S.miniBtn} onClick={() => { setSelected(h); setTab("simulation"); }}>シミュ</button>
+                        <button style={{ ...S.miniBtn, color:"#a78bfa", borderColor:"#a78bfa" }} onClick={() => {
+                          setSellTarget(h);
+                          setSellForm(p => ({ ...p, soldQty: String(h.qty||'') }));
+                        }}>売却</button>
                         <button style={{ ...S.miniBtn, color:"#f87171", borderColor:"#f87171" }} onClick={() => deleteStock(h.id)}>削除</button>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
               </div>
-            </div>
-            {portfolio.length === 0 && <div style={{ ...S.card, textAlign:"center", color:"#475569", padding:40 }}>「+ 銘柄追加」から追加してください。</div>}
+            )}
 
-            {summary && (
-              <div style={{ marginTop:24 }}>
-                <h3 style={{ fontSize:16, fontWeight:800, color:"#f1f5f9", margin:"0 0 16px 0" }}>ポートフォリオサマリー</h3>
-                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(min(160px,45vw),1fr))", gap:12, marginBottom:20 }}>
-                  <div style={S.kpi}><div style={S.kpiL}>投資元本</div><div style={{ ...S.kpiV, color:"#94a3b8" }}>¥{Math.round(tc).toLocaleString()}</div></div>
-                  <div style={S.kpi}><div style={S.kpiL}>評価額合計</div><div style={{ ...S.kpiV, color:"#e2e8f0" }}>¥{Math.round(tv).toLocaleString()}</div></div>
-                  <div style={S.kpi}><div style={S.kpiL}>含み損益（税引前）</div><div style={{ ...S.kpiV, color:tPnL>=0?"#4ade80":"#f87171" }}>{tPnL>=0?"▲":"▼"}¥{Math.round(Math.abs(tPnL)).toLocaleString()}</div></div>
-                  <div style={S.kpi}><div style={S.kpiL}>含み損益（税引後）</div><div style={{ ...S.kpiV, color:summary.afterTax>=0?"#4ade80":"#f87171" }}>{summary.afterTax>=0?"▲":"▼"}¥{Math.round(Math.abs(summary.afterTax)).toLocaleString()}</div></div>
-                  <div style={S.kpi}><div style={S.kpiL}>平均PER</div><div style={{ ...S.kpiV, color:"#60a5fa" }}>{summary.avgPer?summary.avgPer+"倍":"—"}</div></div>
-                  <div style={S.kpi}><div style={S.kpiL}>保有銘柄数</div><div style={{ ...S.kpiV, color:"#a78bfa" }}>{portfolio.filter(h=>!h.sold).length}銘柄</div></div>
-                </div>
-                <div style={{ display:"grid", gridTemplateColumns:R.grid2, gap:16 }}>
-                  <div style={S.card}>
-                    <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:12 }}>セクター別配分</div>
-                    <ResponsiveContainer width="100%" height={R.chartMd}>
-                      <PieChart>
-                        <Pie data={summary.sectorData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={3}>
-                          {summary.sectorData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i%8]} />)}
-                        </Pie>
-                        <Tooltip formatter={(v, name) => ["¥"+v.toLocaleString(), name]} contentStyle={TS} labelStyle={{ color:"#94a3b8" }} itemStyle={{ color:"#e2e8f0" }} />
-                      </PieChart>
-                    </ResponsiveContainer>
-                    <div style={{ display:"flex", flexWrap:"wrap", gap:"6px 14px", justifyContent:"center", marginTop:8 }}>
-                      {summary.sectorData.map((d, i) => {
-                        const tot = summary.sectorData.reduce((a, b) => a+b.value, 0);
-                        return (
-                          <span key={d.name} style={{ display:"flex", alignItems:"center", gap:5, fontSize:16, color:"#94a3b8" }}>
-                            <span style={{ width:10, height:10, borderRadius:2, background:PIE_COLORS[i%8], display:"inline-block", flexShrink:0 }} />
-                            {d.name} {((d.value/tot)*100).toFixed(0)}%
-                          </span>
-                        );
-                      })}
+            {/* 保有候補 */}
+            {portfolioMode === "watchlist" && (
+              <div style={{ ...S.card, padding:0, overflow:"hidden" }}>
+                {watchlist.length === 0 && (
+                  <div style={{ padding:32, textAlign:"center", color:"#475569" }}>候補銘柄がありません。</div>
+                )}
+                {watchlist.map(h => (
+                  <div key={h.id} style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 16px", borderBottom:"1px solid #1e293b", flexWrap:"wrap" }}>
+                    <div style={{ flex:"1 1 160px" }}>
+                      <div style={{ fontWeight:700, color:"#e2e8f0" }}>{h.name}</div>
+                      <div style={{ color:"#475569", fontSize:R.sm }}>{h.ticker} · {h.sector}</div>
+                    </div>
+                    <div style={{ color:"#e2e8f0" }}>¥{h.currentPrice.toLocaleString()}</div>
+                    <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
+                      <button style={S.miniBtn} onClick={() => { setWatchSelected(h); setTab("detail"); setDetailTab("metrics"); }}>詳細</button>
+                      <button style={S.miniBtn} onClick={() => { setWatchSelected(h); setTab("simulation"); }}>シミュ</button>
+                      <button style={{ ...S.miniBtn, color:"#f87171", borderColor:"#f87171" }} onClick={() => { if(!window.confirm("削除しますか？"))return; saveWatch2(p=>p.filter(x=>x.id!==h.id)); }}>削除</button>
                     </div>
                   </div>
-                  <div style={S.card}>
-                    <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:12 }}>損益率ランキング</div>
-                    <ResponsiveContainer width="100%" height={R.chartMd}>
-                      <BarChart layout="vertical" margin={{ left:10, right:20 }}
-                        data={portfolio.filter(h => !h.sold).sort((a,b) => ((b.currentPrice-b.avgCost)/b.avgCost)-((a.currentPrice-a.avgCost)/a.avgCost)).map(h => ({ name:h.name.length>8?h.name.slice(0,8)+"…":h.name, v:parseFloat(((h.currentPrice-h.avgCost)/h.avgCost*100).toFixed(2)) }))}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                        <XAxis type="number" tick={{ fill:"#64748b", fontSize:R.sm }} tickFormatter={v => v+"%"} />
-                        <YAxis dataKey="name" type="category" tick={{ fill:"#94a3b8", fontSize:R.sm }} width={90} />
-                        <Tooltip formatter={v => [v+"%","損益率"]} contentStyle={TS} labelStyle={{ color:"#94a3b8" }} itemStyle={{ color:"#e2e8f0" }} />
-                        <ReferenceLine x={0} stroke="#475569" />
-                        <Bar dataKey="v" fill="#4ade80" radius={[0,4,4,0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* 売却済み */}
+            {portfolioMode === "sold" && (
+              <div>
+                <SoldSummary portfolio={portfolio} TAX={TAX} S={S} R={R} />
+                <div style={{ ...S.card, padding:0, overflow:"hidden" }}>
+                  {portfolio.filter(h=>h.sold).map(h => {
+                    const pnlPct = h.soldPrice && h.avgCost ? (h.soldPrice-h.avgCost)/h.avgCost*100 : null;
+                    return (
+                      <div key={h.id} style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 16px", borderBottom:"1px solid #1e293b", flexWrap:"wrap", opacity:0.7 }}>
+                        <div style={{ flex:"1 1 160px" }}>
+                          <div style={{ fontWeight:700, color:"#94a3b8" }}>{h.name}</div>
+                          <div style={{ color:"#475569", fontSize:R.sm }}>{h.ticker} · 売却日: {h.soldDate||"—"}</div>
+                        </div>
+                        <div style={{ color:"#e2e8f0" }}>¥{h.soldPrice?.toLocaleString()||"—"}</div>
+                        {pnlPct!=null && <Delta val={pnlPct} fmt={v=>v.toFixed(2)+"%"} />}
+                        <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
+                          <button style={S.miniBtn} onClick={() => { setSelected(h); setTab("detail"); setDetailTab("metrics"); }}>詳細</button>
+                          {portfolio.find(x => x.ticker === h.ticker && !x.sold) && (
+                            <button style={{ ...S.miniBtn, color:"#a78bfa", borderColor:"#a78bfa" }} onClick={() => {
+                              const active = portfolio.find(x => x.ticker === h.ticker && !x.sold);
+                              if (!window.confirm("「"+h.name+"」の履歴を保有中の「"+active.name+"」に紐づけますか？")) return;
+                              const hist = [...(h.soldHistory||[])];
+                              if (h.soldDate) hist.push({ soldDate:h.soldDate, soldPrice:h.soldPrice, soldQty:h.soldQty, avgCost:h.avgCost });
+                              hist.push(...(active.soldHistory||[]));
+                              save(p => p.filter(x=>x.id!==h.id).map(x=>x.id!==active.id?x:{ ...x, soldHistory:hist, periods:{...(h.periods||{}), ...(active.periods||{})}, memo:{...(h.memo||{}),...(active.memo||{})}, irList:[...(h.irList||[]),...(active.irList||[])] }));
+                              alert("紐づけ完了。");
+                            }}>🔗 紐づけ</button>
+                          )}
+                          <button style={{ ...S.miniBtn, color:"#4ade80", borderColor:"#4ade80" }} onClick={() => {
+                            const qty = prompt("再購入株数"); if(!qty||isNaN(+qty))return;
+                            const price = prompt("取得単価"); if(!price||isNaN(+price))return;
+                            const history = [...(h.soldHistory||[])];
+                            if (h.soldDate) history.push({ soldDate:h.soldDate, soldPrice:h.soldPrice, soldQty:h.soldQty, avgCost:h.avgCost });
+                            save(p => p.map(x => x.id!==h.id?x:{ ...x, sold:false, soldDate:null, soldPrice:null, soldQty:null, qty:+qty, avgCost:+price, soldHistory:history }));
+                            setPortfolioMode("portfolio");
+                          }}>再購入</button>
+                          <button style={{ ...S.miniBtn, color:"#f87171", borderColor:"#f87171" }} onClick={() => deleteStock(h.id)}>削除</button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
-          </div>
-        )}
           </div>
         )}
 
@@ -4129,357 +3901,6 @@ export default function App() {
           </div>
         )}
 
-        {tab === "compare" && (
-          <div>
-            <h2 style={S.h2}>他社比較</h2>
-            <div style={{ marginBottom:8, color:"#64748b", fontSize:16 }}>比較したい銘柄を選択してください（最大4社）</div>
-            <div style={S.chips}>
-              {portfolio.filter(h => !h.sold).map(h => (
-                <button key={h.id} style={{ ...S.chip, ...(compareIds.includes(h.id)?S.chipOn:{}) }} onClick={() => toggleCompare(h.id)}>{h.ticker} {h.name}</button>
-              ))}
-              {watchlist.length > 0 && <span style={{ color:"#475569", fontSize:R.sm, alignSelf:"center" }}>｜候補:</span>}
-              {watchlist.map(h => (
-                <button key={h.id} style={{ ...S.chip, ...(compareIds.includes(h.id)?{ ...S.chipOn, borderColor:"#f59e0b", color:"#f59e0b" }:{}), borderStyle:"dashed" }} onClick={() => toggleCompare(h.id)}>{h.ticker} {h.name}</button>
-              ))}
-            </div>
-            {cmpStocks.length < 2 ? (
-              <div style={S.card}><span style={{ color:"#64748b" }}>2社以上選択してください。</span></div>
-            ) : (
-              <>
-                <div style={{ ...S.card, overflowX:"auto", marginBottom:20 }}>
-                  <table style={{ width:"100%", borderCollapse:"collapse", fontSize:16 }}>
-                    <thead>
-                      <tr style={{ borderBottom:"1px solid #1e293b" }}>
-                        <th style={{ textAlign:"left", padding:"8px 12px", color:"#475569", fontSize:16, minWidth:150 }}>指標</th>
-                        {cmpStocks.map((h, i) => (
-                          <th key={h.id} style={{ textAlign:"right", padding:"8px 12px", color:CMP_COLORS[i], minWidth:110 }}>
-                            {h.ticker}<br/><span style={{ fontSize:16, color:"#475569" }}>{h.name}</span>
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {[
-                        ["総合スコア", h => scoreFromPeriods(h, baseYear), v => v!=null?v+"pt ("+scoreLabel(v)+")":"—", v => v!=null?scoreColor(v):"#475569"],
-                        ["PER",        h => getCmpCalc(h).per,             v => v?xfmt(v):"—",      v => v&&v<15?"#4ade80":v&&v<25?"#fbbf24":"#f87171"],
-                        ["PBR",        h => getCmpCalc(h).pbr,             v => v?xfmt(v):"—",      v => v&&v<1.5?"#4ade80":"#94a3b8"],
-                        ["PSR",        h => getCmpCalc(h).psr,             v => v?xfmt(v):"—",      () => "#94a3b8"],
-                        ["EV/EBITDA",  h => getCmpCalc(h).evEbitda,        v => v?xfmt(v):"—",      v => v&&v<10?"#4ade80":"#94a3b8"],
-                        ["ROE",        h => getCmpCalc(h).roe,             v => v?pct(v):"—",       v => v&&v>0.15?"#4ade80":"#94a3b8"],
-                        ["ROA",        h => getCmpCalc(h).roa,             v => v?pct(v):"—",       v => v&&v>0.05?"#4ade80":"#94a3b8"],
-                        ["営業利益率", h => getCmpCalc(h).opMargin,        v => v?pct(v):"—",       v => v&&v>0.10?"#4ade80":"#94a3b8"],
-                        ["粗利率",     h => getCmpCalc(h).grossMargin,     v => v?pct(v):"—",       v => v&&v>0.40?"#4ade80":"#94a3b8"],
-                        ["自己資本比率",h => getCmpCalc(h).equityRatio,    v => v?pct(v):"—",       v => v&&v>0.40?"#4ade80":"#94a3b8"],
-                        ["流動比率",   h => getCmpCalc(h).currentRatio,    v => v?pct(v):"—",       v => v&&v>2?"#4ade80":v&&v>1?"#fbbf24":"#f87171"],
-                        ["配当利回り", h => getCmpCalc(h).dividendYield,   v => v?pct(v):"—",       v => v&&v>0.03?"#4ade80":"#94a3b8"],
-                        ["信用倍率",   h => h.financials.shinyoBairitu,            v => v?v+"倍":"—",        v => n(v)>3?"#f87171":"#94a3b8"],
-                        ["時価総額",   h => getCmpCalc(h).marketCap,       v => v?fmtM(v):"—",      () => "#e2e8f0"],
-                      ].map(([label, getter, formatter, colorFn]) => (
-                        <tr key={label} style={{ borderBottom:"1px solid #1e293b" }}>
-                          <td style={{ padding:"8px 12px", color:"#64748b", fontSize:16 }}>{label}</td>
-                          {cmpStocks.map(h => {
-                            const val = getter(h);
-                            return <td key={h.id} style={{ textAlign:"right", padding:"8px 12px", color:colorFn(val), fontWeight:700 }}>{formatter(val)}</td>;
-                          })}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                <div style={S.card}>
-                  <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:4 }}>総合レーダーチャート</div>
-                  <div style={{ color:"#475569", fontSize:16, marginBottom:12 }}>各指標を0〜100点に正規化して比較。外側ほど優秀。</div>
-                  <ResponsiveContainer width="100%" height={R.chartXl}>
-                    <RadarChart data={radarData}>
-                      <PolarGrid stroke="#1e293b" />
-                      <PolarAngleAxis dataKey="m" tick={{ fill:"#64748b", fontSize:R.sm }} />
-                      {cmpStocks.map((h, i) => (
-                        <Radar key={h.id} name={h.name} dataKey={h.name} stroke={CMP_COLORS[i]} fill={CMP_COLORS[i]} fillOpacity={0.15} strokeWidth={2} />
-                      ))}
-                      <Legend wrapperStyle={{ color:"#94a3b8", fontSize:R.sm }} />
-                      <Tooltip formatter={v => Math.round(v)+"点"} contentStyle={TS} itemStyle={{ color:"#e2e8f0" }} />
-                    </RadarChart>
-                  </ResponsiveContainer>
-                </div>
-
-                <div style={S.card}>
-                  <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:4 }}>収益性 vs 安全性マップ</div>
-                  <div style={{ color:"#475569", fontSize:16, marginBottom:12 }}>右上ほど「高収益・高安全性」の理想企業。</div>
-                  <div style={{ position:"relative", height:240, background:"#111827", borderRadius:8, overflow:"hidden" }}>
-                    <div style={{ position:"absolute", top:8, left:8, fontSize:16, color:"#334155" }}>低収益・高安全</div>
-                    <div style={{ position:"absolute", top:8, right:8, fontSize:16, color:"#4ade8044" }}>高収益・高安全</div>
-                    <div style={{ position:"absolute", bottom:8, left:8, fontSize:16, color:"#f8717144" }}>低収益・低安全</div>
-                    <div style={{ position:"absolute", bottom:8, right:8, fontSize:16, color:"#334155" }}>高収益・低安全</div>
-                    <div style={{ position:"absolute", top:0, bottom:0, left:"50%", width:1, background:"#1e293b" }} />
-                    <div style={{ position:"absolute", left:0, right:0, top:"50%", height:1, background:"#1e293b" }} />
-                    {cmpStocks.map((h, i) => {
-                      const cm = getCmpCalc(h);
-                      const px = Math.min(Math.max((cm.equityRatio||0)*100,0),80)/80*85+7;
-                      const py = 100-Math.min(Math.max((cm.opMargin||0)*100,0),30)/30*85-7;
-                      return (
-                        <div key={h.id} style={{ position:"absolute", left:(px)+"%", top:(py)+"%", transform:"translate(-50%,-50%)", background:CMP_COLORS[i], borderRadius:"50%", width:20, height:20, boxShadow:"0 0 12px "+(CMP_COLORS[i])+"88" }} />
-                      );
-                    })}
-                  </div>
-                  <div style={{ display:"flex", justifyContent:"center", gap:16, marginTop:8, flexWrap:"wrap" }}>
-                    {cmpStocks.map((h, i) => <span key={h.id} style={{ fontSize:16, color:CMP_COLORS[i] }}>● {h.ticker} {h.name}</span>)}
-                  </div>
-                </div>
-
-                <div style={{ display:"grid", gridTemplateColumns:R.grid2, gap:16 }}>
-                  <div style={S.card}>
-                    <div style={{ color:"#94a3b8", fontSize:16, marginBottom:12 }}>ROE・ROA・ROIC比較</div>
-                    <ResponsiveContainer width="100%" height={R.chartSm}>
-                      <BarChart data={cmpStocks.map(h => {
-                        const cm = getCmpCalc(h);
-                        return { name:h.name, ROE:parseFloat(((cm.roe||0)*100).toFixed(1)), ROA:parseFloat(((cm.roa||0)*100).toFixed(1)), ROIC:parseFloat(((cm.roic||0)*100).toFixed(1)) };
-                      })}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                        <XAxis dataKey="name" tick={{ fill:"#94a3b8", fontSize:R.sm }} />
-                        <YAxis tick={{ fill:"#64748b", fontSize:R.sm }} tickFormatter={v => v+"%"} />
-                        <Tooltip formatter={v => v+"%"} contentStyle={TS} itemStyle={{ color:"#e2e8f0" }} />
-                        <ReferenceLine y={15} stroke="#4ade80" strokeDasharray="4 4" />
-                        <Legend wrapperStyle={{ color:"#94a3b8", fontSize:R.sm }} />
-                        <Bar dataKey="ROE" fill="#4ade80" radius={[3,3,0,0]} />
-                        <Bar dataKey="ROA" fill="#60a5fa" radius={[3,3,0,0]} />
-                        <Bar dataKey="ROIC" fill="#a78bfa" radius={[3,3,0,0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                  <div style={S.card}>
-                    <div style={{ color:"#94a3b8", fontSize:16, marginBottom:12 }}>PER比較</div>
-                    <ResponsiveContainer width="100%" height={R.chartSm}>
-                      <BarChart data={cmpStocks.map(h => ({ name:h.name, PER:parseFloat((getCmpCalc(h).per||0).toFixed(2)) }))}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                        <XAxis dataKey="name" tick={{ fill:"#94a3b8", fontSize:R.sm }} />
-                        <YAxis tick={{ fill:"#64748b", fontSize:R.sm }} tickFormatter={v => v+"x"} />
-                        <Tooltip formatter={v => v+"倍"} contentStyle={TS} itemStyle={{ color:"#e2e8f0" }} />
-                        <ReferenceLine y={15} stroke="#4ade80" strokeDasharray="4 4" />
-                        <Bar dataKey="PER" fill="#818cf8" radius={[4,4,0,0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-        )}
-
-        {tab === "simulation" && (
-          <div>
-            <h2 style={S.h2}>シミュレーション</h2>
-            <div style={S.chips}>
-              {portfolio.filter(h => !h.sold).map(h => (
-                <button key={h.id} style={{ ...S.chip, ...(selected?.id===h.id?S.chipOn:{}) }} onClick={() => { setSelected(h); setWatchSelected(null); }}>{h.ticker} {h.name}</button>
-              ))}
-              {watchlist.length > 0 && <span style={{ color:"#475569", fontSize:R.sm, alignSelf:"center" }}>｜候補:</span>}
-              {watchlist.map(h => (
-                <button key={h.id} style={{ ...S.chip, ...(watchSelected?.id===h.id?{ ...S.chipOn, borderColor:"#f59e0b", color:"#f59e0b" }:{}), borderStyle:"dashed" }} onClick={() => { setWatchSelected(h); setSelected(null); }}>{h.ticker} {h.name}</button>
-              ))}
-            </div>
-            {!selected && !watchSelected && <div style={S.card}><span style={{ color:"#64748b" }}>銘柄を選択してください。</span></div>}
-            {(selected || watchSelected) && (
-              <>
-                <div style={{ ...S.card, marginBottom:16 }}>
-                  <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:12 }}>設定 — {(selected || watchSelected).name}（{(selected || watchSelected).ticker}）</div>
-                  {/* 基準日設定 */}
-                  <div style={{ background:"#111827", borderRadius:8, padding:"10px 14px", marginBottom:12 }}>
-                    <div style={{ color:"#60a5fa", fontSize:R.sm, fontWeight:700, marginBottom:6 }}>📅 基準日（次の本決算日）</div>
-                    <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
-                      <FInput label="" value={simEdit.baseDate} onChange={v => setSimEdit(p=>({...p, baseDate:v}))} inputType="date" />
-                      {simEdit.baseDate && <BaseDateInfo baseDate={simEdit.baseDate} R={R} />}
-                      {!simEdit.baseDate && <span style={{ color:"#334155", fontSize:R.sm }}>未設定の場合は予測年数をそのまま使用します</span>}
-                    </div>
-                  </div>
-                  <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(min(180px,45vw),1fr))", gap:12 }}>
-                    <FInput label="予測年数（年）" value={simEdit.years} onChange={v => setSimEdit(p => ({ ...p, years:v }))} numOnly={true} />
-                    <FInput label="売上成長率（基本）%" value={simEdit.growthRate} onChange={v => setSimEdit(p => ({ ...p, growthRate:v }))} numOnly={true} />
-                    <FInput label="目標営業利益率 %" value={simEdit.targetMargin} onChange={v => setSimEdit(p => ({ ...p, targetMargin:v }))} numOnly={true} />
-                    <FInput label="目標PER（黒字時・倍）" value={simEdit.targetPer} onChange={v => setSimEdit(p => ({ ...p, targetPer:v }))} numOnly={true} />
-                    <FInput label="目標PSR（赤字時・倍）" value={simEdit.targetPsr} onChange={v => setSimEdit(p => ({ ...p, targetPsr:v }))} numOnly={true} />
-                    <FInput label="目標EV/EBITDA（任意）" value={simEdit.targetEvEbitda} onChange={v => setSimEdit(p => ({ ...p, targetEvEbitda:v }))} numOnly={true} />
-                    <FInput label="配当利回り %" value={simEdit.dividendRate} onChange={v => setSimEdit(p => ({ ...p, dividendRate:v }))} numOnly={true} />
-                    <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
-                      <label style={{ color:"#64748b", fontSize:16 }}>配当再投資</label>
-                      <button style={{ ...S.miniBtn, padding:"8px 12px", color:simEdit.reinvest?"#4ade80":"#64748b", borderColor:simEdit.reinvest?"#4ade80":"#334155" }} onClick={() => setSimEdit(p => ({ ...p, reinvest:!p.reinvest }))}>
-                        {simEdit.reinvest?"あり（複利）":"なし（単純）"}
-                      </button>
-                    </div>
-                  </div>
-                  <div style={{ marginTop:12, display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
-                    <button style={{ ...S.addBtn, padding:"8px 20px" }} onClick={() => {
-                        setSimParams(simEdit);
-                        const target = selected || watchSelected;
-                        if (target) saveSimParams(target.id, simEdit);
-                      }}>▶ 再計算</button>
-                    <span style={{ color:"#334155", fontSize:16 }}>強気: 成長率×1.6 / 弱気: 成長率×0.4（自動計算）</span>
-                  </div>
-                </div>
-
-                <div style={{ display:"flex", gap:4, marginBottom:16, flexWrap:"wrap" }}>
-                  {[["scenario","シナリオ分析"],["valuation","割高割安分析"]].map(([k,v]) => (
-                    <button key={k} style={{ ...S.navBtn, ...(simTab===k?S.navOn:{}) }} onClick={() => setSimTab(k)}>{v}</button>
-                  ))}
-                </div>
-
-                {simTab === "scenario" && (
-                  <div>
-                    <div style={S.card}>
-                      <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:8 }}>株価推定（3シナリオ）</div>
-                      {/* シナリオ計算式の説明 */}
-                      <div style={{ background:"#111827", borderRadius:8, padding:"12px 14px", marginBottom:16, fontSize:16, lineHeight:1.8 }}>
-                        <div style={{ color:"#60a5fa", fontWeight:700, marginBottom:6 }}>📐 計算式</div>
-                        {simRowsData.length > 0 && simRowsData[0].usePsr ? (
-                          <div style={{ color:"#64748b" }}>
-                            <span style={{ color:"#fbbf24" }}>PSR法（赤字企業）</span>：
-                            推定株価 = 売上高 × 成長係数 × <span style={{ color:"#e2e8f0" }}>目標PSR</span> ÷ 発行済株式数
-                          </div>
-                        ) : (
-                          <div style={{ color:"#64748b" }}>
-                            <span style={{ color:"#4ade80" }}>PER法（黒字企業）</span>：
-                            推定株価 = EPS × 成長係数 × <span style={{ color:"#e2e8f0" }}>目標PER</span>
-                          </div>
-                        )}
-                        <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8, marginTop:10 }}>
-                          {[
-                            ["🐂 強気", "#4ade80",
-                              `成長率 ${+simParams.growthRate>=0?"+":""}${Math.round(+simParams.growthRate*(+simParams.growthRate>=0?1.6:0.4))}%`,
-                              simRowsData.length>0&&simRowsData[0].usePsr ? `目標PSR = ${(+simParams.targetPsr*1.2).toFixed(1)}x` : `目標PER = ${(+simParams.targetPer*1.2).toFixed(1)}x`,
-                              "高成長→高いバリュエーションを適用"],
-                            ["📊 基本", "#60a5fa",
-                              `成長率 ${+simParams.growthRate>=0?"+":""}${simParams.growthRate}%`,
-                              simRowsData.length>0&&simRowsData[0].usePsr ? `目標PSR = ${simParams.targetPsr}x` : `目標PER = ${simParams.targetPer}x`,
-                              "入力値通りの成長・バリュエーション"],
-                            ["🐻 弱気", "#f87171",
-                              `成長率 ${+simParams.growthRate>=0?"+":""}${Math.round(+simParams.growthRate*(+simParams.growthRate>=0?0.4:1.6))}%`,
-                              simRowsData.length>0&&simRowsData[0].usePsr ? `目標PSR = ${(+simParams.targetPsr*0.8).toFixed(1)}x` : `目標PER = ${(+simParams.targetPer*0.8).toFixed(1)}x`,
-                              "成長鈍化→低いバリュエーションを適用"],
-                          ].map(([label, color, growthStr, valStr, desc]) => (
-                            <div key={label} style={{ background:"#0d1424", borderRadius:6, padding:"8px 10px", borderLeft:`3px solid ${color}` }}>
-                              <div style={{ color, fontWeight:700, marginBottom:4 }}>{label}</div>
-                              <div style={{ color:"#94a3b8", fontSize:16 }}>{growthStr}</div>
-                              <div style={{ color:"#94a3b8", fontSize:16 }}>{valStr}</div>
-                              <div style={{ color:"#475569", fontSize:16, marginTop:4 }}>{desc}</div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                      <ResponsiveContainer width="100%" height={R.chartXl}>
-                        <AreaChart data={simRowsData}>
-                          <defs>
-                            <linearGradient id="gbull" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#4ade80" stopOpacity={0.2}/><stop offset="95%" stopColor="#4ade80" stopOpacity={0}/></linearGradient>
-                            <linearGradient id="gbase" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#60a5fa" stopOpacity={0.2}/><stop offset="95%" stopColor="#60a5fa" stopOpacity={0}/></linearGradient>
-                            <linearGradient id="gbear" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#f87171" stopOpacity={0.15}/><stop offset="95%" stopColor="#f87171" stopOpacity={0}/></linearGradient>
-                          </defs>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                          <XAxis dataKey="year" tick={{ fill:"#94a3b8", fontSize:R.sm }} />
-                          <YAxis tick={{ fill:"#64748b", fontSize:R.sm }} tickFormatter={v => v?.toLocaleString()} />
-                          <Tooltip formatter={v => v?"¥"+v?.toLocaleString():"—"} contentStyle={TS} itemStyle={{ color:"#e2e8f0" }} />
-                          <ReferenceLine y={n(f.price)||(selected||watchSelected)?.avgCost||(selected||watchSelected)?.currentPrice} stroke="#f59e0b" strokeDasharray="4 4" label={{ value:"取得単価", fill:"#f59e0b", fontSize:16 }} />
-                          {(selected||watchSelected)?.avgCost > 0 && <ReferenceLine y={(selected||watchSelected).avgCost} stroke="#a78bfa" strokeDasharray="4 4" label={{ value:"取得単価", fill:"#a78bfa", fontSize:16 }} />}
-                          <Legend wrapperStyle={{ color:"#94a3b8", fontSize:R.sm }} />
-                          <Area type="monotone" dataKey="bull" stroke="#4ade80" strokeWidth={2} fill="url(#gbull)" name="強気" />
-                          <Area type="monotone" dataKey="base" stroke="#60a5fa" strokeWidth={2} fill="url(#gbase)" name="基本" />
-                          <Area type="monotone" dataKey="bear" stroke="#f87171" strokeWidth={2} fill="url(#gbear)" name="弱気" />
-                          {simRowsData.some(d => d.evp) && <Line type="monotone" dataKey="evp" stroke="#a78bfa" strokeWidth={2} strokeDasharray="4 4" name="EV/EBITDA法" />}
-                        </AreaChart>
-                      </ResponsiveContainer>
-                    </div>
-
-                    <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(min(200px,45vw),1fr))", gap:12, marginBottom:16 }}>
-                      {[["bull","強気","#4ade80"],["base","基本","#60a5fa"],["bear","弱気","#f87171"]].map(([key, label, color]) => {
-                        const simTarget = selected || watchSelected;
-                        const rows = simRowsData;
-                        const last = rows[rows.length-1]?.[key];
-                        const breakY = rows.findIndex(r => r[key] && r[key] > (simTarget?.avgCost||0));
-                        const cagr = last && simTarget?.currentPrice > 0 ? ((Math.pow(last/simTarget.currentPrice, 1/(+simParams.years||1))-1)*100).toFixed(1) : null;
-                        return (
-                          <div key={key} style={{ background:"#111827", border:"1px solid "+(color)+"33", borderRadius:8, padding:"12px 16px" }}>
-                            <div style={{ color, fontWeight:700, marginBottom:8 }}>{label}シナリオ</div>
-                            <div style={{ color:"#475569", fontSize:16, marginBottom:4 }}>最終推定株価</div>
-                            <div style={{ color, fontWeight:700, fontSize:18, marginBottom:8 }}>{"¥"+(last?.toLocaleString()||"—")}</div>
-                            <div style={{ color:"#475569", fontSize:16 }}>年率: <span style={{ color }}>{cagr?cagr+"%":"—"}</span></div>
-                            <div style={{ color:"#475569", fontSize:16, marginTop:4 }}>取得単価超え: <span style={{ color }}>{breakY===0?"すでに超過":breakY>0?breakY+"年後":"期間内に未達"}</span></div>
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    <div style={{ display:"grid", gridTemplateColumns:R.grid2, gap:16 }}>
-                      <div style={S.card}>
-                        <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:4 }}>配当累計</div>
-                        <div style={{ color:"#475569", fontSize:16, marginBottom:8 }}>利回り{simParams.dividendRate}% {simParams.reinvest?"複利":"単純"}</div>
-                        <ResponsiveContainer width="100%" height={R.chartSm}>
-                          <BarChart data={simRowsData}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                            <XAxis dataKey="year" tick={{ fill:"#94a3b8", fontSize:R.sm }} />
-                            <YAxis tick={{ fill:"#64748b", fontSize:R.sm }} tickFormatter={v => v?.toLocaleString()} />
-                            <Tooltip formatter={v => "¥"+v?.toLocaleString()} contentStyle={TS} itemStyle={{ color:"#e2e8f0" }} />
-                            <Bar dataKey="dc" fill="#fbbf24" radius={[4,4,0,0]} name="配当累計" />
-                          </BarChart>
-                        </ResponsiveContainer>
-                      </div>
-                      <div style={S.card}>
-                        <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:4 }}>売上・営業利益推移</div>
-                        <div style={{ color:"#475569", fontSize:16, marginBottom:8 }}>成長率{simParams.growthRate}% x 利益率{simParams.targetMargin}%</div>
-                        <ResponsiveContainer width="100%" height={R.chartSm}>
-                          <LineChart data={simRowsData}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                            <XAxis dataKey="year" tick={{ fill:"#94a3b8", fontSize:R.sm }} />
-                            <YAxis tick={{ fill:"#64748b", fontSize:R.sm }} tickFormatter={v => fmtM(v)} />
-                            <Tooltip formatter={v => fmtM(v)} contentStyle={TS} itemStyle={{ color:"#e2e8f0" }} />
-                            <Legend wrapperStyle={{ color:"#94a3b8", fontSize:R.sm }} />
-                            <Line type="monotone" dataKey="ps" stroke="#60a5fa" strokeWidth={2} dot={false} name="売上" />
-                            <Line type="monotone" dataKey="po" stroke="#4ade80" strokeWidth={2} dot={false} name="営業利益" />
-                          </LineChart>
-                        </ResponsiveContainer>
-                      </div>
-                    </div>
-
-                    <div style={S.card}>
-                      <div style={{ color:"#94a3b8", fontWeight:700, marginBottom:12 }}>サマリーテーブル</div>
-                      <div style={{ overflowX:"auto" }}>
-                        <table style={{ width:"100%", borderCollapse:"collapse", fontSize:16 }}>
-                          <thead>
-                            <tr style={{ borderBottom:"1px solid #1e293b" }}>
-                              {["年","強気株価","基本株価","弱気株価","EV法","EPS","売上","営業利益","配当累計"].map(h => (
-                                <th key={h} style={{ textAlign:"right", padding:"6px 10px", color:"#475569", fontSize:16, whiteSpace:"nowrap" }}>{h}</th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {simRowsData.map((r, i) => (
-                              <tr key={i} style={{ borderBottom:"1px solid #1e293b", background:i===0?"#111827":"transparent" }}>
-                                <td style={{ padding:"8px 10px", color:"#94a3b8", fontWeight:i===0?700:400 }}>{r.year}</td>
-                                <td style={{ textAlign:"right", padding:"8px 10px", color:"#4ade80", fontWeight:700 }}>{"¥"+(r.bull?.toLocaleString()||"—")}</td>
-                                <td style={{ textAlign:"right", padding:"8px 10px", color:"#60a5fa", fontWeight:700 }}>{"¥"+(r.base?.toLocaleString()||"—")}</td>
-                                <td style={{ textAlign:"right", padding:"8px 10px", color:"#f87171" }}>{"¥"+(r.bear?.toLocaleString()||"—")}</td>
-                                <td style={{ textAlign:"right", padding:"8px 10px", color:"#a78bfa" }}>{r.evp?"¥"+r.evp.toLocaleString():"—"}</td>
-                                <td style={{ textAlign:"right", padding:"8px 10px", color:"#e2e8f0" }}>{"¥"+r.pe}</td>
-                                <td style={{ textAlign:"right", padding:"8px 10px", color:"#94a3b8" }}>{fmtM(r.ps)}</td>
-                                <td style={{ textAlign:"right", padding:"8px 10px", color:"#94a3b8" }}>{fmtM(r.po)}</td>
-                                <td style={{ textAlign:"right", padding:"8px 10px", color:"#fbbf24" }}>{"¥"+r.dc?.toLocaleString()}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {simTab === "valuation" && (
-                  <ValuationAnalysis h={selected||watchSelected} portfolio={portfolio} watchlist={watchlist} baseYear={baseYear} simParams={simParams} S={S} R={R_CURRENT} TS={TS} />
-                )}
-              </>
-            )}
-          </div>
-        )}
-
-        {tab === "trades" && (
-          <TradesTab trades={trades} saveTrades={saveTrades2} portfolio={portfolio} watchlist={watchlist} S={S} R={R} />
-        )}
       {/* 売却モーダル */}
       {sellTarget && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}
